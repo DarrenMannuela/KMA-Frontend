@@ -1,0 +1,116 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-paper: #faf8f3;
+  --color-parchment: #f0ebe0;
+  --color-ink-900: #252020;
+  --color-ink-600: #665847;
+  --color-ink-300: #b0a389;
+  --color-amber: #d97706;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background-color: var(--color-paper);
+    color: var(--color-ink-900);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+
+  ::selection {
+    background: #fcd34d;
+    color: #141010;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-parchment);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #cec5b0;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #b0a389;
+  }
+}
+
+@layer components {
+  .prose-kma {
+    font-family: 'DM Sans', sans-serif;
+    line-height: 1.75;
+    color: #3a312d;
+  }
+
+  .prose-kma p {
+    margin-bottom: 1em;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-ink-900 text-paper font-body font-medium text-sm
+           transition-all duration-150 hover:bg-ink-700 active:scale-95 shadow-sm;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-ink-200 bg-paper text-ink-700 font-body font-medium text-sm
+           transition-all duration-150 hover:bg-parchment active:scale-95;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-2 rounded-lg text-ink-600 font-body text-sm
+           transition-all duration-150 hover:bg-parchment hover:text-ink-900 active:scale-95;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white font-body font-medium text-sm
+           transition-all duration-150 hover:bg-red-700 active:scale-95;
+  }
+
+  .card {
+    @apply bg-white rounded-xl border border-ink-100 shadow-card transition-shadow duration-200 hover:shadow-card-hover;
+  }
+
+  .input-field {
+    @apply w-full px-3 py-2 rounded-lg border border-ink-200 bg-paper font-body text-sm text-ink-900
+           placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400
+           transition-colors duration-150;
+  }
+
+  .tag-pill {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800
+           font-body text-xs font-medium;
+  }
+}
+
+/* Page fade in */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.3s ease both;
+}
+
+.animate-fade-up-delay-1 { animation-delay: 0.05s; }
+.animate-fade-up-delay-2 { animation-delay: 0.10s; }
+.animate-fade-up-delay-3 { animation-delay: 0.15s; }
