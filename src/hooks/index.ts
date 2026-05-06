@@ -1,127 +1,64 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { notesApi, categoriesApi, tagsApi } from '@/api'
-import type {
-  CreateNoteRequest,
-  UpdateNoteRequest,
-  CreateCategoryRequest,
-  UpdateCategoryRequest,
-  NotesFilter,
-} from '@/types'
+import {
+  ordersApi, itemsApi, orderRecapApi, suppliersApi,
+  productionApi, operationsApi, deliveryApi, deliveryOrderApi, suratJalanApi,
+} from '@/api'
 
-// ─── Query keys ───────────────────────────────────────────────────────────────
+// ── hook factory ─────────────────────────────────────────────────────────────
+function makeCrudHooks<T, C, U>(
+  key: string,
+  api: {
+    list: () => Promise<T[]>
+    get: (id: string | number) => Promise<T>
+    create: (b: C) => Promise<T>
+    update: (id: string | number, b: U) => Promise<T>
+    delete: (id: string | number) => Promise<unknown>
+  },
+  label: string
+) {
+  return {
+    useList: () =>
+      useQuery({ queryKey: [key], queryFn: api.list }),
 
-export const keys = {
-  notes: (filter?: Partial<NotesFilter>) => ['notes', filter] as const,
-  note:  (id: number)                    => ['notes', id]     as const,
-  categories:                              ['categories']      as const,
-  category:  (id: number)                => ['categories', id] as const,
-  tags:                                    ['tags']            as const,
-}
+    useGet: (id: string | number) =>
+      useQuery({ queryKey: [key, id], queryFn: () => api.get(id), enabled: !!id }),
 
-// ─── Notes Hooks ─────────────────────────────────────────────────────────────
-
-export function useNotes(filter: Partial<NotesFilter> = {}) {
-  return useQuery({
-    queryKey: keys.notes(filter),
-    queryFn: () => notesApi.list(filter),
-  })
-}
-
-export function useNote(id: number) {
-  return useQuery({
-    queryKey: keys.note(id),
-    queryFn: () => notesApi.get(id),
-    enabled: id > 0,
-  })
-}
-
-export function useCreateNote() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (body: CreateNoteRequest) => notesApi.create(body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['notes'] })
-      toast.success('Note created')
+    useCreate: () => {
+      const qc = useQueryClient()
+      return useMutation({
+        mutationFn: (body: C) => api.create(body),
+        onSuccess: () => { qc.invalidateQueries({ queryKey: [key] }); toast.success(`${label} created`) },
+        onError:   (e: Error) => toast.error(e.message),
+      })
     },
-    onError: (e: Error) => toast.error(e.message),
-  })
-}
 
-export function useUpdateNote(id: number) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (body: UpdateNoteRequest) => notesApi.update(id, body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['notes'] })
-      toast.success('Note saved')
+    useUpdate: () => {
+      const qc = useQueryClient()
+      return useMutation({
+        mutationFn: ({ id, body }: { id: string | number; body: U }) => api.update(id, body),
+        onSuccess: () => { qc.invalidateQueries({ queryKey: [key] }); toast.success(`${label} updated`) },
+        onError:   (e: Error) => toast.error(e.message),
+      })
     },
-    onError: (e: Error) => toast.error(e.message),
-  })
-}
 
-export function useDeleteNote() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: number) => notesApi.delete(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['notes'] })
-      toast.success('Note deleted')
+    useDelete: () => {
+      const qc = useQueryClient()
+      return useMutation({
+        mutationFn: (id: string | number) => api.delete(id),
+        onSuccess: () => { qc.invalidateQueries({ queryKey: [key] }); toast.success(`${label} deleted`) },
+        onError:   (e: Error) => toast.error(e.message),
+      })
     },
-    onError: (e: Error) => toast.error(e.message),
-  })
+  }
 }
 
-// ─── Category Hooks ───────────────────────────────────────────────────────────
-
-export function useCategories() {
-  return useQuery({
-    queryKey: keys.categories,
-    queryFn: categoriesApi.list,
-  })
-}
-
-export function useCreateCategory() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (body: CreateCategoryRequest) => categoriesApi.create(body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: keys.categories })
-      toast.success('Category created')
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-}
-
-export function useUpdateCategory(id: number) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (body: UpdateCategoryRequest) => categoriesApi.update(id, body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: keys.categories })
-      toast.success('Category updated')
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-}
-
-export function useDeleteCategory() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: number) => categoriesApi.delete(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: keys.categories })
-      toast.success('Category deleted')
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-}
-
-// ─── Tags Hook ────────────────────────────────────────────────────────────────
-
-export function useTags() {
-  return useQuery({
-    queryKey: keys.tags,
-    queryFn: tagsApi.list,
-  })
-}
+export const orderHooks        = makeCrudHooks('orders',         ordersApi,        'Order')
+export const itemHooks         = makeCrudHooks('items',          itemsApi,         'Item')
+export const recapHooks        = makeCrudHooks('order-recap',    orderRecapApi,    'Order recap')
+export const supplierHooks     = makeCrudHooks('suppliers',      suppliersApi,     'Supplier')
+export const productionHooks   = makeCrudHooks('production',     productionApi,    'Production entry')
+export const operationHooks    = makeCrudHooks('operations',     operationsApi,    'Operation')
+export const deliveryHooks     = makeCrudHooks('delivery',       deliveryApi,      'Delivery')
+export const deliveryOrderHooks = makeCrudHooks('delivery-orders', deliveryOrderApi, 'Delivery order')
+export const suratJalanHooks   = makeCrudHooks('surat-jalan',    suratJalanApi,    'Surat Jalan')

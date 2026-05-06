@@ -1,74 +1,80 @@
-# KMA Frontend
+# KMA Frontend — Kreasi Makmur Abadi
 
-A React + TypeScript frontend for the [KMA](https://github.com/DarrenMannuela/KMA) knowledge management backend.
+Admin dashboard for KMA's internal operations: orders, production, delivery, and financials.
 
 ## Stack
 
-- **React 18** + **TypeScript**
-- **Vite** — dev server with API proxy to Go backend
-- **Tailwind CSS** — utility-first styling with custom design tokens
-- **TanStack Query** — data fetching and caching
-- **Axios** — HTTP client
-- **React Router v6** — client-side routing
-- **react-hot-toast** — toast notifications
+| Tool | Purpose |
+|------|---------|
+| React 18 + TypeScript | UI framework |
+| Vite | Build tool + dev server |
+| Tailwind CSS | Styling with custom design tokens |
+| TanStack Query v5 | Data fetching, caching, mutations |
+| Axios | HTTP client (proxied to Go backend) |
+| React Router v6 | Client-side routing |
+| react-hot-toast | Toast notifications |
+| date-fns | Date formatting |
 
 ## Getting Started
 
-### 1. Start the KMA backend
+### 1. Start the KMA Go backend
 
 ```bash
-# From the KMA repo root
-docker-compose up -d     # starts SQLite container
-go run ./cmd/server      # starts API on :8080
+# From KMA repo root
+go run main.go    # API runs on :8000
 ```
 
-### 2. Install & run the frontend
+### 2. Run the frontend
 
 ```bash
-cd kma-frontend
 npm install
 npm run dev
 # → http://localhost:5173
 ```
 
-The Vite dev server proxies `/api/*` → `http://localhost:8080/api` automatically.
+Vite proxies `/api/v1/*` → `http://localhost:8000` automatically.
 
-## Project Structure
+---
 
+## Backend Route Status
+
+Based on `main.go` at time of generation. Update `status` in `Sidebar.tsx` as you wire handlers.
+
+| Route | Methods | Status |
+|-------|---------|--------|
+| `/api/v1/supplier` + `/:id` | GET, POST, PATCH, DELETE | ✅ Live |
+| `/api/v1/order` + `/:id` | GET, POST | 🟡 Stub |
+| `/api/v1/items` + `/:id` | GET, POST | 🟡 Stub |
+| `/api/v1/order-recap` + `/:id` | GET, POST | 🟡 Stub |
+| `/api/v1/delivery` + `/:id` | GET, POST | 🟡 Stub |
+| `/api/v1/delivery-order` + `/:id` | GET, POST | 🟡 Stub |
+| `/api/v1/surat-jalan` + `/:id` | GET, POST | 🟡 Stub |
+| `/api/v1/production-entry` + `/:id` | GET, POST | 🟡 Stub |
+| `/api/v1/operation-entry` + `/:id` | GET, POST | 🟡 Stub |
+
+### Wiring a new route (example for Items):
+
+```go
+v1.GET("/items",        handler.GetItems)
+v1.POST("/items",       handler.PostItems)
+v1.PATCH("/items/:id",  handler.UpdateItems)
+v1.DELETE("/items/:id", handler.DeleteItems)
 ```
-src/
-├── api/          # Axios client + all endpoint functions
-├── components/   # Reusable UI (Sidebar, NoteCard, NoteEditor)
-├── hooks/        # React Query hooks for data fetching & mutations
-├── pages/        # Route-level pages (Notes, Categories, Tags, Settings)
-├── styles/       # Global CSS + Tailwind config
-├── types/        # TypeScript interfaces matching Go DTOs
-├── App.tsx       # Root layout + routing
-└── main.tsx      # Entry point
-```
 
-## API Assumptions
+Then flip `status: 'stub'` → `status: 'live'` in `src/components/layout/Sidebar.tsx`.
 
-The frontend expects these REST endpoints on the backend (adjust in `src/api/index.ts` if your routes differ):
+---
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/notes` | List notes (supports `?search=`, `?category_id=`, `?tag=`, `?page=`, `?limit=`) |
-| GET | `/api/notes/:id` | Get single note |
-| POST | `/api/notes` | Create note |
-| PUT | `/api/notes/:id` | Update note |
-| DELETE | `/api/notes/:id` | Delete note |
-| GET | `/api/categories` | List categories |
-| POST | `/api/categories` | Create category |
-| PUT | `/api/categories/:id` | Update category |
-| DELETE | `/api/categories/:id` | Delete category |
-| GET | `/api/tags` | List all tags |
+## Supplier Category Enum (from kma.yaml)
 
-## Production Build
+`sablon` | `embroidery` | `merchandise_supplier` | `uniform_supplier` | `general_supplier`
+
+---
+
+## Build for Production
 
 ```bash
 npm run build   # outputs to dist/
 ```
 
-Serve `dist/` with nginx or any static host, and point your API proxy at the Go backend.
-# KMA-Frontend
+Serve `dist/` with nginx, proxy `/api` → Go backend on `:8000`.

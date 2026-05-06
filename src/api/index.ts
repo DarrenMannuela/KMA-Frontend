@@ -1,101 +1,73 @@
 import axios from 'axios'
 import type {
-  Note,
-  Category,
-  CreateNoteRequest,
-  UpdateNoteRequest,
-  CreateCategoryRequest,
-  UpdateCategoryRequest,
-  PaginatedResponse,
-  NotesFilter,
+  Order, Item, OrderRecap, Supplier, Production, Operation,
+  Delivery, DeliveryOrder, SuratJalan,
+  CreateOrderRequest, UpdateOrderRequest,
+  CreateItemRequest, UpdateItemRequest,
+  CreateOrderRecapRequest, UpdateOrderRecapRequest,
+  CreateSupplierRequest, UpdateSupplierRequest,
+  CreateProductionRequest, UpdateProductionRequest,
+  CreateOperationRequest, UpdateOperationRequest,
+  CreateDeliveryRequest, UpdateDeliveryRequest,
+  CreateDeliveryOrderRequest, UpdateDeliveryOrderRequest,
 } from '@/types'
 
-const client = axios.create({
-  baseURL: '/api',
+// ─────────────────────────────────────────────────────────────────────────────
+// Base URL: Vite proxies /api/v1 → http://localhost:8000/api/v1
+// See vite.config.ts proxy config.
+// Port is 8000 (Go server) — not 8080.
+// ─────────────────────────────────────────────────────────────────────────────
+const http = axios.create({
+  baseURL: '/api/v1',
   headers: { 'Content-Type': 'application/json' },
 })
 
-// ─── Request / Response interceptors ─────────────────────────────────────────
-
-client.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    const message =
-      err.response?.data?.error ||
-      err.response?.data?.message ||
-      err.message ||
-      'An unexpected error occurred'
-    return Promise.reject(new Error(message))
-  }
+http.interceptors.response.use(
+  (r) => r,
+  (e) => Promise.reject(new Error(
+    e.response?.data?.error ?? e.response?.data?.message ?? e.message ?? 'Error'
+  ))
 )
 
-// ─── Notes ────────────────────────────────────────────────────────────────────
-
-export const notesApi = {
-  list: async (filter: Partial<NotesFilter> = {}): Promise<PaginatedResponse<Note>> => {
-    const params = new URLSearchParams()
-    if (filter.search)       params.set('search', filter.search)
-    if (filter.category_id)  params.set('category_id', String(filter.category_id))
-    if (filter.tag)          params.set('tag', filter.tag)
-    if (filter.page)         params.set('page', String(filter.page))
-    if (filter.limit)        params.set('limit', String(filter.limit))
-    const res = await client.get<PaginatedResponse<Note>>(`/notes?${params}`)
-    return res.data
-  },
-
-  get: async (id: number): Promise<Note> => {
-    const res = await client.get<Note>(`/notes/${id}`)
-    return res.data
-  },
-
-  create: async (body: CreateNoteRequest): Promise<Note> => {
-    const res = await client.post<Note>('/notes', body)
-    return res.data
-  },
-
-  update: async (id: number, body: UpdateNoteRequest): Promise<Note> => {
-    const res = await client.put<Note>(`/notes/${id}`, body)
-    return res.data
-  },
-
-  delete: async (id: number): Promise<void> => {
-    await client.delete(`/notes/${id}`)
-  },
+// ── Generic CRUD factory ──────────────────────────────────────────────────────
+// Uses PATCH for updates (matching the Go handlers and OpenAPI spec).
+// Some routes are still stubs in main.go — see STUB comments below.
+function crud<T, C, U>(base: string) {
+  return {
+    list:   ()                    => http.get<T[]>(base).then(r => r.data),
+    get:    (id: string | number) => http.get<T>(`${base}/${id}`).then(r => r.data),
+    create: (body: C)             => http.post<T>(base, body).then(r => r.data),
+    // PATCH — matches supplier handler and OpenAPI spec
+    update: (id: string | number, body: U) => http.patch<T>(`${base}/${id}`, body).then(r => r.data),
+    delete: (id: string | number) => http.delete(`${base}/${id}`).then(r => r.data),
+  }
 }
 
-// ─── Categories ───────────────────────────────────────────────────────────────
+// ── Route mapping (exact paths from main.go + kma.yaml) ──────────────────────
+//
+//  LIVE (wired to real handlers):
+//    /supplier, /supplier/:id
+//
+//  STUB (returns placeholder JSON — not wired to DB yet):
+//    /order, /order/:id
+//    /items, /items/:id
+//    /order-recap, /order-recap/:id
+//    /delivery, /delivery/:id
+//    /delivery-order, /delivery-order/:id
+//    /surat-jalan, /surat-jalan/:id
+//    /production-entry, /production-entry/:id
+//    /operation-entry, /operation-entry/:id
+//
+//  NOT YET IN main.go (will need to be added as routes are implemented):
+//    /:id variants for order, items, surat-jalan
+// ─────────────────────────────────────────────────────────────────────────────
 
-export const categoriesApi = {
-  list: async (): Promise<Category[]> => {
-    const res = await client.get<Category[]>('/categories')
-    return res.data
-  },
-
-  get: async (id: number): Promise<Category> => {
-    const res = await client.get<Category>(`/categories/${id}`)
-    return res.data
-  },
-
-  create: async (body: CreateCategoryRequest): Promise<Category> => {
-    const res = await client.post<Category>('/categories', body)
-    return res.data
-  },
-
-  update: async (id: number, body: UpdateCategoryRequest): Promise<Category> => {
-    const res = await client.put<Category>(`/categories/${id}`, body)
-    return res.data
-  },
-
-  delete: async (id: number): Promise<void> => {
-    await client.delete(`/categories/${id}`)
-  },
-}
-
-// ─── Tags ─────────────────────────────────────────────────────────────────────
-
-export const tagsApi = {
-  list: async (): Promise<string[]> => {
-    const res = await client.get<string[]>('/tags')
-    return res.data
-  },
-}
+export const ordersApi        = crud<Order,         CreateOrderRequest,        UpdateOrderRequest>('/order')
+export const itemsApi         = crud<Item,           CreateItemRequest,          UpdateItemRequest>('/items')
+export const orderRecapApi    = crud<OrderRecap,     CreateOrderRecapRequest,    UpdateOrderRecapRequest>('/order-recap')
+export const suppliersApi     = crud<Supplier,       CreateSupplierRequest,      UpdateSupplierRequest>('/supplier')
+export const productionApi    = crud<Production,     CreateProductionRequest,    UpdateProductionRequest>('/production-entry')
+export const operationsApi    = crud<Operation,      CreateOperationRequest,     UpdateOperationRequest>('/operation-entry')
+export const deliveryApi      = crud<Delivery,       CreateDeliveryRequest,      UpdateDeliveryRequest>('/delivery')
+export const deliveryOrderApi = crud<DeliveryOrder,  CreateDeliveryOrderRequest, UpdateDeliveryOrderRequest>('/delivery-order')
+export const suratJalanApi    = crud<SuratJalan,     Partial<SuratJalan>,        Partial<SuratJalan>>('/surat-jalan')

@@ -1,51 +1,54 @@
-import { useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
-import { Sidebar } from '@/components/Sidebar'
-import { NoteEditor } from '@/components/NoteEditor'
-import { NotesPage } from '@/pages/NotesPage'
-import { CategoriesPage } from '@/pages/CategoriesPage'
-import { TagsPage } from '@/pages/TagsPage'
-import { SettingsPage } from '@/pages/SettingsPage'
-import type { Note } from '@/types'
+import { Sidebar } from '@/components/layout/Sidebar'
+import { Topbar } from '@/components/layout/Topbar'
+import { DashboardPage } from '@/pages/DashboardPage'
+import { OrdersPage } from '@/pages/orders/OrdersPage'
+import { ItemsPage } from '@/pages/orders/ItemsPage'
+import { OrderRecapPage } from '@/pages/orders/OrderRecapPage'
+import { DeliveryPage, DeliveryOrdersPage, SuratJalanPage } from '@/pages/delivery/DeliveryPages'
+import { ProductionPage } from '@/pages/production/ProductionPage'
+import { SuppliersPage } from '@/pages/suppliers/SuppliersPage'
+import { OperationsPage } from '@/pages/operations/OperationsPage'
 
 export default function App() {
-  const [editingNote, setEditingNote] = useState<Note | null | undefined>(undefined)
-  // undefined = editor closed; null = new note; Note = editing existing
-
-  const openNew = () => setEditingNote(null)
-  const openEdit = (note: Note) => setEditingNote(note)
-  const closeEditor = () => setEditingNote(undefined)
-
   return (
     <>
       <div className="flex min-h-screen">
-        <Sidebar onNewNote={openNew} />
-        <main className="flex-1 flex flex-col bg-paper">
-          <Routes>
-            <Route path="/" element={<NotesPage onEdit={openEdit} />} />
-            <Route path="/categories" element={<CategoriesPage />} />
-            <Route path="/tags" element={<TagsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Routes>
-        </main>
-      </div>
+        <Sidebar />
 
-      {editingNote !== undefined && (
-        <NoteEditor note={editingNote} onClose={closeEditor} />
-      )}
+        <div className="flex-1 flex flex-col ml-[240px] min-h-screen">
+          <Topbar />
+          <main className="flex-1 overflow-y-auto bg-slate-50">
+            <Routes>
+              <Route path="/"                element={<DashboardPage />} />
+              <Route path="/orders"          element={<OrdersPage />} />
+              <Route path="/items"           element={<ItemsPage />} />
+              <Route path="/order-recap"     element={<OrderRecapPage />} />
+              <Route path="/delivery"        element={<DeliveryPage />} />
+              <Route path="/delivery-orders" element={<DeliveryOrdersPage />} />
+              <Route path="/surat-jalan"     element={<SuratJalanPage />} />
+              <Route path="/production"      element={<ProductionPage />} />
+              <Route path="/suppliers"       element={<SuppliersPage />} />
+              <Route path="/operations"      element={<OperationsPage />} />
+            </Routes>
+          </main>
+        </div>
+      </div>
 
       <Toaster
         position="bottom-right"
         toastOptions={{
           style: {
-            fontFamily: "'DM Sans', sans-serif",
+            fontFamily: "'Sora', sans-serif",
             fontSize: '13px',
-            background: '#252020',
-            color: '#faf8f3',
+            background: '#131a32',
+            color: '#f1f5f9',
             borderRadius: '10px',
+            border: '1px solid #1e2748',
           },
-          success: { iconTheme: { primary: '#fbbf24', secondary: '#252020' } },
+          success: { iconTheme: { primary: '#fbbf24', secondary: '#131a32' } },
+          error:   { iconTheme: { primary: '#ef4444', secondary: '#131a32' } },
         }}
       />
     </>
