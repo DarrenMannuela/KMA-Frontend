@@ -45,11 +45,15 @@ export function DashboardPage() {
   const { data: suppliers   = [] } = supplierHooks.useList()
   const { data: recaps      = [] } = recapHooks.useList()
 
-  const totalAR       = (recaps as OrderRecap[]).reduce((s, r) => s + (r.ar_receivable ?? 0), 0)
-  const totalProdCost = (productions as Production[]).reduce((s, p) => s + (p.price * p.amount), 0)
-  const totalOpsCost  = (operations as Operation[]).reduce((s, o) => s + o.price, 0)
-  const recentOrders  = (orders as Order[]).slice(-5).reverse()
+  const safeRecaps      = Array.isArray(recaps)      ? recaps      : []
+  const safeProductions = Array.isArray(productions) ? productions : []
+  const safeOperations  = Array.isArray(operations)  ? operations  : []
+  const safeOrders      = Array.isArray(orders)      ? orders      : []
 
+  const totalAR       = (safeRecaps as OrderRecap[]).reduce((s, r) => s + (r.ar_receivable ?? 0), 0)
+  const totalProdCost = (safeProductions as Production[]).reduce((s, p) => s + (p.price * p.amount), 0)
+  const totalOpsCost  = (safeOperations as Operation[]).reduce((s, o) => s + o.price, 0)
+  const recentOrders  = (safeOrders as Order[]).slice(-5).reverse()
   return (
     <div className="p-6 space-y-6 max-w-[1400px]">
 

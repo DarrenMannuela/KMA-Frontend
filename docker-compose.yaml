@@ -1,0 +1,16 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kma_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      - kma_network
+
+networks:
+  kma_network:
+    external: true
+    name: kma_network
