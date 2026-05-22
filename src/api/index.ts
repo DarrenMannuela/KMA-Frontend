@@ -63,11 +63,11 @@ function crud<T, C, U>(base: string) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const ordersApi        = crud<Order,         CreateOrderRequest,        UpdateOrderRequest>('/order')
-export const itemsApi         = crud<Item,           CreateItemRequest,          UpdateItemRequest>('/items')
+export const itemsApi         = crud<Item,           CreateItemRequest,          UpdateItemRequest>('/item')
 export const orderRecapApi    = crud<OrderRecap,     CreateOrderRecapRequest,    UpdateOrderRecapRequest>('/order-recap')
 export const suppliersApi     = crud<Supplier,       CreateSupplierRequest,      UpdateSupplierRequest>('/supplier')
-export const productionApi    = crud<Production,     CreateProductionRequest,    UpdateProductionRequest>('/production-entry')
-export const operationsApi    = crud<Operation,      CreateOperationRequest,     UpdateOperationRequest>('/operation-entry')
+export const productionApi    = crud<Production,     CreateProductionRequest,    UpdateProductionRequest>('/production')
+export const operationsApi    = crud<Operation,      CreateOperationRequest,     UpdateOperationRequest>('/operation')
 export const deliveryApi      = crud<Delivery,       CreateDeliveryRequest,      UpdateDeliveryRequest>('/delivery')
 export const deliveryOrderApi = crud<DeliveryOrder,  CreateDeliveryOrderRequest, UpdateDeliveryOrderRequest>('/delivery-order')
 export const suratJalanApi    = crud<SuratJalan,     Partial<SuratJalan>,        Partial<SuratJalan>>('/surat-jalan')
