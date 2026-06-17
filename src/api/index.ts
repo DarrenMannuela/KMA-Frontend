@@ -35,11 +35,11 @@ http.interceptors.response.use(
 function crud<T, C, U>(base: string) {
   return {
     list:   ()                    => http.get<T[]>(base).then(r => r.data),
-    get:    (id: string | number) => http.get<T>(`${base}/${id}`).then(r => r.data),
+    get:    (id: string | number) => http.get<T>(`${base}/${encodeURIComponent(id)}`).then(r => r.data),
     create: (body: C)             => http.post<T>(base, body).then(r => r.data),
     // PATCH — matches supplier handler and OpenAPI spec
-    update: (id: string | number, body: U) => http.patch<T>(`${base}/${id}`, body).then(r => r.data),
-    delete: (id: string | number) => http.delete(`${base}/${id}`).then(r => r.data),
+    update: (id: string | number, body: U) => http.patch<T>(`${base}/${encodeURIComponent(id)}`, body).then(r => r.data),
+    delete: (id: string | number) => http.delete(`${base}/${encodeURIComponent(id)}`).then(r => r.data),
   }
 }
 

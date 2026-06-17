@@ -18,14 +18,12 @@ const TITLES: Record<string, string> = {
 }
 
 // Routes that are fully wired to real DB handlers in main.go
-const LIVE_ROUTES = new Set(['/suppliers'])
+const LIVE_ROUTES = new Set(['/suppliers', '/orders', '/items', '/order-recap',
+  '/delivery', '/delivery-orders', '/surat-jalan',
+  '/production', '/operations',])
 
 // Routes still returning stub JSON
-const STUB_ROUTES = new Set([
-  '/orders', '/items', '/order-recap',
-  '/delivery', '/delivery-orders', '/surat-jalan',
-  '/production', '/operations',
-])
+const STUB_ROUTES = new Set()
 
 export function Topbar() {
   const { pathname } = useLocation()

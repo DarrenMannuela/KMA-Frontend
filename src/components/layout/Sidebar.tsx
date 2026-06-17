@@ -10,15 +10,15 @@ type RouteStatus = 'live' | 'stub'
 
 const NAV: { label: string; path: string; icon: typeof LayoutDashboard; status?: RouteStatus }[] = [
   { label: 'Dashboard',       path: '/',               icon: LayoutDashboard },
-  { label: 'Orders',          path: '/orders',          icon: ShoppingBag,  status: 'stub' },
-  { label: 'Order Items',     path: '/items',           icon: ListOrdered,  status: 'stub' },
-  { label: 'Order Recap',     path: '/order-recap',     icon: FileText,     status: 'stub' },
-  { label: 'Delivery',        path: '/delivery',        icon: Truck,        status: 'stub' },
-  { label: 'Delivery Orders', path: '/delivery-orders', icon: PackageCheck, status: 'stub' },
-  { label: 'Surat Jalan',     path: '/surat-jalan',     icon: ScrollText,   status: 'stub' },
-  { label: 'Production',      path: '/production',      icon: Factory,      status: 'stub' },
+  { label: 'Orders',          path: '/orders',          icon: ShoppingBag,  status: 'live' },
+  { label: 'Order Items',     path: '/items',           icon: ListOrdered,  status: 'live' },
+  { label: 'Order Recap',     path: '/order-recap',     icon: FileText,     status: 'live' },
+  { label: 'Delivery',        path: '/delivery',        icon: Truck,        status: 'live' },
+  { label: 'Delivery Orders', path: '/delivery-orders', icon: PackageCheck, status: 'live' },
+  { label: 'Surat Jalan',     path: '/surat-jalan',     icon: ScrollText,   status: 'live' },
+  { label: 'Production',      path: '/production',      icon: Factory,      status: 'live' },
   { label: 'Suppliers',       path: '/suppliers',       icon: Users,        status: 'live' },
-  { label: 'Operations',      path: '/operations',      icon: Wrench,       status: 'stub' },
+  { label: 'Operations',      path: '/operations',      icon: Wrench,       status: 'live' },
 ]
 
 export function Sidebar() {
