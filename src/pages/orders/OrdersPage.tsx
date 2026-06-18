@@ -5,12 +5,15 @@ import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField } from '@/components/ui'
 import { orderHooks } from '@/hooks'
 import type { Order, CreateOrderRequest } from '@/types'
+import { useNavigate } from 'react-router-dom'
 
 function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () => void }) {
   const create = orderHooks.useCreate()
   const update = orderHooks.useUpdate()
+  const navigate = useNavigate()
 
   const [form, setForm] = useState<CreateOrderRequest>({
+    id :       editing?.id ?? '',
     company:   editing?.company   ?? '',
     po_number: editing?.po_number ?? '',
     date:      editing?.date ? editing.date.split('T')[0] : '',
@@ -27,7 +30,12 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
     if (editing) {
       update.mutate({ id: editing.id, body: payload }, { onSuccess: onClose })
     } else {
-      create.mutate(payload, { onSuccess: onClose })
+      create.mutate(payload, {
+        onSuccess: (newOrder) => {
+          onClose()
+          navigate(`/orders/${encodeURIComponent(newOrder.id)}`)
+        }
+      })
     }
   }
 
@@ -35,6 +43,9 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
 
   return (
     <div className="space-y-4">
+      <FormField label="ID" required>
+        <input className="field" placeholder="01/KMA/26" value={form.id ?? ''} onChange={set('id')} />
+      </FormField>
       <FormField label="Company" required>
         <input className="field" placeholder="e.g. Zenbu Restaurant" value={form.company ?? ''} onChange={set('company')} />
       </FormField>

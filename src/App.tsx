@@ -10,6 +10,7 @@ import { DeliveryPage, DeliveryOrdersPage, SuratJalanPage } from '@/pages/delive
 import { ProductionPage } from '@/pages/production/ProductionPage'
 import { SuppliersPage } from '@/pages/suppliers/SuppliersPage'
 import { OperationsPage } from '@/pages/operations/OperationsPage'
+import { OrderDetailPage } from '@/pages/orders/OrderDetailPage'
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
               <Route path="/production"      element={<ProductionPage />} />
               <Route path="/suppliers"       element={<SuppliersPage />} />
               <Route path="/operations"      element={<OperationsPage />} />
+              <Route path="/orders/:id" element={<OrderDetailPage />} />
             </Routes>
           </main>
         </div>

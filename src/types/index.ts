@@ -20,7 +20,7 @@ export interface Item {
 
 // ─── Matches dto/OrderRecap.go ────────────────────────────────────────────────
 export interface OrderRecap {
-  id: string          // e.g. "001/KMA/25"
+  id: number          // e.g. "001/KMA/25"
   order_id: number
   total: number
   down_payment: number | null
@@ -96,25 +96,25 @@ export interface SuratJalan {
 }
 
 // ─── Request / Create DTOs ────────────────────────────────────────────────────
-export type CreateOrderRequest = Omit<Order, 'id'>
+export type CreateOrderRequest = Order
 export type UpdateOrderRequest = Partial<CreateOrderRequest>
 
 export type CreateItemRequest = Omit<Item, 'id'>
 export type UpdateItemRequest = Partial<CreateItemRequest>
 
-export type CreateOrderRecapRequest = Omit<OrderRecap, 'id' | 'orders'>
+export type CreateOrderRecapRequest = Omit<OrderRecap, 'id'>
 export type UpdateOrderRecapRequest = Partial<CreateOrderRecapRequest>
 
 export type CreateSupplierRequest = Omit<Supplier, 'id'>
 export type UpdateSupplierRequest = Partial<CreateSupplierRequest>
 
-export type CreateProductionRequest = Omit<Production, 'supplier'>
+export type CreateProductionRequest = Production
 export type UpdateProductionRequest = Partial<CreateProductionRequest>
 
-export type CreateOperationRequest = Omit<Operation, 'id'>
+export type CreateOperationRequest = Operation
 export type UpdateOperationRequest = Partial<CreateOperationRequest>
 
-export type CreateDeliveryRequest = Omit<Delivery, 'id'>
+export type CreateDeliveryRequest = Delivery
 export type UpdateDeliveryRequest = Partial<CreateDeliveryRequest>
 
 export type CreateDeliveryOrderRequest = Omit<DeliveryOrder, 'id' | 'delivery'>
