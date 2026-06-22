@@ -45,11 +45,11 @@ function ItemForm({ orderId, editing, onClose }: { orderId: string; editing: Ite
             onChange={e => setForm(p => ({ ...p, size: e.target.value }))} />
         </FormField>
         <FormField label="Qty" required>
-          <input className="field" type="number" min={1} value={form.amount}
+          <input className="field" type="number" min={1} value={form.amount || ''}
             onChange={e => setForm(p => ({ ...p, amount: Number(e.target.value) }))} />
         </FormField>
         <FormField label="Unit Price (Rp)" required>
-          <input className="field font-mono" type="number" min={0} value={form.price}
+          <input className="field font-mono" type="number" min={0} value={form.price || ''}
             onChange={e => setForm(p => ({ ...p, price: Number(e.target.value) }))} />
         </FormField>
       </div>
@@ -146,7 +146,7 @@ export function OrderDetailPage() {
               <tr className="bg-navy-900 text-white">
                 <td colSpan={4} className="p-4 font-semibold">Total</td>
                 <td className="p-4 text-right font-mono font-bold">{formatRp(total)}</td>
-                <td />
+                <td />   
               </tr>
             </tfoot>
           )}

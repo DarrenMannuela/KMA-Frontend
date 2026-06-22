@@ -21,12 +21,13 @@ interface CrudPageProps<T extends { id: string | number }> {
   onDelete: (id: string | number) => void
   deleteMessage?: (row: T) => string
   searchKeys?: (keyof T)[]
+  rowActions?: (row: T) => React.ReactNode
 }
 
 export function CrudPage<T extends { id: string | number }>({
   title, icon: Icon, data = [], isLoading,
   columns, formTitle, renderForm, onDelete,
-  deleteMessage, searchKeys = [],
+  deleteMessage, searchKeys = [], rowActions
 }: CrudPageProps<T>) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<T | null>(null)
@@ -83,38 +84,40 @@ export function CrudPage<T extends { id: string | number }>({
           <EmptyState icon={Icon} title={`No ${title.toLowerCase()} yet`} subtitle="Click Add New to create one" />
         ) : (
           <div className="overflow-x-auto">
-            <table className="kma-table">
-              <thead>
-                <tr>
-                  {columns.map(c => <th key={String(c.key)}>{c.header}</th>)}
-                  <th className="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(row => (
-                  <tr key={row.id}>
-                    {columns.map(c => (
-                      <td key={String(c.key)}>
-                        {c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—')}
-                      </td>
-                    ))}
-                    <td className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button className="btn-ghost btn-sm !px-2" onClick={() => openEdit(row)}>
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          className="btn-ghost btn-sm !px-2 hover:!text-red-600"
-                          onClick={() => setConfirmRow(row)}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+
+        <table className="kma-table">
+          <thead>
+            <tr>
+              {columns.map(c => <th key={String(c.key)}>{c.header}</th>)}
+              <th className="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(row => (
+              <tr key={row.id}>
+                {columns.map(c => (
+                  <td key={String(c.key)}>
+                    {c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—')}
+                  </td>
                 ))}
-              </tbody>
-            </table>
+                <td className="text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    {rowActions && rowActions(row)}
+                    <button className="btn-ghost btn-sm !px-2" onClick={() => openEdit(row)}>
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      className="btn-ghost btn-sm !px-1.5 hover:!text-red-600"
+                      onClick={() => setConfirmRow(row)}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
           </div>
         )}
       </div>

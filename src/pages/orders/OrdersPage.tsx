@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ShoppingBag } from 'lucide-react'
+import { ShoppingBag, Eye } from 'lucide-react'
 import { format } from 'date-fns'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField } from '@/components/ui'
@@ -68,6 +68,7 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
 export function OrdersPage() {
   const { data, isLoading } = orderHooks.useList()
   const del = orderHooks.useDelete()
+  const navigate = useNavigate()
 
   return (
     <CrudPage<Order>
@@ -86,6 +87,15 @@ export function OrdersPage() {
       renderForm={(editing, onClose) => <OrderForm editing={editing} onClose={onClose} />}
       onDelete={id => del.mutate(id)}
       deleteMessage={r => `Delete order ${r.id}?`}
+      rowActions={row => (
+        <button
+          className="btn-ghost btn-sm !px-2 hover:!text-gold-500"
+          onClick={() => navigate(`/orders/${encodeURIComponent(row.id)}`)}
+          title="View items"
+        >
+          <Eye className="w-3.5 h-3.5" />
+        </button>
+      )}
     />
   )
 }

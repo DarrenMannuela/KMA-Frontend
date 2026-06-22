@@ -63,7 +63,7 @@ function crud<T, C, U>(base: string) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const ordersApi        = crud<Order,         CreateOrderRequest,        UpdateOrderRequest>('/order')
-export const itemsApi         = {...crud<Item,           CreateItemRequest,          UpdateItemRequest>('/item'), getByOrder: (orderId: string) => http.get<Item[]>(`/item?order_id=${encodeURIComponent(orderId)}`).then(r => r.data)}
+export const itemsApi         = {...crud<Item,           CreateItemRequest,          UpdateItemRequest>('/item'), getByOrder: (orderId: string) => http.get<Item[]>(`/item/by-order?order_id=${encodeURIComponent(orderId)}`).then(r => r.data)}
 export const orderRecapApi    = crud<OrderRecap,     CreateOrderRecapRequest,    UpdateOrderRecapRequest>('/order-recap')
 export const suppliersApi     = crud<Supplier,       CreateSupplierRequest,      UpdateSupplierRequest>('/supplier')
 export const productionApi    = crud<Production,     CreateProductionRequest,    UpdateProductionRequest>('/production')
