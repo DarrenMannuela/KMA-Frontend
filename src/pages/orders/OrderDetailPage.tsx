@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Plus } from 'lucide-react'
+import { ArrowLeft, Plus, FileText } from 'lucide-react'
 import { format } from 'date-fns'
 import { FormField, formatRp } from '@/components/ui'
 import { orderHooks, itemHooks } from '@/hooks'
 import { itemsApi } from '@/api'
 import type { Item, CreateItemRequest } from '@/types'
+import { GenerateInvoiceForm } from './GenerateInvoiceForm'
+import { Modal } from '@/components/ui/Modal'
+
 
 function ItemForm({ orderId, editing, onClose }: { orderId: string; editing: Item | null; onClose: () => void }) {
   const create = itemHooks.useCreate()
@@ -82,6 +85,7 @@ export function OrderDetailPage() {
 
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Item | null>(null)
+  const [showInvoiceForm, setShowInvoiceForm] = useState(false)
 
   const total = orderItems.reduce((s, i) => s + i.sub_total, 0)
 
@@ -106,6 +110,18 @@ export function OrderDetailPage() {
           <button className="btn-primary flex items-center gap-1" onClick={() => { setEditing(null); setShowForm(true) }}>
             <Plus size={14} /> Add Item
           </button>
+          <button className="btn-secondary flex items-center gap-1" onClick={() => setShowInvoiceForm(true)}>
+            <FileText size={14} /> Generate Invoice
+          </button>
+          {showInvoiceForm && order && (
+              <Modal title="Generate Invoice" onClose={() => setShowInvoiceForm(false)} size="lg">
+                <GenerateInvoiceForm
+                  order={order}
+                  items={orderItems}
+                  onClose={() => setShowInvoiceForm(false)}
+                />
+              </Modal>
+            )}
         </div>
 
         {showForm && (

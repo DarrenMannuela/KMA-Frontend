@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {
-  ordersApi, itemsApi, orderRecapApi, suppliersApi,
+  ordersApi, itemsApi, invoicesApi, suppliersApi,
   productionApi, operationsApi, deliveryApi, deliveryOrderApi, suratJalanApi,
 } from '@/api'
 
@@ -55,7 +55,7 @@ function makeCrudHooks<T, C, U>(
 
 export const orderHooks        = makeCrudHooks('orders',         ordersApi,        'Order')
 export const itemHooks         = makeCrudHooks('items',          itemsApi,         'Item')
-export const recapHooks        = makeCrudHooks('order-recap',    orderRecapApi,    'Order recap')
+export const invoiceHooks        = makeCrudHooks('invoice',    invoicesApi,    'Invoice')
 export const supplierHooks     = makeCrudHooks('suppliers',      suppliersApi,     'Supplier')
 export const productionHooks   = makeCrudHooks('production',     productionApi,    'Production entry')
 export const operationHooks    = makeCrudHooks('operations',     operationsApi,    'Operation')

@@ -5,12 +5,14 @@ import { Topbar } from '@/components/layout/Topbar'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { OrdersPage } from '@/pages/orders/OrdersPage'
 import { ItemsPage } from '@/pages/orders/ItemsPage'
-import { OrderRecapPage } from '@/pages/orders/OrderRecapPage'
+import { InvoicePrintPage } from '@/pages/orders/InvoicePrintPage'
 import { DeliveryPage, DeliveryOrdersPage, SuratJalanPage } from '@/pages/delivery/DeliveryPages'
 import { ProductionPage } from '@/pages/production/ProductionPage'
 import { SuppliersPage } from '@/pages/suppliers/SuppliersPage'
 import { OperationsPage } from '@/pages/operations/OperationsPage'
 import { OrderDetailPage } from '@/pages/orders/OrderDetailPage'
+import { InvoiceListPage } from '@/pages/orders/InvoiceListPage'
+
 
 export default function App() {
   return (
@@ -25,7 +27,8 @@ export default function App() {
               <Route path="/"                element={<DashboardPage />} />
               <Route path="/orders"          element={<OrdersPage />} />
               <Route path="/items"           element={<ItemsPage />} />
-              <Route path="/order-recap"     element={<OrderRecapPage />} />
+              <Route path="/invoice"     element={<InvoiceListPage />} />
+              <Route path="/invoice/:id"     element={<InvoicePrintPage />} />
               <Route path="/delivery"        element={<DeliveryPage />} />
               <Route path="/delivery-orders" element={<DeliveryOrdersPage />} />
               <Route path="/surat-jalan"     element={<SuratJalanPage />} />

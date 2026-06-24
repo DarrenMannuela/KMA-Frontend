@@ -1,10 +1,10 @@
 import axios from 'axios'
 import type {
-  Order, Item, OrderRecap, Supplier, Production, Operation,
+  Order, Item, Invoice, Supplier, Production, Operation,
   Delivery, DeliveryOrder, SuratJalan,
   CreateOrderRequest, UpdateOrderRequest,
   CreateItemRequest, UpdateItemRequest,
-  CreateOrderRecapRequest, UpdateOrderRecapRequest,
+  CreateInvoiceRequest, UpdateInvoiceRequest,
   CreateSupplierRequest, UpdateSupplierRequest,
   CreateProductionRequest, UpdateProductionRequest,
   CreateOperationRequest, UpdateOperationRequest,
@@ -64,7 +64,7 @@ function crud<T, C, U>(base: string) {
 
 export const ordersApi        = crud<Order,         CreateOrderRequest,        UpdateOrderRequest>('/order')
 export const itemsApi         = {...crud<Item,           CreateItemRequest,          UpdateItemRequest>('/item'), getByOrder: (orderId: string) => http.get<Item[]>(`/item/by-order?order_id=${encodeURIComponent(orderId)}`).then(r => r.data)}
-export const orderRecapApi    = crud<OrderRecap,     CreateOrderRecapRequest,    UpdateOrderRecapRequest>('/order-recap')
+export const invoicesApi    = crud<Invoice,     CreateInvoiceRequest,    UpdateInvoiceRequest>('/invoice')
 export const suppliersApi     = crud<Supplier,       CreateSupplierRequest,      UpdateSupplierRequest>('/supplier')
 export const productionApi    = crud<Production,     CreateProductionRequest,    UpdateProductionRequest>('/production')
 export const operationsApi    = crud<Operation,      CreateOperationRequest,     UpdateOperationRequest>('/operation')

@@ -1,8 +1,8 @@
 import { ShoppingBag, Truck, Factory, Wrench, Users, TrendingUp, ArrowUpRight, Package } from 'lucide-react'
 import { formatRp } from '@/components/ui'
-import { orderHooks, deliveryHooks, productionHooks, operationHooks, supplierHooks, recapHooks } from '@/hooks'
+import { orderHooks, deliveryHooks, productionHooks, operationHooks, supplierHooks, invoiceHooks } from '@/hooks'
 import { format } from 'date-fns'
-import type { Order, OrderRecap, Production, Operation } from '@/types'
+import type { Order, Invoice, Production, Operation } from '@/types'
 
 interface KpiCardProps {
   label: string
@@ -43,14 +43,14 @@ export function DashboardPage() {
   const { data: productions = [] } = productionHooks.useList()
   const { data: operations  = [] } = operationHooks.useList()
   const { data: suppliers   = [] } = supplierHooks.useList()
-  const { data: recaps      = [] } = recapHooks.useList()
+  const { data: invoices      = [] } = invoiceHooks.useList()
 
-  const safeRecaps      = Array.isArray(recaps)      ? recaps      : []
+  const safeInvoices      = Array.isArray(invoices)      ? invoices      : []
   const safeProductions = Array.isArray(productions) ? productions : []
   const safeOperations  = Array.isArray(operations)  ? operations  : []
   const safeOrders      = Array.isArray(orders)      ? orders      : []
 
-  const totalAR       = (safeRecaps as OrderRecap[]).reduce((s, r) => s + (r.ar_receivable ?? 0), 0)
+  const totalAR       = (safeInvoices as Invoice[]).reduce((s, r) => s + (r.ar_receivable ?? 0), 0)
   const totalProdCost = (safeProductions as Production[]).reduce((s, p) => s + (p.price * p.amount), 0)
   const totalOpsCost  = (safeOperations as Operation[]).reduce((s, o) => s + o.price, 0)
   const recentOrders  = (safeOrders as Order[]).slice(-5).reverse()
@@ -166,7 +166,7 @@ export function DashboardPage() {
       </div>
 
       {/* ── Financial summary (only when data exists) ────────── */}
-      {(recaps as OrderRecap[]).length > 0 && (
+      {(invoices as Invoice[]).length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-card overflow-hidden fade-up delay-4">
           <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-navy-400" />
@@ -185,11 +185,11 @@ export function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {(recaps as OrderRecap[]).map((r) => (
+                {(invoices as Invoice[]).map((r) => (
                   <tr key={r.id}>
                     <td><span className="id-chip">{r.id}</span></td>
                     <td>{r.total}</td>
-                    <td className="currency">{formatRp(r.amount)}</td>
+                    <td className="currency">{formatRp(r.total)}</td>
                     <td className="currency text-green-600">{formatRp(r.down_payment)}</td>
                     <td className="currency text-amber-600">{formatRp(r.remaining)}</td>
                     <td className="currency font-semibold text-red-600">{formatRp(r.ar_receivable)}</td>

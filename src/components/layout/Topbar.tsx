@@ -8,7 +8,7 @@ const TITLES: Record<string, string> = {
   '/':                'Dashboard',
   '/orders':          'Orders',
   '/items':           'Order Items',
-  '/order-recap':     'Order Recap',
+  '/invoice':     'Invoice',
   '/delivery':        'Delivery',
   '/delivery-orders': 'Delivery Orders',
   '/surat-jalan':     'Surat Jalan',
@@ -18,7 +18,7 @@ const TITLES: Record<string, string> = {
 }
 
 // Routes that are fully wired to real DB handlers in main.go
-const LIVE_ROUTES = new Set(['/suppliers', '/orders', '/items', '/order-recap',
+const LIVE_ROUTES = new Set(['/suppliers', '/orders', '/items', '/invoice',
   '/delivery', '/delivery-orders', '/surat-jalan',
   '/production', '/operations',])
 

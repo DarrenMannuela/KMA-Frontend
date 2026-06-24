@@ -18,17 +18,27 @@ export interface Item {
   sub_total: number
 }
 
-// ─── Matches dto/OrderRecap.go ────────────────────────────────────────────────
-export interface OrderRecap {
-  id: number          // e.g. "001/KMA/25"
-  order_id: number
+// ─── Matches dto/Invoice.go ────────────────────────────────────────────────
+export interface Invoice {
+  id: string
+  order_id: string
+  type: string
+  kepada_yth: string
+  untuk: string
+  alamat: string
+  email: string | null
+  telp: string | null
+  start_produksi: string | null
+  lama_produksi: string | null
   total: number
   down_payment: number | null
   discount: number | null
-  amount: number
   remaining: number
   ar_receivable: number
-  orders?: Order
+  tanggal: string
+  due_date: string | null
+  paid_date: string | null
+  status: string
 }
 
 // ─── Supplier category enum from kma.yaml ────────────────────────────────────
@@ -102,8 +112,11 @@ export type UpdateOrderRequest = Partial<CreateOrderRequest>
 export type CreateItemRequest = Omit<Item, 'id'>
 export type UpdateItemRequest = Partial<CreateItemRequest>
 
-export type CreateOrderRecapRequest = Omit<OrderRecap, 'id'>
-export type UpdateOrderRecapRequest = Partial<CreateOrderRecapRequest>
+export type CreateInvoiceRequest = Omit<Invoice, 'remaining' | 'ar_receivable'> & {
+  remaining?: number
+  ar_receivable?: number
+}
+export type UpdateInvoiceRequest = Partial<CreateInvoiceRequest>
 
 export type CreateSupplierRequest = Omit<Supplier, 'id'>
 export type UpdateSupplierRequest = Partial<CreateSupplierRequest>
@@ -125,7 +138,7 @@ export type PageName =
   | 'dashboard'
   | 'orders'
   | 'items'
-  | 'order-recap'
+  | 'invoice'
   | 'delivery'
   | 'delivery-orders'
   | 'surat-jalan'
