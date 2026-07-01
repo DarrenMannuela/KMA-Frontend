@@ -24,6 +24,7 @@ interface NavGroup {
 
 const STANDALONE: NavItem[] = [
   { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+  { label: 'Delivery', path: '/delivery', icon: Truck, status: 'live' },
 ]
 
 const GROUPS: NavGroup[] = [
@@ -34,15 +35,6 @@ const GROUPS: NavGroup[] = [
       { label: 'Orders',      path: '/orders',      icon: ShoppingBag, status: 'live' },
       { label: 'Order Items', path: '/items',        icon: ListOrdered, status: 'live' },
       { label: 'Invoice', path: '/invoice',  icon: FileText,    status: 'live' },
-    ],
-  },
-  {
-    label: 'Delivery',
-    icon: Truck,
-    items: [
-      { label: 'Delivery',        path: '/delivery',        icon: Truck,        status: 'live' },
-      { label: 'Delivery Orders', path: '/delivery-orders', icon: PackageCheck, status: 'live' },
-      { label: 'Surat Jalan',     path: '/surat-jalan',     icon: ScrollText,   status: 'live' },
     ],
   },
   {
@@ -126,13 +118,18 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-0.5">
-        {STANDALONE.map(item => (
-          <NavItemLink key={item.path} item={item} />
-        ))}
+        {/* Dashboard first */}
+        <NavItemLink item={STANDALONE[0]} />
+
         <div className="pt-2 space-y-0.5">
-          {GROUPS.map(group => (
-            <NavGroupSection key={group.label} group={group} />
-          ))}
+          {/* Orders group */}
+          <NavGroupSection group={GROUPS[0]} />
+
+          {/* Delivery standalone, after Orders */}
+          <NavItemLink item={STANDALONE[1]} />
+
+          {/* Finances group */}
+          <NavGroupSection group={GROUPS[1]} />
         </div>
       </nav>
 

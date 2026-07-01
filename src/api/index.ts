@@ -1,7 +1,7 @@
 import axios from 'axios'
 import type {
   Order, Item, Invoice, Supplier, Production, Operation,
-  Delivery, DeliveryOrder, SuratJalan,
+  Delivery, DeliveryItem,
   CreateOrderRequest, UpdateOrderRequest,
   CreateItemRequest, UpdateItemRequest,
   CreateInvoiceRequest, UpdateInvoiceRequest,
@@ -9,7 +9,7 @@ import type {
   CreateProductionRequest, UpdateProductionRequest,
   CreateOperationRequest, UpdateOperationRequest,
   CreateDeliveryRequest, UpdateDeliveryRequest,
-  CreateDeliveryOrderRequest, UpdateDeliveryOrderRequest,
+  CreateDeliveryItemRequest, UpdateDeliveryItemRequest,
 } from '@/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,5 +69,5 @@ export const suppliersApi     = crud<Supplier,       CreateSupplierRequest,     
 export const productionApi    = crud<Production,     CreateProductionRequest,    UpdateProductionRequest>('/production')
 export const operationsApi    = crud<Operation,      CreateOperationRequest,     UpdateOperationRequest>('/operation')
 export const deliveryApi      = crud<Delivery,       CreateDeliveryRequest,      UpdateDeliveryRequest>('/delivery')
-export const deliveryOrderApi = crud<DeliveryOrder,  CreateDeliveryOrderRequest, UpdateDeliveryOrderRequest>('/delivery-order')
-export const suratJalanApi    = crud<SuratJalan,     Partial<SuratJalan>,        Partial<SuratJalan>>('/surat-jalan')
+export const deliveryItemApi = crud<DeliveryItem,  CreateDeliveryItemRequest, UpdateDeliveryItemRequest>('/delivery-item')
+

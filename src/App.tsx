@@ -6,7 +6,7 @@ import { DashboardPage } from '@/pages/DashboardPage'
 import { OrdersPage } from '@/pages/orders/OrdersPage'
 import { ItemsPage } from '@/pages/orders/ItemsPage'
 import { InvoicePrintPage } from '@/pages/orders/InvoicePrintPage'
-import { DeliveryPage, DeliveryOrdersPage, SuratJalanPage } from '@/pages/delivery/DeliveryPages'
+import { DeliveryPage, DeliveryItemsPage} from '@/pages/delivery/DeliveryPages'
 import { ProductionPage } from '@/pages/production/ProductionPage'
 import { SuppliersPage } from '@/pages/suppliers/SuppliersPage'
 import { OperationsPage } from '@/pages/operations/OperationsPage'
@@ -27,15 +27,14 @@ export default function App() {
               <Route path="/"                element={<DashboardPage />} />
               <Route path="/orders"          element={<OrdersPage />} />
               <Route path="/items"           element={<ItemsPage />} />
-              <Route path="/invoice"     element={<InvoiceListPage />} />
+              <Route path="/invoice"         element={<InvoiceListPage />} />
               <Route path="/invoice/:id"     element={<InvoicePrintPage />} />
               <Route path="/delivery"        element={<DeliveryPage />} />
-              <Route path="/delivery-orders" element={<DeliveryOrdersPage />} />
-              <Route path="/surat-jalan"     element={<SuratJalanPage />} />
+              <Route path="/delivery/:id"    element={<DeliveryItemsPage />} />
               <Route path="/production"      element={<ProductionPage />} />
               <Route path="/suppliers"       element={<SuppliersPage />} />
               <Route path="/operations"      element={<OperationsPage />} />
-              <Route path="/orders/:id" element={<OrderDetailPage />} />
+              <Route path="/orders/:id"      element={<OrderDetailPage />} />
             </Routes>
           </main>
         </div>

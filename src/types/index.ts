@@ -77,33 +77,26 @@ export interface Operation {
 
 // ─── Matches dto/Delivery.go ─────────────────────────────────────────────────
 export interface Delivery {
-  id: string          // e.g. "001/KMA/25"
+  id: string
+  type: string        
   address: string
   po_number: string | null
   phone_number: string | null
   contact_person: string | null
-  date: string        // ISO date string
+  date: string
 }
 
-// ─── Matches dto/DeliveryOrder.go ────────────────────────────────────────────
-export interface DeliveryOrder {
+// ─── Matches dto/DeliveryItem.go ────────────────────────────────────────────
+export interface DeliveryItem {
   id: number
   delivery_id: string
   item_name: string
   size: string | null
   amount: number
+  boxnumber: number| null
   delivery?: Delivery
 }
 
-// ─── Matches dto/SuratJalan.go ────────────────────────────────────────────────
-export interface SuratJalan {
-  id: number
-  delivery_id: number
-  delivery_items: string[]
-  size: (string | null)[]
-  amount: number
-  delivery?: Delivery
-}
 
 // ─── Request / Create DTOs ────────────────────────────────────────────────────
 export type CreateOrderRequest = Order
@@ -130,8 +123,8 @@ export type UpdateOperationRequest = Partial<CreateOperationRequest>
 export type CreateDeliveryRequest = Delivery
 export type UpdateDeliveryRequest = Partial<CreateDeliveryRequest>
 
-export type CreateDeliveryOrderRequest = Omit<DeliveryOrder, 'id' | 'delivery'>
-export type UpdateDeliveryOrderRequest = Partial<CreateDeliveryOrderRequest>
+export type CreateDeliveryItemRequest = Omit<DeliveryItem, 'id' | 'delivery'>
+export type UpdateDeliveryItemRequest = Partial<CreateDeliveryItemRequest>
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 export type PageName =
@@ -140,8 +133,7 @@ export type PageName =
   | 'items'
   | 'invoice'
   | 'delivery'
-  | 'delivery-orders'
-  | 'surat-jalan'
+  | 'delivery-items'
   | 'production'
   | 'suppliers'
   | 'operations'
