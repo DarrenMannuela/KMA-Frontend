@@ -1,13 +1,14 @@
 import axios from 'axios'
 import type {
-  Order, Item, Invoice, Supplier, Production, Operation,
+  Order, Item, Invoice, Supplier, FinanceHeader, FinanceType, ProductionItem, OperationItem,
   Delivery, DeliveryItem,
   CreateOrderRequest, UpdateOrderRequest,
   CreateItemRequest, UpdateItemRequest,
   CreateInvoiceRequest, UpdateInvoiceRequest,
   CreateSupplierRequest, UpdateSupplierRequest,
-  CreateProductionRequest, UpdateProductionRequest,
-  CreateOperationRequest, UpdateOperationRequest,
+  CreateFinanceHeaderRequest, UpdateFinanceHeaderRequest,
+  CreateProductionItemRequest, UpdateProductionItemRequest,
+  CreateOperationItemRequest, UpdateOperationItemRequest,
   CreateDeliveryRequest, UpdateDeliveryRequest,
   CreateDeliveryItemRequest, UpdateDeliveryItemRequest,
 } from '@/types'
@@ -47,6 +48,9 @@ function crud<T, C, U>(base: string) {
 //
 //  LIVE (wired to real handlers):
 //    /supplier, /supplier/:id
+//    /finance-header, /finance-header/:id  (shared parent for Production/Operation Kas Bons)
+//    /production-item, /production-item/:id
+//    /operation-item, /operation-item/:id
 //
 //  STUB (returns placeholder JSON — not wired to DB yet):
 //    /order, /order/:id
@@ -55,8 +59,6 @@ function crud<T, C, U>(base: string) {
 //    /delivery, /delivery/:id
 //    /delivery-order, /delivery-order/:id
 //    /surat-jalan, /surat-jalan/:id
-//    /production-entry, /production-entry/:id
-//    /operation-entry, /operation-entry/:id
 //
 //  NOT YET IN main.go (will need to be added as routes are implemented):
 //    /:id variants for order, items, surat-jalan
@@ -66,8 +68,27 @@ export const ordersApi        = crud<Order,         CreateOrderRequest,        U
 export const itemsApi         = {...crud<Item,           CreateItemRequest,          UpdateItemRequest>('/item'), getByOrder: (orderId: string) => http.get<Item[]>(`/item/by-order?order_id=${encodeURIComponent(orderId)}`).then(r => r.data)}
 export const invoicesApi    = crud<Invoice,     CreateInvoiceRequest,    UpdateInvoiceRequest>('/invoice')
 export const suppliersApi     = crud<Supplier,       CreateSupplierRequest,      UpdateSupplierRequest>('/supplier')
-export const productionApi    = crud<Production,     CreateProductionRequest,    UpdateProductionRequest>('/production')
-export const operationsApi    = crud<Operation,      CreateOperationRequest,     UpdateOperationRequest>('/operation')
+
+// financeHeaderApi: the shared "Kas Bon" parent. listByType is what the
+// production/operations pages actually use — a plain list() would mix both.
+export const financeHeaderApi = {
+  ...crud<FinanceHeader, CreateFinanceHeaderRequest, UpdateFinanceHeaderRequest>('/finance-header'),
+  listByType: (type: FinanceType) =>
+    http.get<FinanceHeader[]>(`/finance-header?type=${type}`).then(r => r.data),
+}
+
+// productionItemApi / operationItemApi: the line items under a header.
+// grouped() returns { [headerId]: Item[] } — the shape the row-flattening
+// hooks in hooks/index.ts expect.
+export const productionItemApi = {
+  ...crud<ProductionItem, CreateProductionItemRequest, UpdateProductionItemRequest>('/production-item'),
+  grouped: () => http.get<Record<string, ProductionItem[]>>('/production-item/grouped').then(r => r.data),
+}
+
+export const operationItemApi = {
+  ...crud<OperationItem, CreateOperationItemRequest, UpdateOperationItemRequest>('/operation-item'),
+  grouped: () => http.get<Record<string, OperationItem[]>>('/operation-item/grouped').then(r => r.data),
+}
+
 export const deliveryApi      = crud<Delivery,       CreateDeliveryRequest,      UpdateDeliveryRequest>('/delivery')
 export const deliveryItemApi = crud<DeliveryItem,  CreateDeliveryItemRequest, UpdateDeliveryItemRequest>('/delivery-item')
-

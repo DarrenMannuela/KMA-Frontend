@@ -56,23 +56,62 @@ export interface Supplier {
   supplier_category: SupplierCategory
 }
 
-// ─── Matches dto/Production.go ────────────────────────────────────────────────
-export interface Production {
+// ─── Matches dto/FinanceHeader.go ─────────────────────────────────────────────
+// Shared parent ("Kas Bon") for both Production and Operation line items.
+// A header is always exactly one Type — never mixed.
+export type FinanceType = 'production' | 'operation'
+
+export interface FinanceHeader {
   id: string          // e.g. "01/KB/26"
+  type: FinanceType
+  date: string         // ISO date string, e.g. "2026-04-02"
+  supplier_id: number  // 0/unset is valid for operation headers with no supplier
   description: string
-  supplier_id: number
+  supplier?: Supplier
+}
+
+// ─── Matches dto/ProductionItem.go ────────────────────────────────────────────
+export interface ProductionItem {
+  id: number
+  header_id: string
   material_name: string
   price: number
   si_unit: string     // e.g. "yard", "meter", "pcs"
   amount: number
-  supplier?: Supplier
 }
 
-// ─── Matches dto/Operations.go ────────────────────────────────────────────────
-export interface Operation {
-  id: string          // e.g. "01/KB/26"
+// ─── Matches dto/OperationItem.go ─────────────────────────────────────────────
+export interface OperationItem {
+  id: number
+  header_id: string
   description: string
   price: number
+}
+
+// ─── Flattened view-models ─────────────────────────────────────────────────────
+// The spreadsheets show one row per item with its parent header's fields
+// merged in — same shape the old flat Production/Operation types had. These
+// are computed client-side in hooks/index.ts; they're not the wire format.
+export interface ProductionRow {
+  id: number                   // ProductionItem.id
+  header_id: string            // e.g. "01/KB/26" — the Kas Bon id
+  date: string
+  description: string          // header-level description
+  supplier_id: number
+  supplier?: Supplier
+  material_name: string        // item-level
+  price: number                // item-level
+  si_unit: string               // item-level
+  amount: number                // item-level
+}
+
+export interface OperationRow {
+  id: number                   // OperationItem.id
+  header_id: string
+  date: string
+  description: string          // header-level description
+  item_description: string     // item-level (the specific cost line)
+  price: number                // item-level
 }
 
 // ─── Matches dto/Delivery.go ─────────────────────────────────────────────────
@@ -114,11 +153,22 @@ export type UpdateInvoiceRequest = Partial<CreateInvoiceRequest>
 export type CreateSupplierRequest = Omit<Supplier, 'id'>
 export type UpdateSupplierRequest = Partial<CreateSupplierRequest>
 
-export type CreateProductionRequest = Production
-export type UpdateProductionRequest = Partial<CreateProductionRequest>
+export type CreateFinanceHeaderRequest = FinanceHeader
+export type UpdateFinanceHeaderRequest = Partial<CreateFinanceHeaderRequest>
 
-export type CreateOperationRequest = Operation
-export type UpdateOperationRequest = Partial<CreateOperationRequest>
+export type CreateProductionItemRequest = Omit<ProductionItem, 'id'>
+export type UpdateProductionItemRequest = Partial<CreateProductionItemRequest>
+
+export type CreateOperationItemRequest = Omit<OperationItem, 'id'>
+export type UpdateOperationItemRequest = Partial<CreateOperationItemRequest>
+
+// What the spreadsheet / quick-add UI submits — the hooks layer splits
+// these into a FinanceHeader + item under the hood.
+export type CreateProductionRowRequest = Omit<ProductionRow, 'id'>
+export type UpdateProductionRowRequest = Partial<CreateProductionRowRequest>
+
+export type CreateOperationRowRequest = Omit<OperationRow, 'id'>
+export type UpdateOperationRowRequest = Partial<CreateOperationRowRequest>
 
 export type CreateDeliveryRequest = Delivery
 export type UpdateDeliveryRequest = Partial<CreateDeliveryRequest>

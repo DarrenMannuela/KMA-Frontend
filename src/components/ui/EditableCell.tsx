@@ -7,7 +7,7 @@ interface SelectOption {
 
 interface EditableCellProps {
   value: any
-  type?: 'text' | 'number' | 'select'
+  type?: 'text' | 'number' | 'select' | 'date'
   options?: SelectOption[]
   onSave: (val: any) => void
   format?: (val: any) => React.ReactNode
@@ -42,6 +42,14 @@ export function EditableCell({
     }
   }
 
+  // Native <input type="number"> still lets people type/paste "e", "+", "-",
+  // "." (valid characters for JS number parsing, not valid for a price or
+  // qty). Rendering it as text + inputMode="numeric" and filtering to
+  // digits here closes that off while keeping the numeric keyboard on mobile.
+  const handleChange = (raw: string) => {
+    setVal(type === 'number' ? raw.replace(/[^\d]/g, '') : raw)
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') commit(val)
     if (e.key === 'Escape') {
@@ -72,9 +80,10 @@ export function EditableCell({
     return (
       <input
         ref={inputRef}
-        type={type}
+        type={type === 'number' ? 'text' : type}
+        inputMode={type === 'number' ? 'numeric' : undefined}
         value={val ?? ''}
-        onChange={(e) => setVal(e.target.value)}
+        onChange={(e) => handleChange(e.target.value)}
         onBlur={() => commit(val)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
