@@ -1,9 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Factory } from 'lucide-react'
 import { productionHooks, supplierHooks } from '@/hooks'
+import { Spinner } from '@/components/ui'
 import { MonthNavigator } from '@/components/ui/MonthNavigator'
 import { ProductionSpreadsheet } from './ProductionsSpreadsheet'
 import { isInMonth } from '@/utils/MonthUtils'
+import type { SupplierCategory } from '@/types'
+
+// Duplicated in ProductionDashboard.tsx / ProductionsSpreadsheet.tsx —
+// worth pulling into a shared util if a fourth spot needs it.
+const CATEGORY_LABELS: Record<SupplierCategory, string> = {
+  sablon: 'Sablon',
+  embroidery: 'Embroidery',
+  merchandise_supplier: 'Merchandise',
+  uniform_supplier: 'Uniform',
+  general_supplier: 'General',
+}
 
 interface ProductionSheetViewProps {
   onBack: () => void
@@ -27,10 +39,12 @@ export function ProductionSheetView({ onBack, initialSupplierId }: ProductionShe
     [allData, cursor]
   )
   const visibleData = supplierFilter ? monthData.filter(r => r.supplier_id === supplierFilter) : monthData
-  const supplierName = suppliers.find(s => s.id === supplierFilter)?.supplier_name
+  const filteredSupplier = suppliers.find(s => s.id === supplierFilter)
+  const supplierName = filteredSupplier?.supplier_name
+  const supplierCategory = filteredSupplier ? CATEGORY_LABELS[filteredSupplier.supplier_category] : undefined
 
   if (isLoading) {
-    return <div className="p-6 text-slate-400 text-sm">Loading production ledger…</div>
+    return <Spinner />
   }
 
   return (
@@ -43,7 +57,16 @@ export function ProductionSheetView({ onBack, initialSupplierId }: ProductionShe
           <Factory className="text-navy-600" size={20} />
           <h2 className="text-lg font-semibold text-slate-800">
             Production Spreadsheet
-            {supplierName && <span className="text-slate-400 font-normal"> — {supplierName}</span>}
+            {supplierName && (
+              <span className="text-slate-400 font-normal">
+                {' '}— {supplierName}
+                {supplierCategory && (
+                  <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wide bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded align-middle">
+                    {supplierCategory}
+                  </span>
+                )}
+              </span>
+            )}
           </h2>
         </div>
         <MonthNavigator year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />

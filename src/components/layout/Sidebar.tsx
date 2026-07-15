@@ -41,8 +41,8 @@ const GROUPS: NavGroup[] = [
     label: 'Finances',
     icon: Factory,
     items: [
-      { label: 'Production', path: '/production', icon: Factory, status: 'live' },
       { label: 'Suppliers',  path: '/suppliers',  icon: Users,   status: 'live' },
+      { label: 'Production', path: '/production', icon: Factory, status: 'live' },
       { label: 'Operations', path: '/operations', icon: Wrench,  status: 'live' },
     ],
   },

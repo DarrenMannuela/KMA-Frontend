@@ -1,6 +1,6 @@
 import axios from 'axios'
 import type {
-  Order, Item, Invoice, Supplier, FinanceHeader, FinanceType, ProductionItem, OperationItem,
+  Order, Item, Invoice, Supplier, FinanceHeader, ProductionItem, OperationItem,
   Delivery, DeliveryItem,
   CreateOrderRequest, UpdateOrderRequest,
   CreateItemRequest, UpdateItemRequest,
@@ -48,8 +48,10 @@ function crud<T, C, U>(base: string) {
 //
 //  LIVE (wired to real handlers):
 //    /supplier, /supplier/:id
-//    /finance-header, /finance-header/:id  (shared parent for Production/Operation Kas Bons)
-//    /production-item, /production-item/:id
+//    /finance-header, /finance-header/:id  (shared parent for Production/Operation Kas Bons —
+//      no longer filterable by type; a header can have both production and
+//      operation items attached, so listing is just "give me all headers")
+//    /production-item, /production-item/:id  (now carries its own supplier_id)
 //    /operation-item, /operation-item/:id
 //
 //  STUB (returns placeholder JSON — not wired to DB yet):
@@ -69,13 +71,12 @@ export const itemsApi         = {...crud<Item,           CreateItemRequest,     
 export const invoicesApi    = crud<Invoice,     CreateInvoiceRequest,    UpdateInvoiceRequest>('/invoice')
 export const suppliersApi     = crud<Supplier,       CreateSupplierRequest,      UpdateSupplierRequest>('/supplier')
 
-// financeHeaderApi: the shared "Kas Bon" parent. listByType is what the
-// production/operations pages actually use — a plain list() would mix both.
-export const financeHeaderApi = {
-  ...crud<FinanceHeader, CreateFinanceHeaderRequest, UpdateFinanceHeaderRequest>('/finance-header'),
-  listByType: (type: FinanceType) =>
-    http.get<FinanceHeader[]>(`/finance-header?type=${type}`).then(r => r.data),
-}
+// financeHeaderApi: the shared "Kas Bon" parent. Plain list() is now what
+// production/operations actually use — there's no type filter anymore,
+// since a single header can have both production and operation items on
+// it. Each page's hooks (productionHooks/operationHooks) filter down to
+// "headers that actually have an item in my table" client-side instead.
+export const financeHeaderApi = crud<FinanceHeader, CreateFinanceHeaderRequest, UpdateFinanceHeaderRequest>('/finance-header')
 
 // productionItemApi / operationItemApi: the line items under a header.
 // grouped() returns { [headerId]: Item[] } — the shape the row-flattening

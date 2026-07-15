@@ -57,23 +57,28 @@ export interface Supplier {
 }
 
 // ─── Matches dto/FinanceHeader.go ─────────────────────────────────────────────
-// Shared parent ("Kas Bon") for both Production and Operation line items.
-// A header is always exactly one Type — never mixed.
-export type FinanceType = 'production' | 'operation'
-
+// A "Kas Bon" — shared parent for Production and/or Operation line items.
+// Deliberately just a receipt: id/date/description. It does NOT carry a
+// type or a supplier anymore. Whether a header shows up on the Production
+// page, the Operations page, or both, is purely a function of which item
+// tables actually have rows pointing at it (see toProductionRows /
+// toOperationRows in hooks/index.ts) — a single Kas Bon can legitimately
+// have both production material lines AND an operation cost line on it,
+// e.g. one physical receipt covering fabric plus the ojek fee to fetch it.
 export interface FinanceHeader {
   id: string          // e.g. "01/KB/26"
-  type: FinanceType
   date: string         // ISO date string, e.g. "2026-04-02"
-  supplier_id: number  // 0/unset is valid for operation headers with no supplier
   description: string
-  supplier?: Supplier
 }
 
 // ─── Matches dto/ProductionItem.go ────────────────────────────────────────────
+// supplier_id lives HERE, not on the header — different material lines
+// under the same Kas Bon can legitimately come from different suppliers.
 export interface ProductionItem {
   id: number
   header_id: string
+  supplier_id: number
+  supplier?: Supplier
   material_name: string
   price: number
   si_unit: string     // e.g. "yard", "meter", "pcs"
@@ -90,15 +95,15 @@ export interface OperationItem {
 
 // ─── Flattened view-models ─────────────────────────────────────────────────────
 // The spreadsheets show one row per item with its parent header's fields
-// merged in — same shape the old flat Production/Operation types had. These
-// are computed client-side in hooks/index.ts; they're not the wire format.
+// merged in. These are computed client-side in hooks/index.ts; they're not
+// the wire format.
 export interface ProductionRow {
   id: number                   // ProductionItem.id
   header_id: string            // e.g. "01/KB/26" — the Kas Bon id
-  date: string
-  description: string          // header-level description
-  supplier_id: number
-  supplier?: Supplier
+  date: string                 // header-level
+  description: string          // header-level
+  supplier_id: number          // item-level
+  supplier?: Supplier          // item-level
   material_name: string        // item-level
   price: number                // item-level
   si_unit: string               // item-level
@@ -108,8 +113,8 @@ export interface ProductionRow {
 export interface OperationRow {
   id: number                   // OperationItem.id
   header_id: string
-  date: string
-  description: string          // header-level description
+  date: string                 // header-level
+  description: string          // header-level
   item_description: string     // item-level (the specific cost line)
   price: number                // item-level
 }
@@ -156,7 +161,7 @@ export type UpdateSupplierRequest = Partial<CreateSupplierRequest>
 export type CreateFinanceHeaderRequest = FinanceHeader
 export type UpdateFinanceHeaderRequest = Partial<CreateFinanceHeaderRequest>
 
-export type CreateProductionItemRequest = Omit<ProductionItem, 'id'>
+export type CreateProductionItemRequest = Omit<ProductionItem, 'id' | 'supplier'>
 export type UpdateProductionItemRequest = Partial<CreateProductionItemRequest>
 
 export type CreateOperationItemRequest = Omit<OperationItem, 'id'>

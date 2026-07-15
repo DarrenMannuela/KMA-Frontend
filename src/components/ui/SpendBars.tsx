@@ -4,6 +4,10 @@ interface SpendBarItem {
   id: string | number
   label: string
   value: number
+  /** Optional badge shown next to the label — e.g. the supplier's category
+   *  (Sablon, Embroidery, ...). Also helps disambiguate two suppliers that
+   *  happen to share a name but differ in category. */
+  category?: string
 }
 
 interface SpendBarsProps {
@@ -33,10 +37,21 @@ export function SpendBars({ items, selectedId, onSelect, emptyLabel = 'No spendi
             className="w-full text-left group"
           >
             <div className="flex justify-between items-baseline mb-1">
-              <span className={`text-sm font-medium ${isSelected ? 'text-white' : 'text-navy-200'}`}>
-                {item.label}
+              <span className="flex items-baseline gap-2 min-w-0">
+                <span className={`text-sm font-medium truncate ${isSelected ? 'text-white' : 'text-navy-200'}`}>
+                  {item.label}
+                </span>
+                {item.category && (
+                  <span
+                    className={`text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 ${
+                      isSelected ? 'bg-white/20 text-white' : 'bg-navy-800 text-navy-300'
+                    }`}
+                  >
+                    {item.category}
+                  </span>
+                )}
               </span>
-              <span className={`text-sm font-mono font-semibold ${isSelected ? 'text-white' : 'text-navy-200'}`}>
+              <span className={`text-sm font-mono font-semibold shrink-0 ${isSelected ? 'text-white' : 'text-navy-200'}`}>
                 {formatRp(item.value)}
               </span>
             </div>

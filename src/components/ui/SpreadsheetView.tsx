@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react'
-import { Trash2, ChevronRight, Plus } from 'lucide-react'
+import { Trash2, ChevronRight, Plus, Check, X } from 'lucide-react'
 import { formatRp } from './index' // Assuming formatRp is exported from your ui/index.ts
 import { EditableCell } from './EditableCell'
 
@@ -17,6 +17,11 @@ export interface ColumnDef<T> {
   format?: (val: any, row: T) => React.ReactNode
   width?: string
   placeholder?: string
+  /** Allow one decimal point while typing (e.g. quantities like "2.5 meter"). Only relevant for type="number". */
+  allowDecimal?: boolean
+  /** Free-text autocomplete suggestions (e.g. existing Kas Bon IDs) — cuts down on
+   *  accidental near-duplicate IDs from typos, while still allowing new values. */
+  suggestions?: string[]
 }
 
 interface SpreadsheetViewProps<T> {
@@ -122,6 +127,21 @@ export function SpreadsheetView<T extends { id: string | number }>({
 
   const addBlankRow = () => setBlankRows(prev => [...prev, ...makeBlankRows(1)])
 
+  // ── Delete confirmation ─────────────────────────────────────────────────
+  // A bare trash icon that fires immediately is one misclick away from
+  // losing a row — worse here, since deleting the last item on a Kas Bon
+  // can cascade-delete the whole shared header (see productionHooks/
+  // operationHooks useDelete). First click arms a row (shows check/cancel
+  // in place of the trash icon); a second, deliberate click actually
+  // deletes. Arming a different row disarms the previous one.
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const requestDelete = (id: string) => setPendingDeleteId(id)
+  const cancelDelete = () => setPendingDeleteId(null)
+  const confirmDelete = (id: string) => {
+    onDeleteRow?.(id)
+    setPendingDeleteId(null)
+  }
+
   // ── Collapsible groups ──────────────────────────────────────────────────
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(defaultCollapsedGroups))
   const toggleGroup = (name: string) => {
@@ -182,7 +202,7 @@ export function SpreadsheetView<T extends { id: string | number }>({
   // in both tables is what actually guarantees that, not content sizing.
   const colGroup = (
     <colgroup>
-      {columns.map(c => <col key={String(c.key)} style={c.width ? { width: c.width } : undefined} />)}
+      {columns.map((c, idx) => <col key={idx} style={c.width ? { width: c.width } : undefined} />)}
       {onDeleteRow && <col style={{ width: '2.5rem' }} />}
     </colgroup>
   )
@@ -197,9 +217,9 @@ export function SpreadsheetView<T extends { id: string | number }>({
           {colGroup}
           <thead ref={theadRef} className="bg-slate-50 border-b border-slate-200 sticky top-0 z-20">
             <tr>
-              {columns.map(col => (
+              {columns.map((col, idx) => (
                 <th
-                  key={String(col.key)}
+                  key={idx}
                   className="px-4 py-3 font-semibold text-slate-600 border-r border-slate-200 last:border-0 bg-slate-50 whitespace-nowrap"
                 >
                   {col.header}
@@ -248,11 +268,13 @@ export function SpreadsheetView<T extends { id: string | number }>({
                               type={col.type}
                               options={col.options}
                               placeholder={col.placeholder}
+                              suggestions={col.suggestions}
+                              allowDecimal={col.allowDecimal}
                               format={val => (col.format ? col.format(val, row) : val)}
                               onSave={(newVal) => onUpdateRow(String(row.id), { ...row, [col.key]: newVal })}
                             />
                           ) : (
-                            <div className="px-2 py-1">
+                            <div className="px-2 py-1 break-words">
                               {col.format ? col.format(row[col.key], row) : String(row[col.key])}
                             </div>
                           )}
@@ -260,13 +282,32 @@ export function SpreadsheetView<T extends { id: string | number }>({
                       ))}
                       {onDeleteRow && (
                         <td className="px-2 text-center">
-                          <button
-                            onClick={() => onDeleteRow(String(row.id))}
-                            className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-opacity"
-                            title="Delete row"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {pendingDeleteId === String(row.id) ? (
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                onClick={() => confirmDelete(String(row.id))}
+                                className="text-red-500 hover:text-red-700"
+                                title="Confirm delete"
+                              >
+                                <Check size={14} />
+                              </button>
+                              <button
+                                onClick={cancelDelete}
+                                className="text-slate-400 hover:text-slate-600"
+                                title="Cancel"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => requestDelete(String(row.id))}
+                              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-opacity"
+                              title="Delete row"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </td>
                       )}
                     </tr>
@@ -322,11 +363,13 @@ export function SpreadsheetView<T extends { id: string | number }>({
                           type={col.type}
                           options={col.options}
                           placeholder={col.key === keyColumn ? (col.placeholder ?? 'new ID…') : col.placeholder}
+                          suggestions={col.suggestions}
+                          allowDecimal={col.allowDecimal}
                           format={val => (col.format ? col.format(val, row as unknown as T) : val)}
                           onSave={(newVal) => updateBlankField(row.__key, col.key, newVal)}
                         />
                       ) : (
-                        <div className="px-2 py-1">
+                        <div className="px-2 py-1 break-words">
                           {col.format
                             ? col.format(row[col.key as string], row as unknown as T)
                             : <span className="text-slate-300">—</span>}

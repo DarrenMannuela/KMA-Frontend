@@ -1,9 +1,22 @@
+import { useMemo } from 'react'
 import { SpreadsheetView, type ColumnDef } from '@/components/ui/SpreadsheetView'
 import { formatRp } from '@/components/ui'
 import { productionHooks, supplierHooks } from '@/hooks'
 import { todayISODate, formatDateShort } from '@/utils/MonthUtils'
 import { SI_UNITS } from '@/utils/Units'
-import type { ProductionRow, CreateProductionRowRequest } from '@/types'
+import type { ProductionRow, CreateProductionRowRequest, SupplierCategory } from '@/types'
+
+// SupplierCategory wire values are snake_case — this is the short display
+// label shown next to a supplier's name (dropdown options, group headers,
+// the Supplier column). Also duplicated in ProductionDashboard.tsx; worth
+// pulling into a shared util if a third spot ever needs it.
+const CATEGORY_LABELS: Record<SupplierCategory, string> = {
+  sablon: 'Sablon',
+  embroidery: 'Embroidery',
+  merchandise_supplier: 'Merchandise',
+  uniform_supplier: 'Uniform',
+  general_supplier: 'General',
+}
 
 interface ProductionSpreadsheetProps {
   /** Already filtered by the parent page (e.g. by month, and optionally by supplier). */
@@ -20,14 +33,42 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
   const update = productionHooks.useUpdate()
   const del = productionHooks.useDelete()
 
-  const supplierOptions = suppliers.map(s => ({ value: s.id, label: s.supplier_name }))
+  // Category tags on in both the dropdown and the Supplier column — two
+  // suppliers can legitimately share a name (e.g. two "Sai Textile"
+  // entries, one for sablon and one for embroidery work), and without the
+  // category there's no way to tell them apart when picking or reading.
+  const supplierOptions = suppliers.map(s => ({
+    value: s.id,
+    label: `${s.supplier_name} · ${CATEGORY_LABELS[s.supplier_category]}`,
+  }))
   const unitOptions = SI_UNITS.map(u => ({ value: u, label: u }))
   const supplierName = (id: number) => suppliers.find(s => s.id === id)?.supplier_name ?? 'Unassigned'
+  const supplierCategory = (id: number) => {
+    const s = suppliers.find(s => s.id === id)
+    return s ? CATEGORY_LABELS[s.supplier_category] : undefined
+  }
+
+  // Existing Kas Bon IDs, offered as autocomplete suggestions on the ID
+  // column — free typing still works for genuinely new IDs, this just
+  // makes it easy to reuse an existing one instead of retyping it with a
+  // typo (e.g. "1/KB/26" vs "01/KB/26"), which today would silently create
+  // a second, disconnected header instead of erroring.
+  const headerIdSuggestions = useMemo(
+    () => Array.from(new Set(data.map(r => r.header_id))).sort(),
+    [data]
+  )
 
   // When a supplier filter is active there's nothing left to group by
   // supplier — group by Kas Bon ID instead so items from the same header
-  // sit together, and Supplier (already conveyed by the page filter/title
-  // in that mode) drops out of the per-row columns.
+  // sit together. Supplier drops out of the per-row columns in that mode
+  // too, but purely because it's redundant to repeat (the filter already
+  // guarantees every visible row has the same supplier) — not because it's
+  // a shared header field anymore. Supplier now lives on ProductionItem,
+  // so two material lines under the same Kas Bon can genuinely have
+  // different suppliers; a group in the unfiltered/grouped-by-supplier
+  // view can therefore have some of one Kas Bon's rows counted under one
+  // supplier's subtotal and the rest under another's — that's intentional,
+  // it reflects where the money actually went.
   //
   // Date isn't a per-row column — it lives on the shared FinanceHeader, not
   // the item, and now that formatDateShort's bug is fixed it displays
@@ -40,6 +81,7 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
   const col = {
     header_id: {
       key: 'header_id', header: 'Kas Bon ID', type: 'text', editable: true, width: '110px', placeholder: 'e.g. 01/KB/26',
+      suggestions: headerIdSuggestions,
     } as ColumnDef<ProductionRow>,
     description: {
       key: 'description', header: 'Description', type: 'text', editable: true, placeholder: 'e.g. Beli bahan Basic 902',
@@ -50,10 +92,19 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
     supplier_id: {
       key: 'supplier_id', header: 'Supplier', type: 'select', editable: true,
       options: supplierOptions,
-      format: (val: number) => supplierName(Number(val)),
+      format: (val: number) => (
+        <span className="inline-flex items-center gap-1.5">
+          {supplierName(Number(val))}
+          {supplierCategory(Number(val)) && (
+            <span className="text-[10px] font-medium uppercase tracking-wide bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
+              {supplierCategory(Number(val))}
+            </span>
+          )}
+        </span>
+      ),
     } as ColumnDef<ProductionRow>,
     amount: {
-      key: 'amount', header: 'Qty', type: 'number', editable: true, width: '80px',
+      key: 'amount', header: 'Qty', type: 'number', editable: true, width: '80px', allowDecimal: true,
     } as ColumnDef<ProductionRow>,
     si_unit: {
       key: 'si_unit', header: 'Unit', type: 'select', editable: true, options: unitOptions,
@@ -79,18 +130,38 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
   return (
     <SpreadsheetView<ProductionRow>
       data={data}
-      maxHeight="60vh"
-      groupByKey={groupedByHeader ? (row => row.header_id) : (row => supplierName(row.supplier_id))}
-      renderGroupHeader={groupedByHeader ? (_groupName, rows) => {
-        const first = rows[0]
-        return (
-          <>
-            <span className="font-mono">{first.header_id}</span>
-            <span className="text-slate-400 font-normal"> — {first.description || 'No description'}</span>
-            <span className="text-slate-400 font-normal"> · {formatDateShort(first.date)}</span>
-          </>
-        )
-      } : undefined}
+      maxHeight="78vh"
+      // Grouping by name string would silently merge two different
+      // suppliers that happen to share a name (e.g. two "Sai Textile"
+      // records — one sablon, one embroidery) into a single group. Group
+      // by the actual supplier_id instead; renderGroupHeader below is what
+      // turns that id back into a readable name + category for display.
+      groupByKey={groupedByHeader ? (row => row.header_id) : (row => String(row.supplier_id))}
+      renderGroupHeader={groupedByHeader
+        ? (_groupName, rows) => {
+            const first = rows[0]
+            return (
+              <>
+                <span className="font-mono">{first.header_id}</span>
+                <span className="text-slate-400 font-normal"> — {first.description || 'No description'}</span>
+                <span className="text-slate-400 font-normal"> · {formatDateShort(first.date)}</span>
+              </>
+            )
+          }
+        : (_groupName, rows) => {
+            const supplierId = rows[0].supplier_id
+            const category = supplierCategory(supplierId)
+            return (
+              <span className="inline-flex items-center gap-1.5">
+                {supplierName(supplierId)}
+                {category && (
+                  <span className="text-[10px] font-medium uppercase tracking-wide bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
+                    {category}
+                  </span>
+                )}
+              </span>
+            )
+          }}
       calculateSubtotal={row => row.price * row.amount}
       keyColumn="id"
       triggerColumn="material_name"

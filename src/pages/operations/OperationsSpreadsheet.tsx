@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { SpreadsheetView, type ColumnDef } from '@/components/ui/SpreadsheetView'
 import { formatRp } from '@/components/ui'
 import { operationHooks } from '@/hooks'
@@ -14,12 +15,20 @@ export function OperationsSpreadsheet({ data }: OperationsSpreadsheetProps) {
   const update = operationHooks.useUpdate()
   const del = operationHooks.useDelete()
 
+  // Existing Kas Bon IDs as autocomplete suggestions — see the same
+  // comment in ProductionsSpreadsheet for why this matters (typos here
+  // silently create a second, disconnected header instead of erroring).
+  const headerIdSuggestions = useMemo(
+    () => Array.from(new Set(data.map(r => r.header_id))).sort(),
+    [data]
+  )
+
   // Date isn't a per-row column — it lives on the shared FinanceHeader, not
   // the item, and shows correctly in the group header (see
   // renderGroupHeader below) now that formatDateShort's bug is fixed. New
   // Kas Bons default to today's date via emptyRowTemplate.
   const columns: ColumnDef<OperationRow>[] = [
-    { key: 'header_id', header: 'Kas Bon ID', type: 'text', editable: true, width: '110px', placeholder: 'e.g. 01/KB/26' },
+    { key: 'header_id', header: 'Kas Bon ID', type: 'text', editable: true, width: '110px', placeholder: 'e.g. 01/KB/26', suggestions: headerIdSuggestions },
     { key: 'description', header: 'Description', type: 'text', editable: true, placeholder: 'e.g. Transport, Beli bahan…' },
     { key: 'item_description', header: 'Item', type: 'text', editable: true, placeholder: 'e.g. Ojek to supplier' },
     {
@@ -31,7 +40,7 @@ export function OperationsSpreadsheet({ data }: OperationsSpreadsheetProps) {
   return (
     <SpreadsheetView<OperationRow>
       data={data}
-      maxHeight="60vh"
+      maxHeight="78vh"
       keyColumn="id"
       triggerColumn="item_description"
       groupByKey={row => row.header_id}

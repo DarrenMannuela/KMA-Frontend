@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Wrench, Plus, ArrowRight } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { operationHooks } from '@/hooks'
-import { formatRp, FormField } from '@/components/ui'
+import { formatRp, FormField, Spinner } from '@/components/ui'
 import { MonthNavigator } from '@/components/ui/MonthNavigator'
 import { isInMonth, todayISODate } from '@/utils/MonthUtils'
 import { formatThousands, stripCommas } from '@/utils/NumberFormat'
@@ -25,6 +26,9 @@ export function OperationsDashboard({ onOpenSheet }: OperationsDashboardProps) {
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() })
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [quickAdd, setQuickAdd] = useState(emptyQuickAdd())
+  // Which required fields were empty on the last submit attempt — flags
+  // the fields themselves instead of the click silently doing nothing.
+  const [missing, setMissing] = useState<Set<'header_id' | 'description'>>(new Set())
 
   const monthData = useMemo(
     () => allData.filter(row => isInMonth(row.date, cursor.year, cursor.month)),
@@ -33,7 +37,15 @@ export function OperationsDashboard({ onOpenSheet }: OperationsDashboardProps) {
   const monthTotal = monthData.reduce((s, o) => s + o.price, 0)
 
   const handleQuickAdd = () => {
-    if (!quickAdd.header_id || !quickAdd.description) return
+    const emptyFields = new Set<'header_id' | 'description'>()
+    if (!quickAdd.header_id) emptyFields.add('header_id')
+    if (!quickAdd.description) emptyFields.add('description')
+    if (emptyFields.size > 0) {
+      setMissing(emptyFields)
+      toast.error('Kas Bon ID and Description are required')
+      return
+    }
+    setMissing(new Set())
     const payload: CreateOperationRowRequest = {
       header_id: quickAdd.header_id,
       date: quickAdd.date,
@@ -52,10 +64,10 @@ export function OperationsDashboard({ onOpenSheet }: OperationsDashboardProps) {
     })
   }
 
-  const handleNewKasBon = () => setQuickAdd(emptyQuickAdd())
+  const handleNewKasBon = () => { setQuickAdd(emptyQuickAdd()); setMissing(new Set()) }
 
   if (isLoading) {
-    return <div className="p-6 text-slate-400 text-sm">Loading operations ledger…</div>
+    return <Spinner />
   }
 
   return (
@@ -96,13 +108,30 @@ export function OperationsDashboard({ onOpenSheet }: OperationsDashboardProps) {
               New Kas Bon
             </button>
           </div>
-          <FormField label="Kas Bon ID">
-            <input className="field font-mono" placeholder="01/KB/26" value={quickAdd.header_id}
-              onChange={e => setQuickAdd(p => ({ ...p, header_id: e.target.value }))} />
+
+          {/* Sticky reminder of which Kas Bon new lines are landing on. */}
+          {quickAdd.header_id && (
+            <div className="col-span-2 md:col-span-4 -mb-1">
+              <span className="inline-flex items-center gap-1.5 text-xs bg-navy-50 text-navy-700 border border-navy-100 rounded-full px-2.5 py-1">
+                Adding to <span className="font-mono font-semibold">{quickAdd.header_id}</span>
+              </span>
+            </div>
+          )}
+
+          <FormField label="Kas Bon ID" required>
+            <input
+              className={`field font-mono ${missing.has('header_id') ? '!border-red-400 !ring-red-100' : ''}`}
+              placeholder="01/KB/26"
+              value={quickAdd.header_id}
+              onChange={e => setQuickAdd(p => ({ ...p, header_id: e.target.value }))}
+            />
           </FormField>
-          <FormField label="Description">
-            <input className="field" value={quickAdd.description}
-              onChange={e => setQuickAdd(p => ({ ...p, description: e.target.value }))} />
+          <FormField label="Description" required>
+            <input
+              className={`field ${missing.has('description') ? '!border-red-400 !ring-red-100' : ''}`}
+              value={quickAdd.description}
+              onChange={e => setQuickAdd(p => ({ ...p, description: e.target.value }))}
+            />
           </FormField>
           <FormField label="Amount (Rp)">
             <input className="field font-mono" type="text" inputMode="numeric" placeholder="0" value={formatThousands(quickAdd.price)}

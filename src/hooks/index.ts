@@ -72,24 +72,30 @@ export const deliveryItemHooks = makeCrudHooks('delivery-orders', deliveryItemAp
 // Production & Operations: FinanceHeader (parent) + items (children), flattened
 // into rows client-side. Pages/spreadsheets keep using useList/useCreate/
 // useUpdate/useDelete exactly as before — only what's inside changed.
+//
+// Headers no longer have a type or a supplier. A single Kas Bon can have
+// BOTH production items and operation items on it (e.g. one receipt
+// covering fabric plus the ojek fee to fetch it) — "is this header on the
+// Production page" is purely "does it have ≥1 row in production_items",
+// same idea for Operations. Supplier lives on ProductionItem now, so
+// different material lines under the same Kas Bon can come from different
+// suppliers — that's expected, not a conflict to warn about.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PRODUCTION_HEADERS_KEY = ['finance-header', 'production']
+const HEADERS_KEY = ['finance-header']
 const PRODUCTION_ITEMS_KEY = ['production-item', 'grouped']
-const OPERATION_HEADERS_KEY = ['finance-header', 'operation']
 const OPERATION_ITEMS_KEY = ['operation-item', 'grouped']
 
 function toProductionRows(headers: FinanceHeader[], grouped: Record<string, ProductionItem[]>): ProductionRow[] {
   const rows: ProductionRow[] = []
   headers.forEach(h => {
     const items = grouped[h.id] ?? []
-    // A header with zero items shouldn't normally happen — useCreate always
-    // makes header+item together — but if it ever does, just skip it rather
-    // than fabricate a row with no real item id (SpreadsheetView expects
-    // every row in `data` to have a real, persisted id).
+    // Headers with zero production items just don't appear on the
+    // Production page — could be a pure-operations Kas Bon, or an
+    // in-between state while a create is still in flight.
     items.forEach(item => rows.push({
       id: item.id, header_id: h.id, date: h.date, description: h.description,
-      supplier_id: h.supplier_id, supplier: h.supplier,
+      supplier_id: item.supplier_id, supplier: item.supplier,
       material_name: item.material_name, price: item.price, si_unit: item.si_unit, amount: item.amount,
     }))
   })
@@ -100,7 +106,8 @@ function toOperationRows(headers: FinanceHeader[], grouped: Record<string, Opera
   const rows: OperationRow[] = []
   headers.forEach(h => {
     const items = grouped[h.id] ?? []
-    // See comment in toProductionRows — headers with zero items are skipped.
+    // See comment in toProductionRows — headers with zero operation items
+    // just don't appear here (could be a pure-production Kas Bon).
     items.forEach(item => rows.push({
       id: item.id, header_id: h.id, date: h.date, description: h.description,
       item_description: item.description, price: item.price,
@@ -111,7 +118,9 @@ function toOperationRows(headers: FinanceHeader[], grouped: Record<string, Opera
 
 export const productionHooks = {
   useList: () => {
-    const headers = useQuery({ queryKey: PRODUCTION_HEADERS_KEY, queryFn: () => financeHeaderApi.listByType('production') })
+    // Same query key as operationHooks.useList — React Query dedupes this
+    // into a single fetch, since headers are no longer type-specific.
+    const headers = useQuery({ queryKey: HEADERS_KEY, queryFn: financeHeaderApi.list })
     const items = useQuery({ queryKey: PRODUCTION_ITEMS_KEY, queryFn: productionItemApi.grouped })
     const data = useMemo(
       () => (headers.data && items.data) ? toProductionRows(headers.data, items.data) : [],
@@ -127,7 +136,7 @@ export const productionHooks = {
     const qc = useQueryClient()
     return useMutation({
       mutationFn: async (row: CreateProductionRowRequest) => {
-        const existingHeaders = qc.getQueryData<FinanceHeader[]>(PRODUCTION_HEADERS_KEY) ?? []
+        const existingHeaders = qc.getQueryData<FinanceHeader[]>(HEADERS_KEY) ?? []
         const headerExists = existingHeaders.some(h => h.id === row.header_id)
         if (!headerExists) {
           // row.date is trusted here — the caller (Quick Add's Date field, or
@@ -136,22 +145,23 @@ export const productionHooks = {
           // there's no per-row Date column to fall back on (date lives on the
           // header, not the item — see toProductionRows).
           const newHeader = await financeHeaderApi.create({
-            id: row.header_id, type: 'production', date: row.date,
-            supplier_id: row.supplier_id, description: row.description,
+            id: row.header_id, date: row.date, description: row.description,
           })
           // Update the cache immediately rather than waiting for the
           // invalidate+refetch below — otherwise a second item added to the
           // same brand-new Kas Bon a moment later would still see "no
           // header yet" and try to create it again.
-          qc.setQueryData<FinanceHeader[]>(PRODUCTION_HEADERS_KEY, (old = []) => [...old, newHeader])
+          qc.setQueryData<FinanceHeader[]>(HEADERS_KEY, (old = []) => [...old, newHeader])
         }
+        // Supplier is an item-level field — no mismatch to check against
+        // the header anymore, every line just carries its own.
         return productionItemApi.create({
-          header_id: row.header_id, material_name: row.material_name,
+          header_id: row.header_id, supplier_id: row.supplier_id, material_name: row.material_name,
           price: row.price, si_unit: row.si_unit, amount: row.amount,
         })
       },
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: PRODUCTION_HEADERS_KEY })
+        qc.invalidateQueries({ queryKey: HEADERS_KEY })
         qc.invalidateQueries({ queryKey: PRODUCTION_ITEMS_KEY })
         toast.success('Production entry created')
       },
@@ -159,9 +169,10 @@ export const productionHooks = {
     })
   },
 
-  // A row edit may touch header fields (date/description/supplier), item
-  // fields (material/price/unit/amount), or both — only the changed ones
-  // are sent, each to its own table.
+  // A row edit may touch header fields (date/description), item fields
+  // (material/price/unit/amount/supplier), or both — only the changed ones
+  // are sent, each to its own table. Supplier now patches just this one
+  // item, not the whole Kas Bon.
   useUpdate: () => {
     const qc = useQueryClient()
     return useMutation({
@@ -169,13 +180,13 @@ export const productionHooks = {
         const headerPatch: UpdateFinanceHeaderRequest = {}
         if (body.date !== undefined) headerPatch.date = body.date
         if (body.description !== undefined) headerPatch.description = body.description
-        if (body.supplier_id !== undefined) headerPatch.supplier_id = body.supplier_id
 
         const itemPatch: UpdateProductionItemRequest = {}
         if (body.material_name !== undefined) itemPatch.material_name = body.material_name
         if (body.price !== undefined) itemPatch.price = body.price
         if (body.si_unit !== undefined) itemPatch.si_unit = body.si_unit
         if (body.amount !== undefined) itemPatch.amount = body.amount
+        if (body.supplier_id !== undefined) itemPatch.supplier_id = body.supplier_id
 
         if (Object.keys(headerPatch).length > 0 && body.header_id) {
           await financeHeaderApi.update(body.header_id, headerPatch)
@@ -185,7 +196,7 @@ export const productionHooks = {
         }
       },
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: PRODUCTION_HEADERS_KEY })
+        qc.invalidateQueries({ queryKey: HEADERS_KEY })
         qc.invalidateQueries({ queryKey: PRODUCTION_ITEMS_KEY })
         toast.success('Production entry updated')
       },
@@ -193,25 +204,31 @@ export const productionHooks = {
     })
   },
 
-  // Deletes the item; if that was the last item under its header, the
-  // now-empty header is cleaned up too (best-effort — failure is harmless,
-  // it just leaves an orphaned header with zero rows).
+  // Deletes the item. The header is only cleaned up if this was its last
+  // item on BOTH sides — a header can carry operation items too now, so
+  // being empty in production_items alone isn't enough to delete it.
   useDelete: () => {
     const qc = useQueryClient()
     return useMutation({
       mutationFn: async (id: number) => {
         const grouped = qc.getQueryData<Record<string, ProductionItem[]>>(PRODUCTION_ITEMS_KEY)
-        const orphanedHeaderId = grouped
-          ? Object.entries(grouped).find(([, items]) => items.length === 1 && items[0].id === id)?.[0]
+        const headerId = grouped
+          ? Object.entries(grouped).find(([, items]) => items.some(i => i.id === id))?.[0]
           : undefined
 
         await productionItemApi.delete(id)
-        if (orphanedHeaderId) {
-          await financeHeaderApi.delete(orphanedHeaderId).catch(() => {})
+
+        if (headerId) {
+          const remainingProductionItems = (grouped![headerId] ?? []).filter(i => i.id !== id)
+          const operationGrouped = qc.getQueryData<Record<string, OperationItem[]>>(OPERATION_ITEMS_KEY)
+          const stillHasOperationItems = (operationGrouped?.[headerId]?.length ?? 0) > 0
+          if (remainingProductionItems.length === 0 && !stillHasOperationItems) {
+            await financeHeaderApi.delete(headerId).catch(() => {})
+          }
         }
       },
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: PRODUCTION_HEADERS_KEY })
+        qc.invalidateQueries({ queryKey: HEADERS_KEY })
         qc.invalidateQueries({ queryKey: PRODUCTION_ITEMS_KEY })
         toast.success('Production entry deleted')
       },
@@ -222,7 +239,8 @@ export const productionHooks = {
 
 export const operationHooks = {
   useList: () => {
-    const headers = useQuery({ queryKey: OPERATION_HEADERS_KEY, queryFn: () => financeHeaderApi.listByType('operation') })
+    // Same query key as productionHooks.useList — dedupes to one fetch.
+    const headers = useQuery({ queryKey: HEADERS_KEY, queryFn: financeHeaderApi.list })
     const items = useQuery({ queryKey: OPERATION_ITEMS_KEY, queryFn: operationItemApi.grouped })
     const data = useMemo(
       () => (headers.data && items.data) ? toOperationRows(headers.data, items.data) : [],
@@ -235,22 +253,21 @@ export const operationHooks = {
     const qc = useQueryClient()
     return useMutation({
       mutationFn: async (row: CreateOperationRowRequest) => {
-        const existingHeaders = qc.getQueryData<FinanceHeader[]>(OPERATION_HEADERS_KEY) ?? []
+        const existingHeaders = qc.getQueryData<FinanceHeader[]>(HEADERS_KEY) ?? []
         const headerExists = existingHeaders.some(h => h.id === row.header_id)
         if (!headerExists) {
           // See productionHooks.useCreate — row.date is trusted here, made
           // meaningful by the caller (Quick Add or the spreadsheet's "new
           // Kas Bon" modal) before this mutation ever runs.
           const newHeader = await financeHeaderApi.create({
-            id: row.header_id, type: 'operation', date: row.date,
-            supplier_id: 0, description: row.description,
+            id: row.header_id, date: row.date, description: row.description,
           })
-          qc.setQueryData<FinanceHeader[]>(OPERATION_HEADERS_KEY, (old = []) => [...old, newHeader])
+          qc.setQueryData<FinanceHeader[]>(HEADERS_KEY, (old = []) => [...old, newHeader])
         }
         return operationItemApi.create({ header_id: row.header_id, description: row.item_description, price: row.price })
       },
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: OPERATION_HEADERS_KEY })
+        qc.invalidateQueries({ queryKey: HEADERS_KEY })
         qc.invalidateQueries({ queryKey: OPERATION_ITEMS_KEY })
         toast.success('Operation entry created')
       },
@@ -278,7 +295,7 @@ export const operationHooks = {
         }
       },
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: OPERATION_HEADERS_KEY })
+        qc.invalidateQueries({ queryKey: HEADERS_KEY })
         qc.invalidateQueries({ queryKey: OPERATION_ITEMS_KEY })
         toast.success('Operation entry updated')
       },
@@ -286,22 +303,29 @@ export const operationHooks = {
     })
   },
 
+  // Same cross-table orphan check as productionHooks.useDelete, mirrored.
   useDelete: () => {
     const qc = useQueryClient()
     return useMutation({
       mutationFn: async (id: number) => {
         const grouped = qc.getQueryData<Record<string, OperationItem[]>>(OPERATION_ITEMS_KEY)
-        const orphanedHeaderId = grouped
-          ? Object.entries(grouped).find(([, items]) => items.length === 1 && items[0].id === id)?.[0]
+        const headerId = grouped
+          ? Object.entries(grouped).find(([, items]) => items.some(i => i.id === id))?.[0]
           : undefined
 
         await operationItemApi.delete(id)
-        if (orphanedHeaderId) {
-          await financeHeaderApi.delete(orphanedHeaderId).catch(() => {})
+
+        if (headerId) {
+          const remainingOperationItems = (grouped![headerId] ?? []).filter(i => i.id !== id)
+          const productionGrouped = qc.getQueryData<Record<string, ProductionItem[]>>(PRODUCTION_ITEMS_KEY)
+          const stillHasProductionItems = (productionGrouped?.[headerId]?.length ?? 0) > 0
+          if (remainingOperationItems.length === 0 && !stillHasProductionItems) {
+            await financeHeaderApi.delete(headerId).catch(() => {})
+          }
         }
       },
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: OPERATION_HEADERS_KEY })
+        qc.invalidateQueries({ queryKey: HEADERS_KEY })
         qc.invalidateQueries({ queryKey: OPERATION_ITEMS_KEY })
         toast.success('Operation entry deleted')
       },

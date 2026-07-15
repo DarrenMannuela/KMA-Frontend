@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowLeft, Wrench } from 'lucide-react'
 import { operationHooks } from '@/hooks'
+import { Spinner } from '@/components/ui'
 import { MonthNavigator } from '@/components/ui/MonthNavigator'
 import { OperationsSpreadsheet } from './OperationsSpreadsheet'
 import { isInMonth } from '@/utils/MonthUtils'
@@ -21,7 +22,7 @@ export function OperationsSheetView({ onBack }: OperationsSheetViewProps) {
   )
 
   if (isLoading) {
-    return <div className="p-6 text-slate-400 text-sm">Loading operations ledger…</div>
+    return <Spinner />
   }
 
   return (
