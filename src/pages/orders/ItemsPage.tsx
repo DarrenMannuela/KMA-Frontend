@@ -4,6 +4,7 @@ import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField, formatRp } from '@/components/ui'
 import { itemHooks, orderHooks } from '@/hooks'
 import type { Item, CreateItemRequest } from '@/types'
+import { stripCommas, formatThousands } from '@/utils/NumberFormat'
 
 function ItemForm({ editing, onClose }: { editing: Item | null; onClose: () => void }) {
   const create = itemHooks.useCreate()
@@ -18,13 +19,29 @@ function ItemForm({ editing, onClose }: { editing: Item | null; onClose: () => v
     price:     editing?.price     ?? 0,
   })
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm(prev => ({ ...prev, [k]: ['amount', 'price'].includes(k) ? Number(e.target.value) : e.target.value }))
+  // Item Name and Size get uppercased as-typed, same convention as the
+  // Order ID/PO Number fields — keeps names consistent across the catalog
+  // instead of "Kemeja" vs "kemeja" vs "KEMEJA" all floating around.
+  const UPPERCASE_FIELDS: (keyof typeof form)[] = ['item_name', 'size']
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    if (k === 'price') {
+      setForm(prev => ({ ...prev, price: Number(stripCommas(e.target.value)) || 0 }))
+    } else if (k === 'amount') {
+      setForm(prev => ({ ...prev, amount: Number(e.target.value) }))
+    } else if (UPPERCASE_FIELDS.includes(k)) {
+      setForm(prev => ({ ...prev, [k]: e.target.value.toUpperCase() }))
+    } else {
+      setForm(prev => ({ ...prev, [k]: e.target.value }))
+    }
+  }
 
   const subTotal = form.amount * form.price
 
   const handleSubmit = () => {
-    const payload: CreateItemRequest = { ...form, size: form.size || null, sub_total: subTotal }
+    // Size is sent as '' rather than null when blank — see the comment in
+    // OrderDetailPage.tsx's ItemForm for why (NULL vs '' in the unique index).
+    const payload: CreateItemRequest = { ...form, size: form.size || '', sub_total: subTotal }
     if (editing) {
       update.mutate({ id: editing.id, body: payload }, { onSuccess: onClose })
     } else {
@@ -54,7 +71,8 @@ function ItemForm({ editing, onClose }: { editing: Item | null; onClose: () => v
           <input className="field" type="number" min={1} value={form.amount} onChange={set('amount')} />
         </FormField>
         <FormField label="Unit Price (Rp)" required>
-          <input className="field font-mono" type="number" min={0} value={form.price} onChange={set('price')} />
+          <input className="field font-mono" type="text" inputMode="numeric"
+            value={form.price ? formatThousands(String(form.price)) : ''} onChange={set('price')} />
         </FormField>
       </div>
       <div className="bg-slate-50 rounded-lg px-4 py-3 flex justify-between items-center">

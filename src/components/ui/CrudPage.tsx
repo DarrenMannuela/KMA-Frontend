@@ -22,12 +22,23 @@ interface CrudPageProps<T extends { id: string | number }> {
   deleteMessage?: (row: T) => string
   searchKeys?: (keyof T)[]
   rowActions?: (row: T) => React.ReactNode
+  // Override for the built-in pencil button. Some pages (e.g. Invoices)
+  // don't edit through this generic modal at all — editing happens on a
+  // dedicated page/flow elsewhere. When provided, the pencil calls this
+  // instead of opening the (otherwise empty) generic form modal.
+  onEditClick?: (row: T) => void
+  // Same idea, for the "Add New" button.
+  // Same idea as onEditClick/onAddClick — an escape hatch for page-specific
+  // needs without baking them into this generic component. Rendered next
+  // to the search box; e.g. Invoices uses it for a Paid/Unpaid toggle.
+  onAddClick?: () => void
+  filterBar?: React.ReactNode
 }
 
 export function CrudPage<T extends { id: string | number }>({
   title, icon: Icon, data = [], isLoading,
   columns, formTitle, renderForm, onDelete,
-  deleteMessage, searchKeys = [], rowActions
+  deleteMessage, searchKeys = [], rowActions, onEditClick, onAddClick, filterBar,
 }: CrudPageProps<T>) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<T | null>(null)
@@ -40,8 +51,14 @@ export function CrudPage<T extends { id: string | number }>({
       )
     : data
 
-  const openCreate = () => { setEditing(null); setModalOpen(true) }
-  const openEdit   = (row: T) => { setEditing(row); setModalOpen(true) }
+  const openCreate = () => {
+    if (onAddClick) { onAddClick(); return }
+    setEditing(null); setModalOpen(true)
+  }
+  const openEdit   = (row: T) => {
+    if (onEditClick) { onEditClick(row); return }
+    setEditing(row); setModalOpen(true)
+  }
   const closeModal = () => { setModalOpen(false); setEditing(null) }
 
   return (
@@ -63,16 +80,21 @@ export function CrudPage<T extends { id: string | number }>({
         </button>
       </div>
 
-      {/* Search */}
-      {searchKeys.length > 0 && (
-        <div className="relative mb-4 max-w-xs fade-up delay-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-          <input
-            className="field !pl-9 !py-2 text-sm"
-            placeholder={`Search ${title.toLowerCase()}…`}
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+      {/* Search + optional filter bar */}
+      {(searchKeys.length > 0 || filterBar) && (
+        <div className="flex items-center gap-3 mb-4 fade-up delay-1">
+          {searchKeys.length > 0 && (
+            <div className="relative max-w-xs flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input
+                className="field !pl-9 !py-2 text-sm"
+                placeholder={`Search ${title.toLowerCase()}…`}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+          )}
+          {filterBar}
         </div>
       )}
 
@@ -89,7 +111,9 @@ export function CrudPage<T extends { id: string | number }>({
           <thead>
             <tr>
               {columns.map(c => <th key={String(c.key)}>{c.header}</th>)}
-              <th className="text-right">Actions</th>
+              <th>
+                <div className="flex items-center justify-end">Actions</div>
+              </th>
             </tr>
           </thead>
           <tbody>

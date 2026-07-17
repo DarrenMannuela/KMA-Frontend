@@ -1,9 +1,10 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Printer } from 'lucide-react'
+import { ArrowLeft, Printer, Receipt } from 'lucide-react'
 import { format } from 'date-fns'
 import { invoicesApi, ordersApi, itemsApi } from '@/api'
 import { formatRp } from '@/components/ui'
+import { useRekening } from '@/utils/RekeningStore'
 
 function formatDate(date: string | Date | null | undefined) {
   if (!date) return '—'
@@ -14,6 +15,7 @@ export function InvoicePrintPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const invoiceId = decodeURIComponent(id ?? '')
+  const { rekening, setRekening } = useRekening()
 
   const { data: invoice, isLoading: invoiceLoading } = useQuery({
     queryKey: ['invoice', invoiceId],
@@ -40,6 +42,14 @@ export function InvoicePrintPage() {
     ? Math.round(((invoice.down_payment ?? 0) / invoice.total) * 100)
     : 50
 
+  // Previously the Pelunasan row was always highlighted regardless of
+  // what this specific invoice document actually represents — a DP
+  // invoice would still show Pelunasan in green, which is backwards: the
+  // highlighted row should be whichever amount THIS invoice is asking the
+  // client to pay right now.
+  const highlightDp = invoice.type === 'dp'
+  const highlightColor = '#d4e6c3'
+
   return (
     <div className="min-h-screen bg-slate-100">
       {/* Toolbar — hidden when printing */}
@@ -51,6 +61,12 @@ export function InvoicePrintPage() {
           <ArrowLeft size={14} /> Back
         </button>
         <span className="text-slate-400 text-sm flex-1">{invoice.id}</span>
+        <button
+          onClick={() => navigate(`/invoice/${encodeURIComponent(invoice.id)}/kwitansi`)}
+          className="btn-secondary flex items-center gap-2"
+        >
+          <Receipt size={14} /> Kwitansi
+        </button>
         <button
           onClick={() => window.print()}
           className="btn-primary flex items-center gap-2"
@@ -203,10 +219,10 @@ export function InvoicePrintPage() {
                     {invoice.due_date ? `LUNAS - ${format(new Date(invoice.due_date), 'd MMMM yyyy').toUpperCase()}` : 'LUNAS'}
                   </td>
                   <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold' }}>
+                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: highlightDp ? highlightColor : undefined }}>
                     D/P {dpPercent} %
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold' }}>
+                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: highlightDp ? highlightColor : undefined }}>
                     {(invoice.down_payment ?? 0).toLocaleString('id-ID')}
                   </td>
                 </tr>
@@ -218,10 +234,10 @@ export function InvoicePrintPage() {
                   {invoice.paid_date ? `J/T : ${format(new Date(invoice.paid_date), 'd MMMM yyyy').toUpperCase()}` : ''}
                 </td>
                 <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: '#d4e6c3' }}>
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: !highlightDp ? highlightColor : undefined }}>
                   PELUNASAN
                 </td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: '#d4e6c3' }}>
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: !highlightDp ? highlightColor : undefined }}>
                   {invoice.remaining.toLocaleString('id-ID')}
                 </td>
               </tr>
@@ -238,9 +254,21 @@ export function InvoicePrintPage() {
               <li>Pembayaran 1 minggu saat pelunasan</li>
               <li>Tanggal Pengiriman : 2 - 3 minggu hari kerja setelah di terima D/P</li>
               <li>Pembayaran via transfer ke rekening a/n :<br />
-                &nbsp;&nbsp;&nbsp;&nbsp;FIFI LESMANA TJHIA<br />
-                &nbsp;&nbsp;&nbsp;&nbsp;BCA PLUIT SAMUDRA<br />
-                &nbsp;&nbsp;&nbsp;&nbsp;<strong>No Rek. 602.002.4389</strong>
+                &nbsp;&nbsp;&nbsp;&nbsp;<input
+                  value={rekening.accountName}
+                  onChange={e => setRekening({ accountName: e.target.value })}
+                  style={{ border: 'none', background: 'transparent', font: 'inherit', width: '220px', padding: 0 }}
+                /><br />
+                &nbsp;&nbsp;&nbsp;&nbsp;<input
+                  value={rekening.bankBranch}
+                  onChange={e => setRekening({ bankBranch: e.target.value })}
+                  style={{ border: 'none', background: 'transparent', font: 'inherit', width: '220px', padding: 0 }}
+                /><br />
+                &nbsp;&nbsp;&nbsp;&nbsp;No Rek. <input
+                  value={rekening.accountNumber}
+                  onChange={e => setRekening({ accountNumber: e.target.value })}
+                  style={{ border: 'none', background: 'transparent', font: 'inherit', fontWeight: 'bold', width: '160px', padding: 0 }}
+                />
               </li>
             </ol>
           </div>

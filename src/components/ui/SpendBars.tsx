@@ -8,6 +8,14 @@ interface SpendBarItem {
    *  (Sablon, Embroidery, ...). Also helps disambiguate two suppliers that
    *  happen to share a name but differ in category. */
   category?: string
+  /** Optional fixed color (hex/rgb) for the small category dot next to the
+   *  label. Deliberately NOT applied to the bar fill itself — the bar's
+   *  length already carries the "how much was spent" comparison, and
+   *  tinting the whole bar by category would layer a second, competing
+   *  visual variable onto the same shape (and would collide with the
+   *  white "selected" state below). The dot gives a fast category scan
+   *  without touching that. */
+  color?: string
 }
 
 interface SpendBarsProps {
@@ -38,6 +46,13 @@ export function SpendBars({ items, selectedId, onSelect, emptyLabel = 'No spendi
           >
             <div className="flex justify-between items-baseline mb-1">
               <span className="flex items-baseline gap-2 min-w-0">
+                {item.color && (
+                  <span
+                    className="inline-block w-2 h-2 rounded-full shrink-0 translate-y-[1px]"
+                    style={{ backgroundColor: item.color }}
+                    aria-hidden="true"
+                  />
+                )}
                 <span className={`text-sm font-medium truncate ${isSelected ? 'text-white' : 'text-navy-200'}`}>
                   {item.label}
                 </span>

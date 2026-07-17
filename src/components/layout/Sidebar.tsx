@@ -9,6 +9,14 @@ import type { LucideIcon } from 'lucide-react'
 
 type RouteStatus = 'live' | 'stub'
 
+// Per-item status dots and the legend footer are a build-time aid for
+// whoever's wiring up handlers — not something a real KMA staff member
+// should see. "Stub (placeholder)" next to a menu item reads as "this is
+// broken" to someone who isn't the developer. Vite sets import.meta.env.DEV
+// to false in a production build, so this disappears automatically once
+// shipped; nothing to remember to toggle off by hand.
+const SHOW_DEV_STATUS = import.meta.env.DEV
+
 interface NavItem {
   label: string
   path: string
@@ -32,7 +40,7 @@ const GROUPS: NavGroup[] = [
     label: 'Orders',
     icon: ShoppingBag,
     items: [
-      { label: 'Orders',      path: '/orders',      icon: ShoppingBag, status: 'live' },
+      { label: 'All Orders',  path: '/orders',      icon: ShoppingBag, status: 'live' },
       { label: 'Order Items', path: '/items',        icon: ListOrdered, status: 'live' },
       { label: 'Invoice', path: '/invoice',  icon: FileText,    status: 'live' },
     ],
@@ -65,8 +73,8 @@ function NavItemLink({ item }: { item: NavItem }) {
         <>
           <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-gold-400' : 'text-navy-400 group-hover:text-navy-200'}`} />
           <span className="flex-1">{item.label}</span>
-          {item.status === 'live' && <Circle className="w-2 h-2 fill-green-400 text-green-400 shrink-0" />}
-          {item.status === 'stub' && <Circle className="w-2 h-2 fill-amber-400 text-amber-400 shrink-0 opacity-60" />}
+          {SHOW_DEV_STATUS && item.status === 'live' && <Circle className="w-2 h-2 fill-green-400 text-green-400 shrink-0" />}
+          {SHOW_DEV_STATUS && item.status === 'stub' && <Circle className="w-2 h-2 fill-amber-400 text-amber-400 shrink-0 opacity-60" />}
         </>
       )}
     </NavLink>
@@ -133,18 +141,20 @@ export function Sidebar() {
         </div>
       </nav>
 
-      {/* Legend */}
-      <div className="px-5 py-3 border-t border-navy-800 space-y-1">
-        <div className="flex items-center gap-2">
-          <Circle className="w-2 h-2 fill-green-400 text-green-400" />
-          <span className="text-navy-500 text-[10px]">Live (DB wired)</span>
+      {/* Legend — dev-only, see SHOW_DEV_STATUS above */}
+      {SHOW_DEV_STATUS && (
+        <div className="px-5 py-3 border-t border-navy-800 space-y-1">
+          <div className="flex items-center gap-2">
+            <Circle className="w-2 h-2 fill-green-400 text-green-400" />
+            <span className="text-navy-500 text-[10px]">Live (DB wired)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Circle className="w-2 h-2 fill-amber-400 text-amber-400 opacity-60" />
+            <span className="text-navy-500 text-[10px]">Stub (placeholder)</span>
+          </div>
+          <p className="text-navy-600 text-[10px] font-mono pt-1">v0.1.0 · Workshop Admin</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Circle className="w-2 h-2 fill-amber-400 text-amber-400 opacity-60" />
-          <span className="text-navy-500 text-[10px]">Stub (placeholder)</span>
-        </div>
-        <p className="text-navy-600 text-[10px] font-mono pt-1">v0.1.0 · Workshop Admin</p>
-      </div>
+      )}
     </aside>
   )
 }

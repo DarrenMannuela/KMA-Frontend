@@ -18,6 +18,16 @@ const CATEGORY_LABELS: Record<SupplierCategory, string> = {
   general_supplier: 'General',
 }
 
+// Same fixed palette as ProductionDashboard.tsx's spend bars — kept
+// consistent so a category reads as the same color everywhere it shows up.
+const CATEGORY_COLORS: Record<SupplierCategory, string> = {
+  sablon: '#fbbf24',
+  embroidery: '#2dd4bf',
+  merchandise_supplier: '#a78bfa',
+  uniform_supplier: '#fb7185',
+  general_supplier: '#94a3b8',
+}
+
 interface ProductionSpreadsheetProps {
   /** Already filtered by the parent page (e.g. by month, and optionally by supplier). */
   data: ProductionRow[]
@@ -46,6 +56,10 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
   const supplierCategory = (id: number) => {
     const s = suppliers.find(s => s.id === id)
     return s ? CATEGORY_LABELS[s.supplier_category] : undefined
+  }
+  const supplierColor = (id: number) => {
+    const s = suppliers.find(s => s.id === id)
+    return s ? CATEGORY_COLORS[s.supplier_category] : undefined
   }
 
   // Existing Kas Bon IDs, offered as autocomplete suggestions on the ID
@@ -94,6 +108,13 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
       options: supplierOptions,
       format: (val: number) => (
         <span className="inline-flex items-center gap-1.5">
+          {supplierColor(Number(val)) && (
+            <span
+              className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+              style={{ backgroundColor: supplierColor(Number(val)) }}
+              aria-hidden="true"
+            />
+          )}
           {supplierName(Number(val))}
           {supplierCategory(Number(val)) && (
             <span className="text-[10px] font-medium uppercase tracking-wide bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
@@ -151,8 +172,16 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
         : (_groupName, rows) => {
             const supplierId = rows[0].supplier_id
             const category = supplierCategory(supplierId)
+            const color = supplierColor(supplierId)
             return (
               <span className="inline-flex items-center gap-1.5">
+                {color && (
+                  <span
+                    className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ backgroundColor: color }}
+                    aria-hidden="true"
+                  />
+                )}
                 {supplierName(supplierId)}
                 {category && (
                   <span className="text-[10px] font-medium uppercase tracking-wide bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">

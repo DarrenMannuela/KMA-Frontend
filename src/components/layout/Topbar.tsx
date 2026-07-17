@@ -1,8 +1,14 @@
 import { useLocation } from 'react-router-dom'
-import { Bell, Zap, AlertCircle } from 'lucide-react'
+import { Bell, Zap, AlertCircle, ChevronDown } from 'lucide-react'
 import { format } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
+
+// The stub/live route banners below mention main.go and "wire the handler"
+// — that's a message for whoever's building the backend, not for a real
+// KMA staff member using the app day to day. Gate them the same way as the
+// Sidebar's status dots so they vanish in a production build automatically.
+const SHOW_DEV_STATUS = import.meta.env.DEV
 
 const TITLES: Record<string, string> = {
   '/':                'Dashboard',
@@ -37,8 +43,8 @@ export function Topbar() {
     staleTime: 15_000,
   })
 
-  const isStub = STUB_ROUTES.has(pathname)
-  const isLive = LIVE_ROUTES.has(pathname)
+  const isStub = SHOW_DEV_STATUS && STUB_ROUTES.has(pathname)
+  const isLive = SHOW_DEV_STATUS && LIVE_ROUTES.has(pathname)
 
   return (
     <header className="bg-white border-b border-slate-100 shrink-0">
@@ -64,9 +70,12 @@ export function Topbar() {
           <button className="btn-ghost !px-2">
             <Bell className="w-4 h-4" />
           </button>
-          <div className="w-8 h-8 rounded-full bg-navy-900 flex items-center justify-center">
-            <span className="text-white text-xs font-semibold">A</span>
-          </div>
+          <button className="flex items-center gap-1 pl-1 pr-1.5 py-1 rounded-full hover:bg-slate-100 transition-colors group">
+            <div className="w-8 h-8 rounded-full bg-navy-900 flex items-center justify-center shrink-0">
+              <span className="text-white text-xs font-semibold">A</span>
+            </div>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+          </button>
         </div>
       </div>
 

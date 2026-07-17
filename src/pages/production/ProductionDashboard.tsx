@@ -21,6 +21,19 @@ const CATEGORY_LABELS: Record<SupplierCategory, string> = {
   general_supplier: 'General',
 }
 
+// Fixed per-category color for the small dot next to each supplier's name
+// on the spend bars — deliberately not applied to the bars themselves (see
+// the comment in SpendBars.tsx for why). Picked for reasonable contrast on
+// the dark navy-900 card and to vary in both hue and lightness, not hue
+// alone, so they stay distinguishable for colorblind readers too.
+const CATEGORY_COLORS: Record<SupplierCategory, string> = {
+  sablon: '#fbbf24',               // amber
+  embroidery: '#2dd4bf',           // teal
+  merchandise_supplier: '#a78bfa', // violet
+  uniform_supplier: '#fb7185',     // rose
+  general_supplier: '#94a3b8',     // slate (neutral "other" bucket)
+}
+
 interface ProductionDashboardProps {
   /** Undefined = "just open the sheet"; a number = "open the sheet pre-filtered to this supplier". */
   onOpenSheet: (supplierId?: number) => void
@@ -68,6 +81,7 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
         id: Number(id),
         label: supplier?.supplier_name ?? 'Unassigned',
         category: supplier ? CATEGORY_LABELS[supplier.supplier_category] : undefined,
+        color: supplier ? CATEGORY_COLORS[supplier.supplier_category] : undefined,
         value,
       }
     })

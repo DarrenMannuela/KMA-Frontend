@@ -12,6 +12,7 @@ import { SuppliersPage } from '@/pages/suppliers/SuppliersPage'
 import { OperationsPage } from '@/pages/operations/OperationsPage'
 import { OrderDetailPage } from '@/pages/orders/OrderDetailPage'
 import { InvoiceListPage } from '@/pages/orders/InvoiceListPage'
+import { KwitansiPrintPage} from '@/pages/orders/KiwitansiPrintPage'
 
 
 export default function App() {
@@ -35,6 +36,7 @@ export default function App() {
               <Route path="/suppliers"       element={<SuppliersPage />} />
               <Route path="/operations"      element={<OperationsPage />} />
               <Route path="/orders/:id"      element={<OrderDetailPage />} />
+              <Route path="/invoice/:id/kwitansi" element={<KwitansiPrintPage />} />
             </Routes>
           </main>
         </div>

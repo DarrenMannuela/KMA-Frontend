@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Plus, FileText, Copy, Pencil } from 'lucide-react'
 import { format } from 'date-fns'
@@ -9,6 +9,7 @@ import { itemsApi, invoicesApi } from '@/api'
 import type { Item, CreateItemRequest } from '@/types'
 import { GenerateInvoiceForm } from './GenerateInvoiceForm'
 import { Modal } from '@/components/ui/Modal'
+import { stripCommas, formatThousands } from '@/utils/NumberFormat'
 
 function ItemForm({
   orderId,
@@ -35,10 +36,17 @@ function ItemForm({
   const subTotal = form.amount * form.price
 
   const handleSubmit = () => {
-    const payload: CreateItemRequest = { ...form, size: form.size || null, sub_total: subTotal }
+    // Size is sent as '' rather than null when blank — SQLite treats every
+    // NULL as distinct from every other NULL in a unique index, which
+    // would otherwise stop two "no size" rows of the same item from ever
+    // merging via idx_items_dedupe on the backend (see Items.go).
+    const payload: CreateItemRequest = { ...form, size: form.size || '', sub_total: subTotal }
     if (editing) {
       update.mutate({ id: editing.id, body: payload }, { onSuccess: onClose })
     } else {
+      // If this exact name+size+price already exists on the order, the
+      // backend merges it into that row instead of creating a duplicate
+      // (see PostItems' upsert) — no need to check for that here.
       create.mutate(payload, { onSuccess: onClose })
     }
   }
@@ -55,19 +63,20 @@ function ItemForm({
       <div className="grid grid-cols-2 gap-3">
         <FormField label="Item Name" required>
           <input className="field" placeholder="e.g. Kemeja Server" value={form.item_name}
-            onChange={e => setForm(p => ({ ...p, item_name: e.target.value }))} />
+            onChange={e => setForm(p => ({ ...p, item_name: e.target.value.toUpperCase() }))} />
         </FormField>
         <FormField label="Size">
           <input className="field" placeholder="e.g. S, M, L" value={form.size ?? ''}
-            onChange={e => setForm(p => ({ ...p, size: e.target.value }))} />
+            onChange={e => setForm(p => ({ ...p, size: e.target.value.toUpperCase() }))} />
         </FormField>
         <FormField label="Qty" required>
           <input className="field" type="number" min={1} value={form.amount || ''}
             onChange={e => setForm(p => ({ ...p, amount: Number(e.target.value) }))} />
         </FormField>
         <FormField label="Unit Price (Rp)" required>
-          <input className="field font-mono" type="number" min={0} value={form.price || ''}
-            onChange={e => setForm(p => ({ ...p, price: Number(e.target.value) }))} />
+          <input className="field font-mono" type="text" inputMode="numeric"
+            value={form.price ? formatThousands(String(form.price)) : ''}
+            onChange={e => setForm(p => ({ ...p, price: Number(stripCommas(e.target.value)) || 0 }))} />
         </FormField>
       </div>
       <div className="bg-slate-50 rounded-lg px-4 py-3 flex justify-between">
@@ -87,6 +96,7 @@ function ItemForm({
 export function OrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const orderId = decodeURIComponent(id ?? '')
 
   const { data: order, isLoading: orderLoading } = orderHooks.useGet(orderId)
@@ -101,13 +111,28 @@ export function OrderDetailPage() {
     enabled: !!orderId,
   })
 
-  const existingInvoice = allInvoices.find(inv => inv.order_id === orderId) ?? null
+  const orderInvoices = allInvoices.filter(inv => inv.order_id === orderId)
+  const dpInvoice = orderInvoices.find(inv => inv.type === 'dp') ?? null
+  const pelunasanInvoice = orderInvoices.find(inv => inv.type === 'pelunasan') ?? null
 
   const del = itemHooks.useDelete()
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Item | null>(null)
   const [duplicating, setDuplicating] = useState<Item | null>(null)
-  const [showInvoiceForm, setShowInvoiceForm] = useState(false)
+  const [invoiceFormType, setInvoiceFormType] = useState<'dp' | 'pelunasan' | null>(null)
+
+  // Arriving here from InvoiceListPage's pencil icon carries which invoice
+  // type to edit in navigation state — open that form immediately, then
+  // clear the state so navigating back/forward or refreshing doesn't
+  // re-trigger it.
+  useEffect(() => {
+    const openType = (location.state as { openInvoiceType?: 'dp' | 'pelunasan' } | null)?.openInvoiceType
+    if (openType) {
+      setInvoiceFormType(openType)
+      navigate(location.pathname, { replace: true, state: null })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state])
 
   const total = orderItems.reduce((s, i) => s + i.sub_total, 0)
 
@@ -157,9 +182,14 @@ export function OrderDetailPage() {
             <button className="btn-primary flex items-center gap-1" onClick={openAdd}>
               <Plus size={14} /> Add Item
             </button>
-            <button className="btn-secondary flex items-center gap-1" onClick={() => setShowInvoiceForm(true)}>
-              <FileText size={14} /> {existingInvoice ? 'Update Invoice' : 'Generate Invoice'}
+            <button className="btn-secondary flex items-center gap-1" onClick={() => setInvoiceFormType('dp')}>
+              <FileText size={14} /> {dpInvoice ? 'Update DP Invoice' : 'Generate DP Invoice'}
             </button>
+            {dpInvoice && (
+              <button className="btn-secondary flex items-center gap-1" onClick={() => setInvoiceFormType('pelunasan')}>
+                <FileText size={14} /> {pelunasanInvoice ? 'Update Pelunasan Invoice' : 'Generate Pelunasan Invoice'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -235,13 +265,23 @@ export function OrderDetailPage() {
         </div>
       </div>
 
-      {showInvoiceForm && (
-        <Modal title={existingInvoice ? 'Update Invoice' : 'Generate Invoice'} onClose={() => setShowInvoiceForm(false)} size="lg">
+      {invoiceFormType && (
+        <Modal
+          title={
+            invoiceFormType === 'dp'
+              ? (dpInvoice ? 'Update DP Invoice' : 'Generate DP Invoice')
+              : (pelunasanInvoice ? 'Update Pelunasan Invoice' : 'Generate Pelunasan Invoice')
+          }
+          onClose={() => setInvoiceFormType(null)}
+          size="lg"
+        >
           <GenerateInvoiceForm
             order={order}
             items={orderItems}
-            existingInvoice={existingInvoice}
-            onClose={() => setShowInvoiceForm(false)}
+            forcedType={invoiceFormType}
+            existingInvoice={invoiceFormType === 'dp' ? dpInvoice : pelunasanInvoice}
+            prefillFrom={invoiceFormType === 'pelunasan' ? dpInvoice : null}
+            onClose={() => setInvoiceFormType(null)}
           />
         </Modal>
       )}
