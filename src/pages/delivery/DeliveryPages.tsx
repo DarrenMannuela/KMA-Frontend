@@ -1,52 +1,167 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Truck, PackageCheck, Eye } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Truck, Eye, Plus, RotateCcw, Printer } from 'lucide-react'
 import { format } from 'date-fns'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField } from '@/components/ui'
-import { deliveryHooks, deliveryItemHooks} from '@/hooks'
+import { deliveryHooks, deliveryItemHooks, orderHooks } from '@/hooks'
+import { invoicesApi } from '@/api'
 import type {
-  Delivery, CreateDeliveryRequest,
-  DeliveryItem, CreateDeliveryItemRequest
+  Delivery, CreateDeliveryRequest, Order, Invoice,
 } from '@/types'
 
 // ─── Delivery ─────────────────────────────────────────────────────────────────
 
+// Delivery IDs follow "NN/KMA/DO/YY" or "NN/KMA/SJ/YY" (e.g. "01/KMA/DO/26").
+// DO and SJ each keep their own sequence — mirrors suggestNextOrderId in
+// OrdersPage.tsx, restarting at 01 each year and per type.
+function suggestNextDeliveryId(deliveries: Delivery[], type: 'DO' | 'SJ'): string {
+  const yy = new Date().getFullYear().toString().slice(-2)
+  const pattern = new RegExp(`^(\\d+)\\/KMA\\/${type}\\/${yy}$`)
+  const usedNumbers = deliveries
+    .map(d => d.id.match(pattern))
+    .filter((m): m is RegExpMatchArray => !!m)
+    .map(m => parseInt(m[1], 10))
+  const next = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1
+  return `${String(next).padStart(2, '0')}/KMA/${type}/${yy}`
+}
+
+// For an SJ tied to an order, the documents that physically go out are
+// derived, not typed: an original kwitansi + invoice per invoice raised
+// against that order (labelled DP or PELUNASAN depending on whether it's
+// been paid off), plus a "COPY PO" line if the order has a PO number.
+// Mirrors the paper template — see the physical SJ example this was built
+// from, which lists exactly these three document types under ITEMS.
+function suggestSJDocuments(order: Order | undefined, orderInvoices: Invoice[]): { item_name: string; amount: number }[] {
+  if (!order) return []
+  const docs: { item_name: string; amount: number }[] = []
+  orderInvoices.forEach(inv => {
+    const suffix = inv.remaining === 0 ? ' (PELUNASAN)' : inv.down_payment ? ' (DP)' : ''
+    docs.push({ item_name: `ASLI KWITANSI NO. ${inv.id}`, amount: 1 })
+    docs.push({ item_name: `ASLI INVOICE NO. ${inv.id}${suffix}`, amount: 1 })
+  })
+  if (order.po_number) {
+    docs.push({ item_name: 'COPY PO', amount: 1 })
+  }
+  return docs
+}
+
 function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose: () => void }) {
   const create = deliveryHooks.useCreate()
   const update = deliveryHooks.useUpdate()
+  const createItem = deliveryItemHooks.useCreate()
   const navigate = useNavigate() 
+  const { data: deliveries = [] } = deliveryHooks.useList()
+  const { data: orders = [] } = orderHooks.useList()
+  // Only needed to build the SJ auto-documents preview/creation below — a
+  // plain fetch here (like DeliveryPrintPage does for delivery/items)
+  // rather than a dedicated hook, since this is the only place in the app
+  // that needs invoices scoped to an order.
+  const { data: invoices = [] } = useQuery({
+    queryKey: ['invoices'],
+    queryFn: () => invoicesApi.list(),
+  })
 
   const [type, setType] = useState<'DO' | 'SJ'>(
     editing?.id?.includes('/SJ/') ? 'SJ' : 'DO'
   )
 
+  // Only auto-fill/auto-refresh the ID while the user hasn't typed their
+  // own value — same rule as OrdersPage's idTouched, so we never clobber a
+  // manually-entered ID.
+  const [idTouched, setIdTouched] = useState(false)
+
+  // Same "touched" convention for the two fields the selected Order can
+  // supply (Company, PO Number): as long as the user hasn't typed into
+  // them directly, picking an order — or switching to a different one —
+  // keeps them in sync with that order's data. Editing an existing
+  // delivery starts touched=true so opening the edit modal never
+  // overwrites what's already saved.
+  const [companyTouched, setCompanyTouched] = useState(!!editing)
+  const [poNumberTouched, setPoNumberTouched] = useState(!!editing)
+
   const [form, setForm] = useState<CreateDeliveryRequest>({
     id:             editing?.id             ?? '', 
     type:           editing?.type           ?? type,
+    company:        editing?.company        ?? '',
     address:        editing?.address        ?? '',
     po_number:      editing?.po_number      ?? '',
     phone_number:   editing?.phone_number   ?? '',
     contact_person: editing?.contact_person ?? '',
     date:           editing?.date ? editing.date.split('T')[0] : '',
+    // Only DO deliveries are tied to an order — a DO's box contents come
+    // from that order's Items, capped by what's left to deliver. SJ
+    // deliveries (documents) aren't order-item-constrained.
+    order_id:       editing?.order_id       ?? null,
   })
 
-  const setStr = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm(p => ({ ...p, [k]: e.target.value }))
+  // Prefill the suggested ID for brand-new deliveries once the list is
+  // available, and re-suggest whenever the type toggle changes (DO and SJ
+  // have separate sequences) — as long as the user hasn't typed their own.
+  useEffect(() => {
+    if (!editing && !idTouched) {
+      setForm(p => ({ ...p, id: suggestNextDeliveryId(deliveries, type) }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deliveries, editing, type])
+
+  const resetIdSuggestion = () => {
+    setIdTouched(false)
+    setForm(p => ({ ...p, id: suggestNextDeliveryId(deliveries, type) }))
+  }
+
+  const idAlreadyExists = deliveries.some(d => d.id === form.id && d.id !== editing?.id)
+
+  // Same convention as OrdersPage — force these to uppercase as-typed so
+  // "jl. hayam wuruk" / "Jl. Hayam Wuruk" / "JL. HAYAM WURUK" don't end up
+  // as three different-looking values across deliveries. Phone number is
+  // left alone since it's digits only.
+  const UPPERCASE_FIELDS: (keyof CreateDeliveryRequest)[] = ['address', 'po_number', 'contact_person', 'company']
+
+  const setStr = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value
+    const value = UPPERCASE_FIELDS.includes(k) ? raw.toUpperCase() : raw
+    if (k === 'company') setCompanyTouched(true)
+    if (k === 'po_number') setPoNumberTouched(true)
+    setForm(p => ({ ...p, [k]: value }))
+  }
 
   const idPlaceholder = type === 'DO' ? '01/KMA/DO/26' : '01/KMA/SJ/26'
 
   const handleSubmit = () => {
+      if (!form.id.trim()) return
+      if (idAlreadyExists) return
+      if (type === 'DO' && !form.order_id) return
+      if (!form.company?.trim()) return
       const payload = {
         ...form,
+        id: form.id.trim(),
         date: form.date ? new Date(form.date).toISOString() : new Date().toISOString()
       }
       if (editing) {
         update.mutate({ id: editing.id, body: payload }, { onSuccess: onClose })
       } else {
         create.mutate(payload, {
-          onSuccess: (newDelivery) => {   // ← change this
+          onSuccess: async (newDelivery) => {
             onClose()
+            if (type === 'SJ' && form.order_id) {
+              const linkedOrder = orders.find(o => o.id === form.order_id)
+              const orderInvoices = invoices.filter(inv => inv.order_id === form.order_id)
+              // Sequential, not a forEach of .mutate() calls — those fire
+              // concurrently and land in whatever order the network happens
+              // to resolve them, which scrambles the intended
+              // Kwitansi → Invoice → PO sequence on the printout.
+              for (const doc of suggestSJDocuments(linkedOrder, orderInvoices)) {
+                await createItem.mutateAsync({
+                  delivery_id: newDelivery.id,
+                  item_name: doc.item_name,
+                  size: null,
+                  amount: doc.amount,
+                  box_number: 1,
+                })
+              }
+            }
             navigate(`/delivery/${encodeURIComponent(newDelivery.id)}`)
           }
         })
@@ -60,31 +175,119 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
       {/* Type selector */}
       {!editing && (
         <FormField label="Delivery Type" required>
-          <select className="field" value={type} onChange={e => {const t = e.target.value as 'DO' | 'SJ' 
-          setType(t)
-          setForm(p => ({ ...p, type: t }))
-        }}
-
->
+          <select className="field" value={type} onChange={e => {
+            const t = e.target.value as 'DO' | 'SJ'
+            setType(t)
+            setForm(p => ({ ...p, type: t, order_id: t === 'SJ' ? null : p.order_id }))
+          }}>
             <option value="DO">DO — Delivery Order (item delivery, per box)</option>
             <option value="SJ">SJ — Surat Jalan (documents: mock ups, invoices, receipts)</option>
           </select>
         </FormField>
       )}
 
-      <FormField label={type === 'DO' ? 'Delivery Order No.' : 'Surat Jalan No.'}>
-        <input
-          className="field font-mono"
-          placeholder={`e.g. ${idPlaceholder}`}
-          readOnly={!!editing}
-          value={form.id}
-          onChange={e => setForm(p => ({ ...p, id: e.target.value }))}
-        />
-        {!editing && (
+      {type === 'DO' && (
+        <FormField label="Order" required>
+          <select
+            className="field"
+            value={form.order_id ?? ''}
+            onChange={e => {
+              const newOrderId = e.target.value || null
+              const selectedOrder = orders.find(o => o.id === newOrderId)
+              setForm(p => ({
+                ...p,
+                order_id: newOrderId,
+                company: !companyTouched && selectedOrder?.company ? selectedOrder.company.toUpperCase() : p.company,
+                po_number: !poNumberTouched && selectedOrder?.po_number ? selectedOrder.po_number.toUpperCase() : p.po_number,
+              }))
+            }}
+          >
+            <option value="">Select order…</option>
+            {orders.map(o => <option key={o.id} value={o.id}>{o.id} — {o.company}</option>)}
+          </select>
           <p className="text-xs text-slate-400 mt-1">
-            ID format: <span className="font-mono">{idPlaceholder}</span> — set manually or by server
+            Box contents can only be picked from this order's items, up to what's left to deliver.
+            Company and PO Number below fill in from the order — edit them directly if this delivery needs different values.
           </p>
-        )}
+        </FormField>
+      )}
+
+      {type === 'SJ' && (
+        <FormField label="Order (optional)">
+          <select
+            className="field"
+            value={form.order_id ?? ''}
+            onChange={e => {
+              const newOrderId = e.target.value || null
+              const selectedOrder = orders.find(o => o.id === newOrderId)
+              setForm(p => ({
+                ...p,
+                order_id: newOrderId,
+                company: !companyTouched && selectedOrder?.company ? selectedOrder.company.toUpperCase() : p.company,
+              }))
+            }}
+          >
+            <option value="">No linked order…</option>
+            {orders.map(o => <option key={o.id} value={o.id}>{o.id} — {o.company}</option>)}
+          </select>
+          {form.order_id ? (() => {
+            const linkedOrder = orders.find(o => o.id === form.order_id)
+            const orderInvoices = invoices.filter(inv => inv.order_id === form.order_id)
+            const preview = suggestSJDocuments(linkedOrder, orderInvoices)
+            return preview.length > 0 ? (
+              <div className="text-xs text-slate-500 mt-1.5 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                Will auto-add on create:
+                <ul className="mt-1 space-y-0.5">
+                  {preview.map(doc => <li key={doc.item_name} className="font-mono">· {doc.item_name}</li>)}
+                </ul>
+              </div>
+            ) : (
+              <p className="text-xs text-amber-600 mt-1">
+                No invoices found yet for this order, and it has no PO number — nothing will be auto-added.
+              </p>
+            )
+          })() : (
+            <p className="text-xs text-slate-400 mt-1">
+              Linking an order auto-adds its kwitansi, invoice, and PO copy as documents once created.
+            </p>
+          )}
+        </FormField>
+      )}
+
+      <FormField label={type === 'DO' ? 'Delivery Order No.' : 'Surat Jalan No.'} required>
+        <div className="flex items-center gap-2">
+          <input
+            className="field font-mono"
+            placeholder={`e.g. ${idPlaceholder}`}
+            readOnly={!!editing}
+            value={form.id}
+            onChange={e => { setIdTouched(true); setForm(p => ({ ...p, id: e.target.value.toUpperCase() })) }}
+          />
+          {!editing && (
+            <button
+              type="button"
+              className="btn-ghost btn-sm !px-2 shrink-0"
+              title="Reset to suggested next number"
+              onClick={resetIdSuggestion}
+            >
+              <RotateCcw size={14} />
+            </button>
+          )}
+        </div>
+        {idAlreadyExists ? (
+          <p className="text-xs text-red-500 mt-1">
+            A delivery with this ID already exists — pick a different number.
+          </p>
+        ) : !editing ? (
+          <p className="text-xs text-slate-400 mt-1">
+            Auto-suggested as next {type} number for {new Date().getFullYear()} — edit if needed.
+          </p>
+        ) : null}
+      </FormField>
+
+      <FormField label="Company (NAMA)" required>
+        <input className="field" placeholder="e.g. The 101 Darmawangsa"
+          value={form.company ?? ''} onChange={setStr('company')} />
       </FormField>
 
       <FormField label="Delivery Address" required>
@@ -93,10 +296,12 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
       </FormField>
 
       <div className="grid grid-cols-2 gap-3">
-        <FormField label="PO Number">
-          <input className="field font-mono" placeholder="P0000011"
-            value={form.po_number ?? ''} onChange={setStr('po_number')} />
-        </FormField>
+        {type === 'DO' && (
+          <FormField label="PO Number">
+            <input className="field font-mono" placeholder="P0000011"
+              value={form.po_number ?? ''} onChange={setStr('po_number')} />
+          </FormField>
+        )}
         <FormField label="Delivery Date">
           <input className="field" type="date"
             value={form.date} onChange={setStr('date')} />
@@ -123,7 +328,11 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
       </div>
 
       <div className="flex gap-2 pt-1">
-        <button className="btn-primary" disabled={busy} onClick={handleSubmit}>
+        <button
+          className="btn-primary"
+          disabled={busy || idAlreadyExists || !form.id.trim() || !form.address?.trim() || !form.company?.trim() || (type === 'DO' && !form.order_id)}
+          onClick={handleSubmit}
+        >
           {busy ? 'Saving…' : editing ? 'Update Delivery' : `Create ${type === 'DO' ? 'Delivery Order' : 'Surat Jalan'}`}
         </button>
         <button className="btn-secondary" onClick={onClose}>Cancel</button>
@@ -143,9 +352,10 @@ export function DeliveryPage() {
       icon={Truck}
       data={data}
       isLoading={isLoading}
-      searchKeys={['address', 'contact_person', 'po_number']}
+      searchKeys={['company', 'address', 'contact_person', 'po_number']}
       columns={[
         { header: 'Delivery ID',     key: 'id',             render: r => <span className="id-chip">{r.id}</span> },
+        { header: 'Company',         key: 'company',        render: r => <span className="font-semibold text-navy-900">{r.company ?? '—'}</span> },
         { header: 'Address',         key: 'address',        render: r => <span className="font-medium">{r.address}</span> },
         { header: 'Contact',         key: 'contact_person', render: r => r.contact_person ?? '—' },
         { header: 'Phone',           key: 'phone_number',   render: r => <span className="font-mono text-xs">{r.phone_number ?? '—'}</span> },
@@ -157,99 +367,21 @@ export function DeliveryPage() {
       onDelete={id => del.mutate(id)}
       deleteMessage={r => `Delete delivery ${r.id}?`}
       rowActions={row => (
-        <button
-          className="btn-ghost btn-sm !px-2 hover:!text-gold-500"
-          onClick={() => navigate(`/delivery/${encodeURIComponent(row.id)}`)}
-          title="View contents">
-          <Eye className="w-3.5 h-3.5" />
-        </button>
+        <>
+          <button
+            className="btn-ghost btn-sm !px-2 hover:!text-gold-500"
+            onClick={() => navigate(`/delivery/${encodeURIComponent(row.id)}`)}
+            title="View contents">
+            <Eye className="w-3.5 h-3.5" />
+          </button>
+          <button
+            className="btn-ghost btn-sm !px-2 hover:!text-gold-500"
+            onClick={() => navigate(`/delivery/${encodeURIComponent(row.id)}/print`)}
+            title="Print delivery order">
+            <Printer className="w-3.5 h-3.5" />
+          </button>
+        </>
       )}
     />
   )
 }
-
-// ─── Delivery Orders ──────────────────────────────────────────────────────────
-
-function DeliveryOrderForm({ editing, onClose }: { editing: DeliveryItem | null; onClose: () => void }) {
-  const create = deliveryItemHooks.useCreate()
-  const update = deliveryItemHooks.useUpdate()
-  const { data: deliveries = [] } = deliveryHooks.useList()
-
-  const [form, setForm] = useState<CreateDeliveryItemRequest>({
-    delivery_id: editing?.delivery_id ?? '',
-    item_name:   editing?.item_name   ?? '',
-    size:        editing?.size        ?? '',
-    amount:      editing?.amount      ?? 1,
-    boxnumber:   editing?.boxnumber ?? 0
-  })
-
-  const handleSubmit = () => {
-    const payload = { ...form, size: form.size || null }
-    if (editing) {
-      update.mutate({ id: editing.id, body: payload }, { onSuccess: onClose })
-    } else {
-      create.mutate(payload, { onSuccess: onClose })
-    }
-  }
-
-  const busy = create.isPending || update.isPending
-
-  return (
-    <div className="space-y-4">
-      <FormField label="Delivery" required>
-        <select className="field" value={form.delivery_id}
-          onChange={e => setForm(p => ({ ...p, delivery_id: e.target.value }))}>
-          <option value="">Select delivery…</option>
-          {deliveries.map(d => <option key={d.id} value={d.id}>{d.id} — {d.address}</option>)}
-        </select>
-      </FormField>
-      <div className="grid grid-cols-2 gap-3">
-        <FormField label="Item Name" required>
-          <input className="field" placeholder="e.g. Apron" value={form.item_name}
-            onChange={e => setForm(p => ({ ...p, item_name: e.target.value }))} />
-        </FormField>
-        <FormField label="Size">
-          <input className="field" placeholder="S / M / L / XL" value={form.size ?? ''}
-            onChange={e => setForm(p => ({ ...p, size: e.target.value }))} />
-        </FormField>
-        <FormField label="Amount" required>
-          <input className="field" type="number" min={1} value={form.amount}
-            onChange={e => setForm(p => ({ ...p, amount: Number(e.target.value) }))} />
-        </FormField>
-      </div>
-      <div className="flex gap-2 pt-1">
-        <button className="btn-primary" disabled={busy} onClick={handleSubmit}>
-          {busy ? 'Saving…' : editing ? 'Update' : 'Add Item'}
-        </button>
-        <button className="btn-secondary" onClick={onClose}>Cancel</button>
-      </div>
-    </div>
-  )
-}
-
-export function DeliveryItemsPage() {
-  const { data, isLoading } = deliveryItemHooks.useList()
-  const del = deliveryItemHooks.useDelete()
-
-  return (
-    <CrudPage<DeliveryItem>
-      title="Delivery Item"
-      icon={PackageCheck}
-      data={data}
-      isLoading={isLoading}
-      searchKeys={['item_name']}
-      columns={[
-        { header: 'ID',          key: 'id' },
-        { header: 'Delivery ID', key: 'delivery_id',  render: r => <span className="id-chip">{r.delivery_id}</span> },
-        { header: 'Item',        key: 'item_name',    render: r => <span className="font-medium">{r.item_name}</span> },
-        { header: 'Size',        key: 'size',         render: r => r.size ? <span className="badge-slate">{r.size}</span> : '—' },
-        { header: 'Amount',      key: 'amount' },
-      ]}
-      formTitle={e => e ? 'Edit Delivery Order' : 'Add Delivery Order Item'}
-      renderForm={(editing, onClose) => <DeliveryOrderForm editing={editing} onClose={onClose} />}
-      onDelete={id => del.mutate(id)}
-      deleteMessage={r => `Delete delivery order item "${r.item_name}"?`}
-    />
-  )
-}
-

@@ -122,12 +122,19 @@ export interface OperationRow {
 // ─── Matches dto/Delivery.go ─────────────────────────────────────────────────
 export interface Delivery {
   id: string
-  type: string        
+  type: string
+  company: string | null   // NAMA on the printed DO/SJ — the client's company name
   address: string
   po_number: string | null
   phone_number: string | null
   contact_person: string | null
   date: string
+  // A DO's items are constrained by what was actually ordered — this ties
+  // the delivery back to the Order whose Items define the item/size
+  // catalog and the quantities available to split across boxes. SJ
+  // deliveries (documents) aren't tied to an order's item quantities, so
+  // this stays null for them.
+  order_id: string | null
 }
 
 // ─── Matches dto/DeliveryItem.go ────────────────────────────────────────────
@@ -137,7 +144,7 @@ export interface DeliveryItem {
   item_name: string
   size: string | null
   amount: number
-  boxnumber: number| null
+  box_number: number| null
   delivery?: Delivery
 }
 

@@ -6,7 +6,9 @@ import { DashboardPage } from '@/pages/DashboardPage'
 import { OrdersPage } from '@/pages/orders/OrdersPage'
 import { ItemsPage } from '@/pages/orders/ItemsPage'
 import { InvoicePrintPage } from '@/pages/orders/InvoicePrintPage'
-import { DeliveryPage, DeliveryItemsPage} from '@/pages/delivery/DeliveryPages'
+import { DeliveryPage } from '@/pages/delivery/DeliveryPages'
+import { DeliveryDetailPage } from '@/pages/delivery/DeliveryDetailsPages'
+import { DeliveryPrintPage } from '@/pages/delivery/DeliveryPrintPage'
 import { ProductionPage } from '@/pages/production/ProductionPage'
 import { SuppliersPage } from '@/pages/suppliers/SuppliersPage'
 import { OperationsPage } from '@/pages/operations/OperationsPage'
@@ -25,17 +27,18 @@ export default function App() {
           <Topbar />
           <main className="flex-1 overflow-y-auto bg-slate-50">
             <Routes>
-              <Route path="/"                element={<DashboardPage />} />
-              <Route path="/orders"          element={<OrdersPage />} />
-              <Route path="/items"           element={<ItemsPage />} />
-              <Route path="/invoice"         element={<InvoiceListPage />} />
-              <Route path="/invoice/:id"     element={<InvoicePrintPage />} />
-              <Route path="/delivery"        element={<DeliveryPage />} />
-              <Route path="/delivery/:id"    element={<DeliveryItemsPage />} />
-              <Route path="/production"      element={<ProductionPage />} />
-              <Route path="/suppliers"       element={<SuppliersPage />} />
-              <Route path="/operations"      element={<OperationsPage />} />
-              <Route path="/orders/:id"      element={<OrderDetailPage />} />
+              <Route path="/"                     element={<DashboardPage />} />
+              <Route path="/orders"               element={<OrdersPage />} />
+              <Route path="/items"                element={<ItemsPage />} />
+              <Route path="/invoice"              element={<InvoiceListPage />} />
+              <Route path="/invoice/:id"          element={<InvoicePrintPage />} />
+              <Route path="/delivery"             element={<DeliveryPage />} />
+              <Route path="/delivery/:id"         element={<DeliveryDetailPage />} />
+              <Route path="/delivery/:id/print"   element={<DeliveryPrintPage />} />
+              <Route path="/production"           element={<ProductionPage />} />
+              <Route path="/suppliers"            element={<SuppliersPage />} />
+              <Route path="/operations"           element={<OperationsPage />} />
+              <Route path="/orders/:id"           element={<OrderDetailPage />} />
               <Route path="/invoice/:id/kwitansi" element={<KwitansiPrintPage />} />
             </Routes>
           </main>
