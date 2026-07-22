@@ -1,3 +1,4 @@
+import { useRef, useLayoutEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Printer, Receipt } from 'lucide-react'
@@ -5,6 +6,18 @@ import { format } from 'date-fns'
 import { invoicesApi, ordersApi, itemsApi } from '@/api'
 import { formatRp } from '@/components/ui'
 import { useRekening } from '@/utils/RekeningStore'
+
+// Page is fit dynamically to one physical page (see the scale effect
+// below): shrink everything down together as content grows, but never
+// past MIN_SCALE (~9px body text) — beyond that it's no longer legible,
+// so we stop shrinking and let the extra content spill onto a second
+// printed page instead of being crushed unreadably small.
+const PAGE_HEIGHT_MM = 297
+const MM_TO_PX = 96 / 25.4
+const PAGE_HEIGHT_PX = PAGE_HEIGHT_MM * MM_TO_PX
+const BASE_FONT_PX = 11
+const MIN_FONT_PX = 9
+const MIN_SCALE = MIN_FONT_PX / BASE_FONT_PX
 
 function formatDate(date: string | Date | null | undefined) {
   if (!date) return '—'
@@ -16,6 +29,19 @@ export function InvoicePrintPage() {
   const navigate = useNavigate()
   const invoiceId = decodeURIComponent(id ?? '')
   const { rekening, setRekening } = useRekening()
+
+  // Fit-to-page: contentRef is the actual invoice sheet. We inflate its
+  // CSS width by 1/scale before shrinking it back down with
+  // transform:scale(scale) — the standard "zoom out to fit" trick, so the
+  // whole page (text, spacing, everything) shrinks together instead of
+  // just the font, while still rendering edge-to-edge at 210mm rather than
+  // leaving a gap on the right. wrapperHeightPx holds the actual space the
+  // scaled-down sheet occupies, so the surrounding layout — and print
+  // pagination — reflows correctly around it.
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [scale, setScale] = useState(1)
+  const [wrapperHeightPx, setWrapperHeightPx] = useState(PAGE_HEIGHT_PX)
+  const convergeAttempts = useRef(0)
 
   const { data: invoice, isLoading: invoiceLoading } = useQuery({
     queryKey: ['invoice', invoiceId],
@@ -34,6 +60,35 @@ export function InvoicePrintPage() {
     queryFn: () => itemsApi.getByOrder(invoice!.order_id),
     enabled: !!invoice?.order_id,
   })
+
+  useLayoutEffect(() => {
+    convergeAttempts.current = 0
+  }, [invoice?.id])
+
+  // Re-measures after every render (deliberately no dependency array) so
+  // it reacts to anything that can change content height — item count,
+  // notes, the editable bank-account inputs. Each pass compares the
+  // natural (pre-transform) height against one page and either converges
+  // (change too small to matter) or nudges scale again; capped at a few
+  // attempts so it can't oscillate forever if something keeps changing
+  // height on every render.
+  useLayoutEffect(() => {
+    if (!contentRef.current || !invoice) return
+    if (convergeAttempts.current > 6) return
+    const natural = contentRef.current.scrollHeight
+    const needed = PAGE_HEIGHT_PX / natural
+    const nextScale = Math.min(1, Math.max(needed, MIN_SCALE))
+    const nextWrapperHeight = natural * nextScale
+    if (Math.abs(nextScale - scale) > 0.002) {
+      convergeAttempts.current += 1
+      setScale(nextScale)
+    }
+    if (Math.abs(nextWrapperHeight - wrapperHeightPx) > 0.5) {
+      setWrapperHeightPx(nextWrapperHeight)
+    }
+  })
+
+  const spillsToSecondPage = scale <= MIN_SCALE + 0.002 && wrapperHeightPx > PAGE_HEIGHT_PX + 1
 
   if (invoiceLoading) return <div className="p-8 text-slate-400">Loading…</div>
   if (!invoice) return <div className="p-8 text-red-400">Invoice not found.</div>
@@ -60,7 +115,11 @@ export function InvoicePrintPage() {
         >
           <ArrowLeft size={14} /> Back
         </button>
-        <span className="text-slate-400 text-sm flex-1">{invoice.id}</span>
+        <span className="text-slate-400 text-sm flex-1">
+          {invoice.id}
+          {scale < 0.999 && !spillsToSecondPage && ` · fitted to one page (${Math.round(scale * 100)}%)`}
+          {spillsToSecondPage && ' · long invoice — prints across 2 pages'}
+        </span>
         <button
           onClick={() => navigate(`/invoice/${encodeURIComponent(invoice.id)}/kwitansi`)}
           className="btn-secondary flex items-center gap-2"
@@ -77,11 +136,22 @@ export function InvoicePrintPage() {
 
       {/* Invoice document */}
       <div className="p-8 print:p-0">
-        <div
-          id="invoice"
-          className="bg-white mx-auto shadow-lg print:shadow-none"
-          style={{ width: '210mm', minHeight: '297mm', padding: '20mm 20mm 15mm 20mm', fontFamily: 'Arial, sans-serif', fontSize: '11px', color: '#000' }}
-        >
+        <div style={{ width: '210mm', height: `${wrapperHeightPx}px` }} className="mx-auto">
+          <div
+            ref={contentRef}
+            id="invoice"
+            className="bg-white shadow-lg print:shadow-none"
+            style={{
+              width: `${100 / scale}%`,
+              minHeight: '297mm',
+              padding: '20mm 20mm 15mm 20mm',
+              fontFamily: 'Arial, sans-serif',
+              fontSize: '11px',
+              color: '#000',
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+            }}
+          >
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '16px' }}>
             <div>
@@ -308,6 +378,7 @@ export function InvoicePrintPage() {
             <div>TELP. 021.300.253.99 / Hp. 0811.857.372</div>
             <div>Email : fifi67@yahoo.com</div>
           </div>
+          </div>
         </div>
       </div>
 
@@ -318,7 +389,6 @@ export function InvoicePrintPage() {
           .print\\:hidden { display: none !important; }
           .print\\:shadow-none { box-shadow: none !important; }
           .print\\:p-0 { padding: 0 !important; }
-          #invoice { width: 100% !important; margin: 0 !important; }
           @page { size: A4; margin: 0; }
           
           /* ← Add these to hide sidebar and topbar when printing */
