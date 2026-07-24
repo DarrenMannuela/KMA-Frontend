@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Building2, Users, Package, Printer, Image as ImageIcon, FileText } from 'lucide-react'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, Building2, Users, Package, Printer, Image as ImageIcon } from 'lucide-react'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField, Spinner } from '@/components/ui'
 import { clientHooks, clientContactHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
@@ -88,16 +88,8 @@ function ClientContactForm({ clientId, editing, onClose }: { clientId: number; e
 function ClientItemPhotoCell({ item, clientId }: { item: ClientItem; clientId: number }) {
   const navigate = useNavigate()
   const [imgFailed, setImgFailed] = useState(false)
-  const isPdf = item.photo_path?.toLowerCase().endsWith('.pdf')
   const go = (e: React.MouseEvent) => { e.stopPropagation(); navigate(`/clients/${clientId}/items/${item.id}`) }
 
-  if (item.photo_path && isPdf) {
-    return (
-      <button onClick={go} title="Open item page" className="w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center text-red-400 border border-red-100 hover:bg-red-100">
-        <FileText size={16} />
-      </button>
-    )
-  }
   if (item.photo_path && !imgFailed) {
     return (
       <button onClick={go} title="Open item page">
@@ -227,7 +219,13 @@ export function ClientDetailPage() {
   const { data: groupedPrices } = clientItemPriceHooks.useGrouped()
 
   const [showPrint, setShowPrint] = useState(false)
-  const [tab, setTab] = useState<'contacts' | 'catalogue'>('contacts')
+  // Backed by ?tab= instead of plain useState — ClientItemDetailPage's
+  // "back to catalogue" link does a real route change to this page (a
+  // remount, not a re-render), which would otherwise reset any local
+  // state back to the 'contacts' default every time.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = searchParams.get('tab') === 'catalogue' ? 'catalogue' : 'contacts'
+  const setTab = (next: 'contacts' | 'catalogue') => setSearchParams({ tab: next }, { replace: true })
 
   if (clientLoading) {
     return <Spinner />

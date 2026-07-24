@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, Package, Image as ImageIcon, FileText, Pencil, X, Check } from 'lucide-react'
+import { ArrowLeft, Package, Image as ImageIcon, Pencil, X, Check } from 'lucide-react'
 import { FormField, Spinner, formatRp } from '@/components/ui'
 import { clientHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
 import { formatThousands, stripCommas } from '@/utils/NumberFormat'
@@ -16,19 +16,10 @@ function ItemPhotoPanel({ item }: { item: ClientItem }) {
   const remove = clientItemHooks.useDeletePhoto()
   const inputRef = useRef<HTMLInputElement>(null)
   const [imgFailed, setImgFailed] = useState(false)
-  const isPdf = item.photo_path?.toLowerCase().endsWith('.pdf')
 
   return (
     <div className="card p-4 flex flex-col items-center gap-3">
-      {item.photo_path && isPdf ? (
-        <a
-          href={item.photo_path} target="_blank" rel="noopener noreferrer"
-          className="w-full aspect-square rounded-xl bg-red-50 flex items-center justify-center text-red-400 border border-red-100 hover:bg-red-100"
-          title="Open PDF"
-        >
-          <FileText size={40} />
-        </a>
-      ) : item.photo_path && !imgFailed ? (
+      {item.photo_path && !imgFailed ? (
         <a href={item.photo_path} target="_blank" rel="noopener noreferrer" title="View full size" className="w-full">
           <img
             src={item.photo_path}
@@ -57,7 +48,7 @@ function ItemPhotoPanel({ item }: { item: ClientItem }) {
         )}
       </div>
       <input
-        ref={inputRef} type="file" accept="image/png,image/jpeg,application/pdf" className="hidden"
+        ref={inputRef} type="file" accept="image/jpeg,image/png" className="hidden"
         onChange={e => {
           const file = e.target.files?.[0]
           if (file) { upload.mutate({ id: item.id, file }); setImgFailed(false) }
@@ -210,13 +201,13 @@ export function ClientItemDetailPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center gap-3">
-        <button onClick={() => navigate(`/clients/${clientId}`)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500" title="Back to catalogue">
+        <button onClick={() => navigate(`/clients/${clientId}?tab=catalogue`)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500" title="Back to catalogue">
           <ArrowLeft size={18} />
         </button>
         <Package className="text-navy-600" size={20} />
         <div>
           <p className="text-xs text-slate-400">
-            <Link to={`/clients/${clientId}`} className="hover:underline">{client?.client_name ?? 'Client'}</Link> / Catalogue
+            <Link to={`/clients/${clientId}?tab=catalogue`} className="hover:underline">{client?.client_name ?? 'Client'}</Link> / Catalogue
           </p>
           <h2 className="text-lg font-semibold text-slate-800">{item.item_name}{item.size ? ` (${item.size})` : ''}</h2>
         </div>

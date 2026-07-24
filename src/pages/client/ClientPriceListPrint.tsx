@@ -110,6 +110,7 @@ export function ClientPriceListPrint({ client, items, pricesByItem, onClose }: C
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b-2 border-navy-900">
+                  <th className="text-left  py-2 font-semibold text-navy-900 w-14"></th>
                   <th className="text-left  py-2 font-semibold text-navy-900">Item</th>
                   <th className="text-right py-2 font-semibold text-navy-900">Previous</th>
                   <th className="text-right py-2 font-semibold text-navy-900">Current Price</th>
@@ -121,6 +122,17 @@ export function ClientPriceListPrint({ client, items, pricesByItem, onClose }: C
                   const changed = previous && previous.price !== latest.price
                   return (
                     <tr key={item.id} className="border-b border-slate-100">
+                      <td className="py-2 pr-2">
+                        {item.photo_path ? (
+                          <img
+                            src={item.photo_path}
+                            alt=""
+                            className="w-10 h-10 rounded object-cover border border-slate-200"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded bg-slate-50 border border-slate-100" />
+                        )}
+                      </td>
                       <td className="py-2 text-navy-900">
                         {item.item_name}
                         {item.size && <span className="text-slate-400"> ({item.size})</span>}
