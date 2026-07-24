@@ -12,6 +12,7 @@ const SHOW_DEV_STATUS = import.meta.env.DEV
 
 const TITLES: Record<string, string> = {
   '/':                'Dashboard',
+  '/clients':         'Clients',
   '/orders':          'Orders',
   '/items':           'Order Items',
   '/invoice':     'Invoice',
@@ -26,7 +27,7 @@ const TITLES: Record<string, string> = {
 // Routes that are fully wired to real DB handlers in main.go
 const LIVE_ROUTES = new Set(['/suppliers', '/orders', '/items', '/invoice',
   '/delivery', '/delivery-orders', '/surat-jalan',
-  '/production', '/operations',])
+  '/production', '/operations', '/clients',])
 
 // Routes still returning stub JSON
 const STUB_ROUTES = new Set()

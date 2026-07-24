@@ -1,7 +1,7 @@
 import axios from 'axios'
 import type {
   Order, Item, Invoice, Supplier, FinanceHeader, ProductionItem, OperationItem,
-  Delivery, DeliveryItem,
+  Delivery, DeliveryItem, Client, ClientContact, ClientItem, ClientItemPrice,
   CreateOrderRequest, UpdateOrderRequest,
   CreateItemRequest, UpdateItemRequest,
   CreateInvoiceRequest, UpdateInvoiceRequest,
@@ -11,6 +11,10 @@ import type {
   CreateOperationItemRequest, UpdateOperationItemRequest,
   CreateDeliveryRequest, UpdateDeliveryRequest,
   CreateDeliveryItemRequest, UpdateDeliveryItemRequest,
+  CreateClientRequest, UpdateClientRequest,
+  CreateClientContactRequest, UpdateClientContactRequest,
+  CreateClientItemRequest, UpdateClientItemRequest,
+  CreateClientItemPriceRequest, UpdateClientItemPriceRequest,
 } from '@/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -64,6 +68,14 @@ function crud<T, C, U>(base: string) {
 //
 //  NOT YET IN main.go (will need to be added as routes are implemented):
 //    /:id variants for order, items, surat-jalan
+//
+//  CLIENTS SUBSECTION (verified against main.go):
+//    /client, /client/:id
+//    /client-contact, /client-contact/:id, /client-contact/by-client?client_id=
+//    /client-item, /client-item/:id, /client-item/by-client?client_id=
+//    /client-item/:id/photo  (POST multipart "photo", DELETE)
+//    /client-item-price, /client-item-price/:id,
+//      /client-item-price/by-item?client_item_id=, /client-item-price/grouped
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const ordersApi        = crud<Order,         CreateOrderRequest,        UpdateOrderRequest>('/order')
@@ -93,3 +105,44 @@ export const operationItemApi = {
 
 export const deliveryApi      = crud<Delivery,       CreateDeliveryRequest,      UpdateDeliveryRequest>('/delivery')
 export const deliveryItemApi = crud<DeliveryItem,  CreateDeliveryItemRequest, UpdateDeliveryItemRequest>('/delivery-item')
+
+// ── Clients subsection ────────────────────────────────────────────────────────
+// clientApi: the company/client record itself.
+export const clientApi = crud<Client, CreateClientRequest, UpdateClientRequest>('/client')
+
+// clientContactApi: one client's POCs. getByClient() powers the client
+// detail page's POC list, same shape as itemsApi.getByOrder.
+export const clientContactApi = {
+  ...crud<ClientContact, CreateClientContactRequest, UpdateClientContactRequest>('/client-contact'),
+  getByClient: (clientId: number | string) =>
+    http.get<ClientContact[]>(`/client-contact/by-client?client_id=${encodeURIComponent(clientId)}`).then(r => r.data),
+}
+
+// clientItemApi: one client's catalogue. getByClient() powers the client
+// detail page's catalogue list. uploadPhoto/deletePhoto hit the dedicated
+// photo endpoints (multipart form, field name "photo").
+export const clientItemApi = {
+  ...crud<ClientItem, CreateClientItemRequest, UpdateClientItemRequest>('/client-item'),
+  getByClient: (clientId: number | string) =>
+    http.get<ClientItem[]>(`/client-item/by-client?client_id=${encodeURIComponent(clientId)}`).then(r => r.data),
+  uploadPhoto: (id: number | string, file: File) => {
+    const form = new FormData()
+    form.append('photo', file)
+    return http.post<ClientItem>(`/client-item/${encodeURIComponent(id)}/photo`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
+  deletePhoto: (id: number | string) =>
+    http.delete<ClientItem>(`/client-item/${encodeURIComponent(id)}/photo`).then(r => r.data),
+}
+
+// clientItemPriceApi: year-by-year price history per catalogue item.
+// grouped() returns { [client_item_id]: Price[] }, same "grouped" shape
+// as productionItemApi/operationItemApi — lets a client's whole catalogue
+// render its price history in one request instead of one per item.
+export const clientItemPriceApi = {
+  ...crud<ClientItemPrice, CreateClientItemPriceRequest, UpdateClientItemPriceRequest>('/client-item-price'),
+  getByItem: (clientItemId: number | string) =>
+    http.get<ClientItemPrice[]>(`/client-item-price/by-item?client_item_id=${encodeURIComponent(clientItemId)}`).then(r => r.data),
+  grouped: () => http.get<Record<string, ClientItemPrice[]>>('/client-item-price/grouped').then(r => r.data),
+}

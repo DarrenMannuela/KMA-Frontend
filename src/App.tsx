@@ -15,6 +15,9 @@ import { OperationsPage } from '@/pages/operations/OperationsPage'
 import { OrderDetailPage } from '@/pages/orders/OrderDetailPage'
 import { InvoiceListPage } from '@/pages/orders/InvoiceListPage'
 import { KwitansiPrintPage} from '@/pages/orders/KiwitansiPrintPage'
+import { ClientsPage } from '@/pages/client/ClientsPage'
+import { ClientDetailPage } from '@/pages/client/ClientDetailPage'
+import { ClientItemDetailPage } from '@/pages/client/ClientItemDetailPage'
 
 
 export default function App() {
@@ -40,6 +43,9 @@ export default function App() {
               <Route path="/operations"           element={<OperationsPage />} />
               <Route path="/orders/:id"           element={<OrderDetailPage />} />
               <Route path="/invoice/:id/kwitansi" element={<KwitansiPrintPage />} />
+              <Route path="/clients"                        element={<ClientsPage />} />
+              <Route path="/clients/:id"                    element={<ClientDetailPage />} />
+              <Route path="/clients/:clientId/items/:itemId" element={<ClientItemDetailPage />} />
             </Routes>
           </main>
         </div>

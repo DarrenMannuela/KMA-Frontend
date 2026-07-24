@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingBag, ListOrdered, FileText,
   Truck, PackageCheck, ScrollText, Factory, Users, Wrench,
-  Circle, ChevronDown,
+  Building2, Circle, ChevronDown,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -40,6 +40,7 @@ const GROUPS: NavGroup[] = [
     label: 'Orders',
     icon: ShoppingBag,
     items: [
+      { label: 'Clients',     path: '/clients',      icon: Building2,    status: 'live' },
       { label: 'All Orders',  path: '/orders',      icon: ShoppingBag, status: 'live' },
       { label: 'Order Items', path: '/items',        icon: ListOrdered, status: 'live' },
       { label: 'Invoice', path: '/invoice',  icon: FileText,    status: 'live' },
