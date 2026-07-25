@@ -40,8 +40,13 @@ export function KwitansiPrintPage() {
 
   // The amount THIS kwitansi is a receipt for — the D/P amount if this is
   // a DP invoice, the remaining balance if this is the Pelunasan invoice.
-  const amount = invoice.type === 'dp' ? (invoice.down_payment ?? 0) : invoice.remaining
-  const purposeLabel = invoice.type === 'dp' ? 'DOWN PAYMENT (D/P)' : 'PELUNASAN'
+  // A 0% down payment isn't really a "down payment" — same convention as
+  // OrderDetailPage/InvoiceListPage/InvoicePrintPage — so a dp-type
+  // invoice with nothing actually down is treated as a full/Pelunasan
+  // payment here too: a receipt for "D/P — Rp 0" would be meaningless.
+  const isFullInvoice = invoice.type === 'dp' && (invoice.down_payment ?? 0) === 0
+  const amount = invoice.type === 'dp' && !isFullInvoice ? (invoice.down_payment ?? 0) : invoice.remaining
+  const purposeLabel = invoice.type === 'dp' && !isFullInvoice ? 'DOWN PAYMENT (D/P)' : 'PELUNASAN'
 
   return (
     <div className="min-h-screen bg-slate-100">

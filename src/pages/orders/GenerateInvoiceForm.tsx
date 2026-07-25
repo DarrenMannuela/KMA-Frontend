@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, Building2 } from 'lucide-react'
 import { FormField, formatRp } from '@/components/ui'
 import { invoicesApi } from '@/api'
-import { invoiceHooks } from '@/hooks'
+import { invoiceHooks, clientHooks, clientContactHooks } from '@/hooks'
 import type { Order, Item, Invoice, CreateInvoiceRequest, UpdateInvoiceRequest } from '@/types'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
 
@@ -40,25 +40,44 @@ interface Props {
   // when generating a DP invoice (nothing to prefill from) or when
   // existingInvoice is already set (editing takes priority).
   prefillFrom?: Invoice | null
+  // The order's linked Client (if any) — lets this form pull Alamat from
+  // the Client record and offer a Contact picker for Untuk/Telp/Email,
+  // the same way OrdersPage/DeliveryPages link to Clients. Null for
+  // orders that only have a free-text company.
+  clientId: number | null
   onClose: () => void
 }
 
-export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType, prefillFrom, onClose }: Props) {
+export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType, prefillFrom, clientId, onClose }: Props) {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { data: invoices = [] } = invoiceHooks.useList()
 
+  // Only fetched when the order is actually linked to a client — an
+  // unlinked order just falls back to typing everything by hand, same as
+  // before this existed. useGet's `id` is typed as `string | number` (no
+  // `undefined`) since it's the shared CRUD-hook factory, not one of the
+  // purpose-built "fetch only if linked" hooks — 0 is never a real client
+  // id, so it works as the same "don't fetch yet" sentinel while still
+  // satisfying the type, and useGet's internal `enabled: !!id` treats it
+  // exactly like undefined would.
+  const { data: client } = clientHooks.useGet(clientId ?? 0)
+  const { data: contacts = [] } = clientContactHooks.useByClient(clientId ?? undefined)
+
   const total = items.reduce((s, i) => s + i.sub_total, 0)
 
+  // Kept as a string while the field is being edited — an empty input
+  // becomes "" here, not 0, so backspacing to clear the field doesn't
+  // instantly get overwritten back to "0" by a controlled re-render
+  // before you can type a replacement. Only meaningful for forcedType
+  // 'dp'; Pelunasan bypasses this entirely (see downPayment below).
   const [dpPercent, setDpPercent] = useState(() => {
     if (existingInvoice && existingInvoice.total > 0) {
-      return Math.round(((existingInvoice.down_payment ?? 0) / existingInvoice.total) * 100)
+      return String(Math.round(((existingInvoice.down_payment ?? 0) / existingInvoice.total) * 100))
     }
-    if (prefillFrom && prefillFrom.total > 0) {
-      return Math.round(((prefillFrom.down_payment ?? 0) / prefillFrom.total) * 100)
-    }
-    return 50
+    return '50'
   })
+  const dpPercentNum = Math.min(100, Number(dpPercent) || 0)
 
   const [form, setForm] = useState({
     id:             existingInvoice?.id             ?? '',
@@ -87,8 +106,56 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
 
   const [idTouched, setIdTouched] = useState(false)
   const [totalTouched, setTotalTouched] = useState(false)
+  // Which Client Contact (if any) was picked to autofill Untuk/Telp/Email
+  // — purely to keep the select controlled, same role catalogueItemId
+  // plays in OrderDetailPage's item picker. Editing an existing invoice or
+  // prefilling from a DP invoice already has real values here, so this
+  // starts unset in those cases rather than guessing which contact they
+  // came from.
+  const [contactId, setContactId] = useState<number | ''>('')
 
-  const downPayment = Math.round(form.total * (dpPercent / 100))
+  // Alamat has no other source to prefill from (unlike Kepada Yth, which
+  // already defaults from order.company above) — pull it from the linked
+  // Client's address once it loads, but only for a brand-new invoice with
+  // nothing typed into that field yet, so this never clobbers a saved or
+  // prefilled value.
+  useEffect(() => {
+    if (!existingInvoice && !prefillFrom && !form.alamat && client?.address) {
+      setForm(p => (p.alamat ? p : { ...p, alamat: client.address!.toUpperCase() }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, existingInvoice, prefillFrom])
+
+  // Picking a contact fills Untuk/Telp/Email directly — an explicit user
+  // action, so it overwrites those fields outright (same convention as
+  // DeliveryPages' handleContactChange) rather than only filling blanks.
+  const handleContactChange = (idStr: string) => {
+    const id = idStr ? Number(idStr) : ''
+    setContactId(id)
+    const contact = contacts.find(c => c.id === id)
+    if (!contact) return
+    setForm(p => ({
+      ...p,
+      untuk: contact.name,
+      telp: contact.phone_number ?? p.telp,
+      email: contact.email ?? p.email,
+    }))
+  }
+
+  // For a Pelunasan invoice, the amount already covered is exactly what
+  // the D/P invoice actually collected — pulled straight from the record
+  // (existingInvoice when editing one, prefillFrom when generating a new
+  // one off the order's D/P invoice) rather than recomputed from a
+  // percentage, which could drift if the order's items/total changed
+  // since the D/P was raised. There's nothing to type here; it's just
+  // "total minus what's already been paid."
+  const alreadyPaidAmount = forcedType === 'pelunasan'
+    ? (existingInvoice?.down_payment ?? prefillFrom?.down_payment ?? 0)
+    : 0
+
+  const downPayment = forcedType === 'pelunasan'
+    ? Math.min(alreadyPaidAmount, form.total)
+    : Math.round(form.total * (dpPercentNum / 100))
   const remaining = form.total - downPayment
   const ar = remaining - (Number(form.discount) ?? 0)
 
@@ -241,22 +308,72 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
             </p>
           ) : null}
         </FormField>
-        <FormField label="Down Payment (%)">
-          <div className="flex items-center gap-2">
-            <input className="field font-mono" type="number" min={0} max={100}
-              value={dpPercent} onChange={e => setDpPercent(Number(e.target.value))} />
-            <span className="text-slate-400 text-sm shrink-0">%</span>
-          </div>
-        </FormField>
+        {forcedType === 'dp' ? (
+          <FormField label="Down Payment (%)">
+            <div className="flex items-center gap-2">
+              <input
+                className="field font-mono"
+                type="text"
+                inputMode="numeric"
+                placeholder="0"
+                value={dpPercent}
+                onChange={e => setDpPercent(e.target.value.replace(/[^\d]/g, ''))}
+                onBlur={() => setDpPercent(String(dpPercentNum))}
+              />
+              <span className="text-slate-400 text-sm shrink-0">%</span>
+            </div>
+            {dpPercentNum === 0 && (
+              <p className="text-xs text-amber-600 mt-1">
+                0% — this covers the full amount in one invoice. No separate Pelunasan invoice will be offered for this order.
+              </p>
+            )}
+          </FormField>
+        ) : (
+          <FormField label="Remaining to Collect">
+            <input className="field font-mono bg-slate-50 text-slate-500 cursor-not-allowed" readOnly
+              value={formatRp(remaining)} />
+            <p className="text-xs text-slate-400 mt-1">
+              {alreadyPaidAmount > 0
+                ? `Total minus the ${formatRp(alreadyPaidAmount)} already collected on the D/P invoice — filled in automatically.`
+                : 'No D/P was collected on this order — this covers the full total.'}
+            </p>
+          </FormField>
+        )}
       </div>
 
       <div className="border-t border-slate-100 pt-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Client Details</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Client Details</p>
+          {client && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-xs font-medium text-navy-600 hover:text-navy-800"
+              onClick={() => navigate(`/clients/${client.id}`)}
+            >
+              <Building2 size={12} /> {client.client_name} — View record
+            </button>
+          )}
+        </div>
         <div className="space-y-3">
           <FormField label="Kepada Yth (Company)" required>
             <input className="field" placeholder="PT. Artisan Kuliner Indonesia"
               value={form.kepada_yth} onChange={set('kepada_yth')} />
           </FormField>
+          {clientId && contacts.length > 0 && (
+            <FormField label="Contact (optional)">
+              <select className="field" value={contactId} onChange={e => handleContactChange(e.target.value)}>
+                <option value="">Select a contact to autofill…</option>
+                {contacts.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}{c.role ? ` — ${c.role}` : ''}{c.is_primary ? ' (Primary)' : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-400 mt-1">
+                Fills in Untuk, Telp, and Email below — still editable, or leave unpicked to type them directly.
+              </p>
+            </FormField>
+          )}
           <FormField label="Untuk (Contact Person)" required>
             <input className="field" placeholder="Ibu Cory"
               value={form.untuk} onChange={set('untuk')} />
@@ -307,7 +424,9 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
             <span className="font-mono">{formatRp(form.total)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-500">D/P ({dpPercent}%)</span>
+            <span className="text-slate-500">
+              {forcedType === 'dp' ? `D/P (${dpPercentNum}%)` : 'Already Paid (D/P)'}
+            </span>
             <span className="font-mono text-green-700">{formatRp(downPayment)}</span>
           </div>
           <div className="flex justify-between">

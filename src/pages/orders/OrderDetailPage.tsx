@@ -165,6 +165,14 @@ export function OrderDetailPage() {
   const orderInvoices = allInvoices.filter(inv => inv.order_id === orderId)
   const dpInvoice = orderInvoices.find(inv => inv.type === 'dp') ?? null
   const pelunasanInvoice = orderInvoices.find(inv => inv.type === 'pelunasan') ?? null
+  // A 0% down payment isn't really a "down payment" — it's the full amount
+  // due in one invoice, with nothing left over for a second (Pelunasan)
+  // invoice to collect. Still stored/typed as 'dp' under the hood (no
+  // schema change needed), but the UI treats it as a plain invoice: the
+  // button/modal drop the "DP" wording, and the Pelunasan button — which
+  // would otherwise offer to collect a remaining balance of Rp 0 — is
+  // hidden entirely rather than left there to be confusing.
+  const dpIsFullPayment = !!dpInvoice && (dpInvoice.down_payment ?? 0) === 0
 
   const del = itemHooks.useDelete()
   const [showForm, setShowForm] = useState(false)
@@ -247,9 +255,10 @@ export function OrderDetailPage() {
               <Plus size={14} /> Add Item
             </button>
             <button className="btn-secondary flex items-center gap-1" onClick={() => setInvoiceFormType('dp')}>
-              <FileText size={14} /> {dpInvoice ? 'Update DP Invoice' : 'Generate DP Invoice'}
+              <FileText size={14} />
+              {!dpInvoice ? 'Generate DP Invoice' : dpIsFullPayment ? 'Update Invoice' : 'Update DP Invoice'}
             </button>
-            {dpInvoice && (
+            {dpInvoice && !dpIsFullPayment && (
               <button className="btn-secondary flex items-center gap-1" onClick={() => setInvoiceFormType('pelunasan')}>
                 <FileText size={14} /> {pelunasanInvoice ? 'Update Pelunasan Invoice' : 'Generate Pelunasan Invoice'}
               </button>
@@ -334,20 +343,21 @@ export function OrderDetailPage() {
         <Modal
           title={
             invoiceFormType === 'dp'
-              ? (dpInvoice ? 'Update DP Invoice' : 'Generate DP Invoice')
+              ? (!dpInvoice ? 'Generate DP Invoice' : dpIsFullPayment ? 'Update Invoice' : 'Update DP Invoice')
               : (pelunasanInvoice ? 'Update Pelunasan Invoice' : 'Generate Pelunasan Invoice')
           }
           onClose={() => setInvoiceFormType(null)}
           size="lg"
         >
-          <GenerateInvoiceForm
-            order={order}
-            items={orderItems}
-            forcedType={invoiceFormType}
-            existingInvoice={invoiceFormType === 'dp' ? dpInvoice : pelunasanInvoice}
-            prefillFrom={invoiceFormType === 'pelunasan' ? dpInvoice : null}
-            onClose={() => setInvoiceFormType(null)}
-          />
+        <GenerateInvoiceForm
+          order={order}
+          items={orderItems}
+          forcedType={invoiceFormType}
+          existingInvoice={invoiceFormType === 'dp' ? dpInvoice : pelunasanInvoice}
+          prefillFrom={invoiceFormType === 'pelunasan' ? dpInvoice : null}
+          clientId={order.client_id}  
+          onClose={() => setInvoiceFormType(null)}
+        />
         </Modal>
       )}
     </div>

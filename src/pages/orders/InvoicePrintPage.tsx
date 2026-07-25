@@ -19,6 +19,23 @@ const BASE_FONT_PX = 11
 const MIN_FONT_PX = 9
 const MIN_SCALE = MIN_FONT_PX / BASE_FONT_PX
 
+// Preset options for the header-highlight color picker in the toolbar —
+// muted, desaturated pastels in the same family as the existing D/P vs
+// Pelunasan highlight (#d4e6c3, kept here as "Sage" so it's pickable too)
+// rather than bright/saturated colors — reads as understated and
+// document-appropriate rather than a bright accent, and stays legible
+// under black text either way.
+const HIGHLIGHT_PALETTE = [
+  { name: 'Sage',      value: '#d4e6c3' },
+  { name: 'Dusty Blue', value: '#c3d9e6' },
+  { name: 'Wheat',     value: '#e6dcc3' },
+  { name: 'Terracotta', value: '#e6c3c3' },
+  { name: 'Dusty Rose', value: '#e6c3d9' },
+  { name: 'Lavender',  value: '#d9c3e6' },
+  { name: 'Muted Teal', value: '#c3e6da' },
+  { name: 'Warm Gray', value: '#dcdcd4' },
+] as const
+
 function formatDate(date: string | Date | null | undefined) {
   if (!date) return '—'
   return format(new Date(date), 'd-MMM-yy')
@@ -29,6 +46,24 @@ export function InvoicePrintPage() {
   const navigate = useNavigate()
   const invoiceId = decodeURIComponent(id ?? '')
   const { rekening, setRekening } = useRekening()
+  const [signatoryName, setSignatoryName] = useState('FIFI LESMANA')
+  const [signatoryTitle, setSignatoryTitle] = useState('FOUNDER')
+  const [highlightChoice, setHighlightChoice] = useState<string>(HIGHLIGHT_PALETTE[0].value)
+  // Per-row overrides — keyed by a stable id per row (see rowKey below).
+  // Clicking a row paints it with whatever color is currently selected in
+  // the toolbar's swatch picker; clicking a row that's already that exact
+  // color clears it back to its default. The header row's highlight isn't
+  // part of this map — it always follows highlightChoice directly, since
+  // that one's meant to always be on.
+  const [rowHighlights, setRowHighlights] = useState<Record<string, string>>({})
+  const toggleRowHighlight = (key: string) => {
+    setRowHighlights(prev => {
+      const next = { ...prev }
+      if (next[key] === highlightChoice) delete next[key]
+      else next[key] = highlightChoice
+      return next
+    })
+  }
 
   // Fit-to-page: contentRef is the actual invoice sheet. We inflate its
   // CSS width by 1/scale before shrinking it back down with
@@ -101,9 +136,22 @@ export function InvoicePrintPage() {
   // what this specific invoice document actually represents — a DP
   // invoice would still show Pelunasan in green, which is backwards: the
   // highlighted row should be whichever amount THIS invoice is asking the
-  // client to pay right now.
-  const highlightDp = invoice.type === 'dp'
+  // client to pay right now. A 0% down payment isn't really a "down
+  // payment" — same convention as OrderDetailPage/InvoiceListPage — so a
+  // dp-type invoice with nothing actually down is treated as a full
+  // invoice: no D/P row at all, and the highlight lands on Pelunasan
+  // (the full amount) instead of a Rp 0 D/P line.
+  const isFullInvoice = invoice.type === 'dp' && (invoice.down_payment ?? 0) === 0
+  const highlightDp = invoice.type === 'dp' && !isFullInvoice
   const highlightColor = '#d4e6c3'
+  // General-purpose "highlight this cell" background — spread
+  // highlightCellStyle into any <td>/<th>'s style object to mark it (e.g.
+  // the KETERANGAN table's column headers below). Sourced from
+  // highlightChoice (picked in the toolbar's color picker), kept distinct
+  // from highlightColor above, which specifically marks whichever of D/P
+  // vs Pelunasan is due on THIS invoice — a semantically different kind
+  // of highlight that isn't user-pickable.
+  const highlightCellStyle = { background: highlightChoice }
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -120,6 +168,32 @@ export function InvoicePrintPage() {
           {scale < 0.999 && !spillsToSecondPage && ` · fitted to one page (${Math.round(scale * 100)}%)`}
           {spillsToSecondPage && ' · long invoice — prints across 2 pages'}
         </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-slate-400 mr-0.5">Click a row to color it:</span>
+          {HIGHLIGHT_PALETTE.map(c => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setHighlightChoice(c.value)}
+              title={c.name}
+              aria-label={c.name}
+              className="w-5 h-5 rounded-full shrink-0"
+              style={{
+                background: c.value,
+                border: highlightChoice === c.value ? '2px solid #1e293b' : '1px solid #cbd5e1',
+              }}
+            />
+          ))}
+          {Object.keys(rowHighlights).length > 0 && (
+            <button
+              type="button"
+              onClick={() => setRowHighlights({})}
+              className="text-xs text-slate-400 hover:text-slate-600 underline ml-1"
+            >
+              Clear
+            </button>
+          )}
+        </div>
         <button
           onClick={() => navigate(`/invoice/${encodeURIComponent(invoice.id)}/kwitansi`)}
           className="btn-secondary flex items-center gap-2"
@@ -231,19 +305,30 @@ export function InvoicePrintPage() {
           {/* Items table */}
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0', fontSize: '11px' }}>
             <thead>
-              <tr style={{ background: '#f0f0f0' }}>
-                <th style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', width: '40px' }}>NO.</th>
-                <th style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'left' }}>KETERANGAN</th>
-                <th style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', width: '60px' }}>SIZE</th>
-                <th style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', width: '60px' }}>QTY</th>
-                <th style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', width: '90px' }}>HARGA NET</th>
-                <th style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', width: '100px' }}>JUMLAH (Rp)</th>
+              {/* Column dividers use a darker border (#94a3b8) than the
+                  rest of the table (#ccc) — against a light highlight
+                  fill, the lighter gray had almost no contrast and the
+                  vertical lines between columns basically disappeared. */}
+              <tr style={highlightCellStyle}>
+                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'center', width: '40px' }}>NO.</th>
+                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'left' }}>KETERANGAN</th>
+                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'center', width: '60px' }}>SIZE</th>
+                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'center', width: '60px' }}>QTY</th>
+                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'right', width: '90px' }}>HARGA NET</th>
+                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'right', width: '100px' }}>JUMLAH (Rp)</th>
               </tr>
             </thead>
             <tbody>
-              {/* Company name row */}
-              <tr>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center' }}>1</td>
+              {/* Company name row — a header/label row, not an item, so it
+                  no longer takes a NO. — numbering now belongs entirely to
+                  the item groups below it. Clickable like the rows below
+                  it, so it can be picked out with a color too. */}
+              <tr
+                onClick={() => toggleRowHighlight('company')}
+                className="cursor-pointer print:cursor-default"
+                style={{ background: rowHighlights['company'] }}
+              >
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
                 <td style={{ border: '1px solid #ccc', padding: '6px 8px', fontWeight: 'bold', fontStyle: 'italic' }}>
                   {invoice.kepada_yth.toUpperCase()}
                 </td>
@@ -253,25 +338,69 @@ export function InvoicePrintPage() {
                 <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
               </tr>
 
-              {/* Item rows */}
-              {items.map((item, idx) => (
-                <tr key={idx}>
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px' }}>{item.item_name.toUpperCase()}</td>
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold' }}>{item.size ?? '—'}</td>
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center' }}>{item.amount.toLocaleString('id-ID')}</td>
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right' }}>{item.price.toLocaleString('id-ID')}</td>
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right' }}>{item.sub_total.toLocaleString('id-ID')}</td>
-                </tr>
-              ))}
-
-              {/* Spacer row */}
-              <tr>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} colSpan={6} />
-              </tr>
+              {/* Item rows — grouped by item_name (regardless of the order
+                  items actually come back in, so same-named items with
+                  different sizes always sit together), numbered 1, 2, 3…
+                  with the number only on each group's first row; the
+                  size-variant rows underneath it leave NO. blank. */}
+              {(() => {
+                const groups: { name: string; rows: typeof items }[] = []
+                items.forEach(item => {
+                  const group = groups.find(g => g.name === item.item_name)
+                  if (group) group.rows.push(item)
+                  else groups.push({ name: item.item_name, rows: [item] })
+                })
+                return groups.flatMap((group, groupIdx) => [
+                  ...group.rows.map((item, rowIdx) => {
+                    const key = `item-${item.id}`
+                    return (
+                      <tr
+                        key={key}
+                        onClick={() => toggleRowHighlight(key)}
+                        className="cursor-pointer print:cursor-default"
+                        style={{ background: rowHighlights[key] }}
+                      >
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center' }}>
+                          {rowIdx === 0 ? groupIdx + 1 : ''}
+                        </td>
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px' }}>{rowIdx === 0 ? item.item_name.toUpperCase() : ''}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold' }}>{item.size ?? '—'}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center' }}>{item.amount.toLocaleString('id-ID')}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right' }}>{item.price.toLocaleString('id-ID')}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right' }}>{item.sub_total.toLocaleString('id-ID')}</td>
+                      </tr>
+                    )
+                  }),
+                  // Gap after every item group — a real visible row (not
+                  // just a bordered-empty hairline, which collapses to
+                  // almost nothing with border-collapse when the cell has
+                  // no content). Plain white by default — the KETERANGAN
+                  // table's column headers are what's highlighted
+                  // automatically — but still clickable/paintable like
+                  // every other row here.
+                  (() => {
+                    const key = `gap-${group.name}`
+                    const cellStyle = { border: '1px solid #ccc', padding: '6px 8px', height: '20px', background: rowHighlights[key] }
+                    return (
+                      <tr key={key} onClick={() => toggleRowHighlight(key)} className="cursor-pointer print:cursor-default">
+                        <td style={cellStyle} />
+                        <td style={cellStyle} />
+                        <td style={cellStyle} />
+                        <td style={cellStyle} />
+                        <td style={cellStyle} />
+                        <td style={cellStyle} />
+                      </tr>
+                    )
+                  })(),
+                ])
+              })()}
 
               {/* Total row */}
-              <tr>
+              <tr
+                onClick={() => toggleRowHighlight('total')}
+                className="cursor-pointer print:cursor-default"
+                style={{ background: rowHighlights['total'] }}
+              >
                 <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} colSpan={3} />
                 <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold' }}>
                   {items.reduce((s, i) => s + i.amount, 0).toLocaleString('id-ID')}
@@ -282,32 +411,58 @@ export function InvoicePrintPage() {
                 </td>
               </tr>
 
-              {/* DP row */}
-              {invoice.down_payment != null && (
-                <tr>
+              {/* DP row — for a full invoice (0% DP) there's no D/P amount
+                  to show, but we still render a bordered spacer row in its
+                  place (same technique as the Spacer row above TOTAL) so
+                  the horizontal rule/spacing above PELUNASAN stays uniform
+                  whether or not this particular invoice has a D/P line.
+                  Clicking it overrides the automatic highlightDp coloring
+                  on its two right-most cells with whichever swatch is
+                  selected — click again with the same swatch to go back
+                  to the automatic behavior. */}
+              {invoice.down_payment != null && invoice.down_payment > 0 ? (
+                <tr onClick={() => toggleRowHighlight('dp')} className="cursor-pointer print:cursor-default">
                   <td style={{ padding: '6px 8px', textAlign: 'right', borderTop: '1px solid #ccc' }} colSpan={3}>
                     {invoice.due_date ? `LUNAS - ${format(new Date(invoice.due_date), 'd MMMM yyyy').toUpperCase()}` : 'LUNAS'}
                   </td>
                   <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: highlightDp ? highlightColor : undefined }}>
+                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
                     D/P {dpPercent} %
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: highlightDp ? highlightColor : undefined }}>
+                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
                     {(invoice.down_payment ?? 0).toLocaleString('id-ID')}
                   </td>
                 </tr>
+              ) : (
+                <tr onClick={() => toggleRowHighlight('dp')} className="cursor-pointer print:cursor-default">
+                  {(() => {
+                    const cellStyle = { border: '1px solid #ccc', padding: '6px 8px', background: rowHighlights['dp'] }
+                    return (
+                      <>
+                        <td style={cellStyle} />
+                        <td style={cellStyle} />
+                        <td style={cellStyle} />
+                        <td style={cellStyle} />
+                        <td style={cellStyle} />
+                        <td style={cellStyle} />
+                      </>
+                    )
+                  })()}
+                </tr>
               )}
 
-              {/* Pelunasan row */}
-              <tr>
+              {/* Pelunasan row — same click-to-override behavior as DP above. */}
+              <tr onClick={() => toggleRowHighlight('pelunasan')} className="cursor-pointer print:cursor-default">
                 <td style={{ padding: '6px 8px', textAlign: 'right' }} colSpan={3}>
-                  {invoice.paid_date ? `J/T : ${format(new Date(invoice.paid_date), 'd MMMM yyyy').toUpperCase()}` : ''}
+                  {isFullInvoice
+                    ? (invoice.due_date ? `LUNAS - ${format(new Date(invoice.due_date), 'd MMMM yyyy').toUpperCase()}` : 'LUNAS')
+                    : (invoice.paid_date ? `J/T : ${format(new Date(invoice.paid_date), 'd MMMM yyyy').toUpperCase()}` : '')}
                 </td>
                 <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: !highlightDp ? highlightColor : undefined }}>
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
                   PELUNASAN
                 </td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: !highlightDp ? highlightColor : undefined }}>
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
                   {invoice.remaining.toLocaleString('id-ID')}
                 </td>
               </tr>
@@ -355,8 +510,20 @@ export function InvoicePrintPage() {
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontWeight: 'bold', marginBottom: '60px' }}>DI BUAT OLEH</div>
               <div style={{ borderTop: '1px solid #000', paddingTop: '4px', display: 'inline-block', width: '200px' }} />
-              <div>FIFI LESMANA</div>
-              <div>FOUNDER</div>
+              <div>
+                <input
+                  value={signatoryName}
+                  onChange={e => setSignatoryName(e.target.value.toUpperCase())}
+                  style={{ border: 'none', background: 'transparent', font: 'inherit', textAlign: 'right', width: '200px', padding: 0 }}
+                />
+              </div>
+              <div>
+                <input
+                  value={signatoryTitle}
+                  onChange={e => setSignatoryTitle(e.target.value.toUpperCase())}
+                  style={{ border: 'none', background: 'transparent', font: 'inherit', textAlign: 'right', width: '200px', padding: 0 }}
+                />
+              </div>
               <div style={{ fontWeight: 'bold' }}>KREASI MAKMUR ABADI</div>
             </div>
           </div>

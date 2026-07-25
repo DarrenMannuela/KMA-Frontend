@@ -71,14 +71,26 @@ export function InvoiceListPage() {
         { header: 'Client',       key: 'kepada_yth',
           render: r => <span className="font-medium">{r.kepada_yth}</span> },
         { header: 'Type',         key: 'type',
-          render: r => (
-            <span className={`badge ${TYPE_BADGE[r.type] ?? 'bg-slate-100 text-slate-600'}`}>
-              {r.type === 'dp' ? 'Down Payment' : 'Pelunasan'}
-            </span>
-          )},
+          render: r => {
+            // Same "0% DP = full invoice, not a partial one" convention as
+            // OrderDetailPage/InvoicePrintPage/KwitansiPrintPage — a
+            // dp-type invoice with no actual down payment reads as "Down
+            // Payment" here otherwise, which is misleading once it's
+            // really covering the whole order.
+            const isFullInvoice = r.type === 'dp' && (r.down_payment ?? 0) === 0
+            return (
+              <span className={`badge ${TYPE_BADGE[r.type] ?? 'bg-slate-100 text-slate-600'}`}>
+                {isFullInvoice ? 'Full Invoice' : r.type === 'dp' ? 'Down Payment' : 'Pelunasan'}
+              </span>
+            )
+          }},
         { header: 'Amount Due',   key: 'total',
           render: r => {
-            const due = r.type === 'dp' ? (r.down_payment ?? 0) : r.remaining
+            // Same fix: a full invoice's "amount due" is the whole
+            // remaining balance, not down_payment (which is 0 for these —
+            // that's what makes it "full" rather than partial).
+            const isFullInvoice = r.type === 'dp' && (r.down_payment ?? 0) === 0
+            const due = r.type === 'dp' && !isFullInvoice ? (r.down_payment ?? 0) : r.remaining
             return (
               <div>
                 <span className="font-mono">{formatRp(due)}</span>
