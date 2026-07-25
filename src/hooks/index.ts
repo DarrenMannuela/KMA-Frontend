@@ -139,6 +139,18 @@ const HEADERS_KEY = ['finance-header']
 const PRODUCTION_ITEMS_KEY = ['production-item', 'grouped']
 const OPERATION_ITEMS_KEY = ['operation-item', 'grouped']
 
+// Raw FinanceHeader list — same query key as productionHooks.useList /
+// operationHooks.useList below, so React Query dedupes this into their
+// existing fetch rather than firing a new one. This is what Kas Bon ID
+// auto-suggestion (Production/Operations quick-add) needs: the "NN/KB/YY"
+// sequence is shared across both item types, and a header can exist with
+// items in neither table yet (or only the other one), so deriving "IDs in
+// use" from a single type's flattened rows would miss some and risk two
+// quick-adds suggesting the same next number.
+export function useFinanceHeaders() {
+  return useQuery({ queryKey: HEADERS_KEY, queryFn: financeHeaderApi.list })
+}
+
 function toProductionRows(headers: FinanceHeader[], grouped: Record<string, ProductionItem[]>): ProductionRow[] {
   const rows: ProductionRow[] = []
   headers.forEach(h => {
@@ -163,7 +175,7 @@ function toOperationRows(headers: FinanceHeader[], grouped: Record<string, Opera
     // just don't appear here (could be a pure-production Kas Bon).
     items.forEach(item => rows.push({
       id: item.id, header_id: h.id, date: h.date, description: h.description,
-      item_description: item.description, price: item.price,
+      category: item.category, item_description: item.description, price: item.price,
     }))
   })
   return rows
@@ -317,7 +329,7 @@ export const operationHooks = {
           })
           qc.setQueryData<FinanceHeader[]>(HEADERS_KEY, (old = []) => [...old, newHeader])
         }
-        return operationItemApi.create({ header_id: row.header_id, description: row.item_description, price: row.price })
+        return operationItemApi.create({ header_id: row.header_id, category: row.category, description: row.item_description, price: row.price })
       },
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: HEADERS_KEY })
@@ -338,6 +350,7 @@ export const operationHooks = {
 
         const itemPatch: UpdateOperationItemRequest = {}
         if (body.item_description !== undefined) itemPatch.description = body.item_description
+        if (body.category !== undefined) itemPatch.category = body.category
         if (body.price !== undefined) itemPatch.price = body.price
 
         if (Object.keys(headerPatch).length > 0 && body.header_id) {

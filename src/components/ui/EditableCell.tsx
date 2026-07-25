@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useId } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useId } from 'react'
 
 interface SelectOption {
   value: string | number
@@ -20,6 +20,10 @@ interface EditableCellProps {
   /** Allow a single decimal point while typing (e.g. quantities like "2.5
    *  meter"). Digits-only stays the default for whole-number fields. */
   allowDecimal?: boolean
+  /** Force text input to uppercase as it's typed — for alphanumeric IDs
+   *  (e.g. Kas Bon IDs) where "01/kb/26" and "01/KB/26" should read as the
+   *  same value rather than silently diverging. Only applies to type="text". */
+  uppercase?: boolean
 }
 
 export function EditableCell({
@@ -31,12 +35,22 @@ export function EditableCell({
   placeholder,
   suggestions,
   allowDecimal = false,
+  uppercase = false,
 }: EditableCellProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [val, setVal] = useState(initialValue)
   const inputRef = useRef<HTMLInputElement>(null)
   const selectRef = useRef<HTMLSelectElement>(null)
   const datalistId = useId()
+  // React re-sets a controlled input's DOM value on every keystroke, which
+  // resets the caret to the end of the string unless something restores
+  // it — normally invisible since typing at the end IS where the caret
+  // already is, but obvious the moment you click into the middle of
+  // existing text: type one character and the caret jumps back to the
+  // end. Most noticeable on uppercase fields (the transform touches the
+  // string every time), but it's a general controlled-input issue, not an
+  // uppercase-only one, so this restores position after every change.
+  const caretPos = useRef<number | null>(null)
 
   useEffect(() => { setVal(initialValue) }, [initialValue])
 
@@ -46,10 +60,29 @@ export function EditableCell({
     else inputRef.current?.focus()
   }, [isEditing, type])
 
+  useLayoutEffect(() => {
+    if (isEditing && type !== 'select' && caretPos.current != null && inputRef.current) {
+      inputRef.current.setSelectionRange(caretPos.current, caretPos.current)
+    }
+  }, [val, isEditing, type])
+
   const commit = (raw: any) => {
     setIsEditing(false)
-    if (raw !== initialValue && !(raw === '' && (initialValue === null || initialValue === undefined))) {
-      onSave(type === 'number' ? Number(raw) : raw)
+    // A native <select> always hands back a string in e.target.value, even
+    // when the field it represents is numeric (e.g. supplier_id/client_id).
+    // Match back to the option whose value stringifies to the same thing,
+    // and use ITS value — preserving whatever type it actually is — so a
+    // number-typed field doesn't silently turn into a string ("3" instead
+    // of 3) and get rejected by a backend expecting a real number.
+    let value = raw
+    if (type === 'number') {
+      value = Number(raw)
+    } else if (type === 'select' && options) {
+      const matched = options.find(o => String(o.value) === String(raw))
+      if (matched) value = matched.value
+    }
+    if (value !== initialValue && !(value === '' && (initialValue === null || initialValue === undefined))) {
+      onSave(value)
     }
   }
 
@@ -59,8 +92,12 @@ export function EditableCell({
   // that off while keeping the numeric keyboard on mobile. allowDecimal
   // permits a single "." for fields like quantity (2.5 meter of fabric is
   // a normal real-world entry) while still blocking a second dot.
-  const handleChange = (raw: string) => {
-    if (type !== 'number') { setVal(raw); return }
+  const handleChange = (raw: string, caret: number | null) => {
+    if (type !== 'number') {
+      caretPos.current = caret
+      setVal(uppercase ? raw.toUpperCase() : raw)
+      return
+    }
     let cleaned = raw.replace(allowDecimal ? /[^\d.]/g : /[^\d]/g, '')
     if (allowDecimal) {
       const firstDot = cleaned.indexOf('.')
@@ -105,7 +142,7 @@ export function EditableCell({
           type={type === 'number' ? 'text' : type}
           inputMode={type === 'number' ? (allowDecimal ? 'decimal' : 'numeric') : undefined}
           value={val ?? ''}
-          onChange={(e) => handleChange(e.target.value)}
+          onChange={(e) => handleChange(e.target.value, e.target.selectionStart)}
           onBlur={() => commit(val)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}

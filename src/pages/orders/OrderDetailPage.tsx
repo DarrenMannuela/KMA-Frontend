@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Plus, FileText, Copy, Pencil } from 'lucide-react'
+import { ArrowLeft, Plus, FileText, Copy, Pencil, Building2, PackageSearch } from 'lucide-react'
 import { format } from 'date-fns'
 import { FormField, formatRp } from '@/components/ui'
-import { orderHooks, itemHooks } from '@/hooks'
+import { orderHooks, itemHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
 import { itemsApi, invoicesApi } from '@/api'
 import type { Item, CreateItemRequest } from '@/types'
 import { GenerateInvoiceForm } from './GenerateInvoiceForm'
@@ -13,17 +13,37 @@ import { stripCommas, formatThousands } from '@/utils/NumberFormat'
 
 function ItemForm({
   orderId,
+  clientId,
   editing,
   prefill,
   onClose,
 }: {
   orderId: string
+  clientId: number | null
   editing: Item | null
   prefill?: Item
   onClose: () => void
 }) {
   const create = itemHooks.useCreate()
   const update = itemHooks.useUpdate()
+
+  // Only fetched when the order is actually linked to a client — an
+  // unlinked order just skips straight to the free-text fields below.
+  const { data: catalogue = [] } = clientItemHooks.useByClient(clientId ?? undefined)
+  const { data: pricesGrouped = {} } = clientItemPriceHooks.useGrouped()
+
+  const latestPriceFor = (clientItemId: number) => {
+    const history = pricesGrouped[String(clientItemId)] ?? []
+    if (history.length === 0) return undefined
+    return [...history].sort((a, b) => b.year - a.year)[0].price
+  }
+
+  // Tracks which catalogue entry (if any) was picked, purely to keep the
+  // select controlled — the actual item_name/size/price below are plain
+  // form fields once filled, so picking from the catalogue is a shortcut,
+  // not a lock: everything stays editable afterward, and typing a name
+  // that doesn't match anything in the catalogue works exactly as before.
+  const [catalogueItemId, setCatalogueItemId] = useState<number | ''>('')
 
   const [form, setForm] = useState<Omit<CreateItemRequest, 'sub_total'>>({
     order_id:  orderId,
@@ -32,6 +52,21 @@ function ItemForm({
     amount:    editing?.amount    ?? prefill?.amount    ?? 1,
     price:     editing?.price     ?? prefill?.price     ?? 0,
   })
+
+  const handlePickCatalogueItem = (idStr: string) => {
+    if (!idStr) { setCatalogueItemId(''); return }
+    const id = Number(idStr)
+    const item = catalogue.find(c => c.id === id)
+    if (!item) return
+    setCatalogueItemId(id)
+    const price = latestPriceFor(id)
+    setForm(p => ({
+      ...p,
+      item_name: item.item_name,
+      size: item.size ?? '',
+      price: price ?? p.price,
+    }))
+  }
 
   const subTotal = form.amount * form.price
 
@@ -59,6 +94,22 @@ function ItemForm({
         <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-700">
           Duplicated from <span className="font-semibold">{prefill.item_name} ({prefill.size ?? 'no size'})</span> — modify as needed.
         </div>
+      )}
+      {catalogue.length > 0 && (
+        <FormField label="Pick from Catalogue (optional)">
+          <div className="relative">
+            <PackageSearch size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <select className="field pl-8" value={catalogueItemId} onChange={e => handlePickCatalogueItem(e.target.value)}>
+              <option value="">Type manually instead…</option>
+              {catalogue.map(c => (
+                <option key={c.id} value={c.id}>{c.item_name}{c.size ? ` (${c.size})` : ''}</option>
+              ))}
+            </select>
+          </div>
+          <p className="text-xs text-slate-400 mt-1">
+            Fills in the name, size, and latest catalogue price below — everything stays editable, or just skip this and type the item directly.
+          </p>
+        </FormField>
       )}
       <div className="grid grid-cols-2 gap-3">
         <FormField label="Item Name" required>
@@ -171,7 +222,20 @@ export function OrderDetailPage() {
         </button>
         <div>
           <h1 className="text-xl font-bold text-navy-900">{order.id}</h1>
-          <p className="text-sm text-slate-500">{order.company} · {order.date ? format(new Date(order.date), 'dd MMM yyyy') : '—'}</p>
+          <p className="text-sm text-slate-500">
+            {order.company} · {order.date ? format(new Date(order.date), 'dd MMM yyyy') : '—'}
+            {order.client_id && (
+              <>
+                {' · '}
+                <button
+                  className="inline-flex items-center gap-1 text-navy-600 hover:underline"
+                  onClick={() => navigate(`/clients/${order.client_id}`)}
+                >
+                  <Building2 size={12} /> Client record
+                </button>
+              </>
+            )}
+          </p>
         </div>
       </div>
 
@@ -197,6 +261,7 @@ export function OrderDetailPage() {
           <div className="p-4 border-b border-slate-100 bg-slate-50">
             <ItemForm
               orderId={orderId}
+              clientId={order.client_id}
               editing={editing}
               prefill={duplicating ?? undefined}
               onClose={closeForm}

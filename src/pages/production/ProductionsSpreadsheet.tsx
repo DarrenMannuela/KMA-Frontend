@@ -95,13 +95,13 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
   const col = {
     header_id: {
       key: 'header_id', header: 'Kas Bon ID', type: 'text', editable: true, width: '110px', placeholder: 'e.g. 01/KB/26',
-      suggestions: headerIdSuggestions,
+      suggestions: headerIdSuggestions, uppercase: true,
     } as ColumnDef<ProductionRow>,
     description: {
-      key: 'description', header: 'Description', type: 'text', editable: true, placeholder: 'e.g. Beli bahan Basic 902',
+      key: 'description', header: 'Description', type: 'text', editable: true, placeholder: 'e.g. Beli bahan Basic 902', uppercase: true,
     } as ColumnDef<ProductionRow>,
     material_name: {
-      key: 'material_name', header: 'Bahan', type: 'text', editable: true, placeholder: 'e.g. Basic 902',
+      key: 'material_name', header: 'Bahan', type: 'text', editable: true, placeholder: 'e.g. Basic 902', uppercase: true,
     } as ColumnDef<ProductionRow>,
     supplier_id: {
       key: 'supplier_id', header: 'Supplier', type: 'select', editable: true,

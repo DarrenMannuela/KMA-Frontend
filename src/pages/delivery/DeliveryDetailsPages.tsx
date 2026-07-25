@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Printer } from 'lucide-react'
+import { ArrowLeft, Printer, Building2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { deliveryHooks } from '@/hooks'
 import { DeliveryItemsManager } from './DeliveryItemsManager'
@@ -34,6 +34,17 @@ export function DeliveryDetailPage() {
             {delivery.address}
             {delivery.contact_person && ` · ${delivery.contact_person}`}
             {delivery.date && ` · ${format(new Date(delivery.date), 'dd MMM yyyy')}`}
+            {delivery.client_id && (
+              <>
+                {' · '}
+                <button
+                  className="inline-flex items-center gap-1 text-navy-600 hover:underline"
+                  onClick={() => navigate(`/clients/${delivery.client_id}`)}
+                >
+                  <Building2 size={12} /> Client record
+                </button>
+              </>
+            )}
             {delivery.order_id && (
               <>
                 {' · Order '}

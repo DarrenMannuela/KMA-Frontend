@@ -1,7 +1,12 @@
 // ─── Matches dto/Orders.go ────────────────────────────────────────────────────
 export interface Order {
   id: string          // e.g. "001/KMA/25"
-  company: string | null
+  client_id: number | null   // FK → Client.id. Nullable so existing/one-off
+                              // orders with only a free-text company still work.
+  company: string | null     // Denormalized company name, snapshotted from the
+                              // linked Client (or typed manually) at order time —
+                              // kept for display/printing even if the Client
+                              // record is later renamed or removed.
   po_number: string | null
   date: string        // ISO date string
 }
@@ -59,12 +64,15 @@ export interface Supplier {
 // ─── Matches dto/FinanceHeader.go ─────────────────────────────────────────────
 // A "Kas Bon" — shared parent for Production and/or Operation line items.
 // Deliberately just a receipt: id/date/description. It does NOT carry a
-// type or a supplier anymore. Whether a header shows up on the Production
-// page, the Operations page, or both, is purely a function of which item
-// tables actually have rows pointing at it (see toProductionRows /
-// toOperationRows in hooks/index.ts) — a single Kas Bon can legitimately
-// have both production material lines AND an operation cost line on it,
-// e.g. one physical receipt covering fabric plus the ojek fee to fetch it.
+// type, a supplier, or (as of the OperationItem.category addition below) a
+// category — those live on the item, since a single Kas Bon can
+// legitimately have lines from different suppliers/categories. Whether a
+// header shows up on the Production page, the Operations page, or both, is
+// purely a function of which item tables actually have rows pointing at it
+// (see toProductionRows / toOperationRows in hooks/index.ts) — a single
+// Kas Bon can legitimately have both production material lines AND an
+// operation cost line on it, e.g. one physical receipt covering fabric
+// plus the ojek fee to fetch it.
 export interface FinanceHeader {
   id: string          // e.g. "01/KB/26"
   date: string         // ISO date string, e.g. "2026-04-02"
@@ -86,9 +94,14 @@ export interface ProductionItem {
 }
 
 // ─── Matches dto/OperationItem.go ─────────────────────────────────────────────
+// category lives HERE, not on the header — same convention as
+// ProductionItem.supplier_id above, so different cost lines under the same
+// Kas Bon can carry different categories (e.g. one receipt covering both a
+// "Transport" line and a "Utilities" line).
 export interface OperationItem {
   id: number
   header_id: string
+  category: string
   description: string
   price: number
 }
@@ -114,7 +127,8 @@ export interface OperationRow {
   id: number                   // OperationItem.id
   header_id: string
   date: string                 // header-level
-  description: string          // header-level
+  description: string          // header-level — the Kas Bon's own receipt memo
+  category: string             // item-level — e.g. "Transport", "Utilities"
   item_description: string     // item-level (the specific cost line)
   price: number                // item-level
 }
@@ -123,6 +137,9 @@ export interface OperationRow {
 export interface Delivery {
   id: string
   type: string
+  client_id: number | null   // FK → Client.id. Nullable — same convention as
+                              // Order.client_id, for one-off deliveries with
+                              // only a free-text company/address.
   company: string | null   // NAMA on the printed DO/SJ — the client's company name
   address: string
   po_number: string | null

@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Truck, Eye, Plus, RotateCcw, Printer } from 'lucide-react'
+import { Truck, Eye, Plus, RotateCcw, Printer, Building2, ArrowRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField } from '@/components/ui'
-import { deliveryHooks, deliveryItemHooks, orderHooks } from '@/hooks'
+import { deliveryHooks, deliveryItemHooks, orderHooks, clientHooks } from '@/hooks'
 import { invoicesApi } from '@/api'
 import type {
   Delivery, CreateDeliveryRequest, Order, Invoice,
@@ -54,6 +54,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
   const navigate = useNavigate() 
   const { data: deliveries = [] } = deliveryHooks.useList()
   const { data: orders = [] } = orderHooks.useList()
+  const { data: clients = [] } = clientHooks.useList()
   // Only needed to build the SJ auto-documents preview/creation below — a
   // plain fetch here (like DeliveryPrintPage does for delivery/items)
   // rather than a dedicated hook, since this is the only place in the app
@@ -80,10 +81,16 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
   // overwrites what's already saved.
   const [companyTouched, setCompanyTouched] = useState(!!editing)
   const [poNumberTouched, setPoNumberTouched] = useState(!!editing)
+  // Same idea for Client — picking an Order that's itself linked to a
+  // Client fills this in for free; picking a Client directly (or editing
+  // an existing delivery) marks it touched so linking/switching an order
+  // never silently overwrites a deliberately-chosen client.
+  const [clientTouched, setClientTouched] = useState(!!editing)
 
   const [form, setForm] = useState<CreateDeliveryRequest>({
     id:             editing?.id             ?? '', 
     type:           editing?.type           ?? type,
+    client_id:      editing?.client_id      ?? null,
     company:        editing?.company        ?? '',
     address:        editing?.address        ?? '',
     po_number:      editing?.po_number      ?? '',
@@ -95,6 +102,34 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
     // deliveries (documents) aren't order-item-constrained.
     order_id:       editing?.order_id       ?? null,
   })
+
+  // Shared by both the DO "Order" select and the SJ "Order (optional)"
+  // select — picking an order fills Company/PO Number/Client from it
+  // wherever those fields haven't been touched directly, same rule
+  // uniformly applied in one place instead of duplicated per-type.
+  const applyOrderSelection = (newOrderId: string | null) => {
+    const selectedOrder = orders.find(o => o.id === newOrderId)
+    setForm(p => ({
+      ...p,
+      order_id: newOrderId,
+      company: !companyTouched && selectedOrder?.company ? selectedOrder.company.toUpperCase() : p.company,
+      po_number: !poNumberTouched && selectedOrder?.po_number ? selectedOrder.po_number.toUpperCase() : p.po_number,
+      client_id: !clientTouched ? (selectedOrder?.client_id ?? p.client_id) : p.client_id,
+    }))
+  }
+
+  // Picking a client prefills Company from client_name — same convention
+  // as OrdersPage — but only when Company hasn't been touched directly.
+  const handleClientChange = (idStr: string) => {
+    setClientTouched(true)
+    const newClientId = idStr ? Number(idStr) : null
+    const newClient = clients.find(c => c.id === newClientId)
+    setForm(p => ({
+      ...p,
+      client_id: newClientId,
+      company: !companyTouched && newClient ? newClient.client_name : p.company,
+    }))
+  }
 
   // Prefill the suggested ID for brand-new deliveries once the list is
   // available, and re-suggest whenever the type toggle changes (DO and SJ
@@ -191,23 +226,14 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
           <select
             className="field"
             value={form.order_id ?? ''}
-            onChange={e => {
-              const newOrderId = e.target.value || null
-              const selectedOrder = orders.find(o => o.id === newOrderId)
-              setForm(p => ({
-                ...p,
-                order_id: newOrderId,
-                company: !companyTouched && selectedOrder?.company ? selectedOrder.company.toUpperCase() : p.company,
-                po_number: !poNumberTouched && selectedOrder?.po_number ? selectedOrder.po_number.toUpperCase() : p.po_number,
-              }))
-            }}
+            onChange={e => applyOrderSelection(e.target.value || null)}
           >
             <option value="">Select order…</option>
             {orders.map(o => <option key={o.id} value={o.id}>{o.id} — {o.company}</option>)}
           </select>
           <p className="text-xs text-slate-400 mt-1">
             Box contents can only be picked from this order's items, up to what's left to deliver.
-            Company and PO Number below fill in from the order — edit them directly if this delivery needs different values.
+            Company, PO Number, and Client below fill in from the order — edit them directly if this delivery needs different values.
           </p>
         </FormField>
       )}
@@ -217,15 +243,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
           <select
             className="field"
             value={form.order_id ?? ''}
-            onChange={e => {
-              const newOrderId = e.target.value || null
-              const selectedOrder = orders.find(o => o.id === newOrderId)
-              setForm(p => ({
-                ...p,
-                order_id: newOrderId,
-                company: !companyTouched && selectedOrder?.company ? selectedOrder.company.toUpperCase() : p.company,
-              }))
-            }}
+            onChange={e => applyOrderSelection(e.target.value || null)}
           >
             <option value="">No linked order…</option>
             {orders.map(o => <option key={o.id} value={o.id}>{o.id} — {o.company}</option>)}
@@ -283,6 +301,18 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
             Auto-suggested as next {type} number for {new Date().getFullYear()} — edit if needed.
           </p>
         ) : null}
+      </FormField>
+
+      <FormField label="Client">
+        <select className="field" value={form.client_id ?? ''} onChange={e => handleClientChange(e.target.value)}>
+          <option value="">No linked client (free-text company only)…</option>
+          {clients.map(c => <option key={c.id} value={c.id}>{c.client_name}</option>)}
+        </select>
+        <p className="text-xs text-slate-400 mt-1">
+          {form.order_id
+            ? "Filled in from the linked order above — change it here if this delivery's client differs."
+            : 'Linking a client ties this delivery to their record in Clients.'}
+        </p>
       </FormField>
 
       <FormField label="Company (NAMA)" required>
@@ -356,6 +386,15 @@ export function DeliveryPage() {
       columns={[
         { header: 'Delivery ID',     key: 'id',             render: r => <span className="id-chip">{r.id}</span> },
         { header: 'Company',         key: 'company',        render: r => <span className="font-semibold text-navy-900">{r.company ?? '—'}</span> },
+        { header: 'Client',          key: 'client_id',      render: r => r.client_id ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); navigate(`/clients/${r.client_id}`) }}
+              className="inline-flex items-center gap-1 text-sm font-medium text-navy-600 hover:text-navy-800"
+              title="Open client record"
+            >
+              <Building2 size={12} /> View <ArrowRight size={12} />
+            </button>
+          ) : <span className="text-slate-300 text-xs">Not linked</span> },
         { header: 'Address',         key: 'address',        render: r => <span className="font-medium">{r.address}</span> },
         { header: 'Contact',         key: 'contact_person', render: r => r.contact_person ?? '—' },
         { header: 'Phone',           key: 'phone_number',   render: r => <span className="font-mono text-xs">{r.phone_number ?? '—'}</span> },

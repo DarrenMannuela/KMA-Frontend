@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Wrench } from 'lucide-react'
 import { operationHooks } from '@/hooks'
 import { Spinner } from '@/components/ui'
@@ -8,18 +8,29 @@ import { isInMonth } from '@/utils/MonthUtils'
 
 interface OperationsSheetViewProps {
   onBack: () => void
+  /** Pre-filter to this category when arriving from a bar click on the dashboard.
+   *  Deliberately spans multiple Kas Bons — see the comment in OperationsDashboard
+   *  on why Category, not Kas Bon ID, is the grouping/filtering dimension. */
+  initialCategory?: string
 }
 
-export function OperationsSheetView({ onBack }: OperationsSheetViewProps) {
+export function OperationsSheetView({ onBack, initialCategory }: OperationsSheetViewProps) {
   const { data: allData = [], isLoading } = operationHooks.useList()
 
   const now = new Date()
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() })
+  const [categoryFilter, setCategoryFilter] = useState<string | undefined>(initialCategory)
+
+  // If the dashboard sends us here again with a different category, pick that up.
+  useEffect(() => { setCategoryFilter(initialCategory) }, [initialCategory])
 
   const monthData = useMemo(
     () => allData.filter(row => isInMonth(row.date, cursor.year, cursor.month)),
     [allData, cursor]
   )
+  const visibleData = categoryFilter
+    ? monthData.filter(r => (r.category || 'Uncategorized') === categoryFilter)
+    : monthData
 
   if (isLoading) {
     return <Spinner />
@@ -33,12 +44,23 @@ export function OperationsSheetView({ onBack }: OperationsSheetViewProps) {
             <ArrowLeft size={18} />
           </button>
           <Wrench className="text-navy-600" size={20} />
-          <h2 className="text-lg font-semibold text-slate-800">Operations Spreadsheet</h2>
+          <h2 className="text-lg font-semibold text-slate-800">
+            Operations Spreadsheet
+            {categoryFilter && (
+              <span className="text-slate-400 font-normal"> — {categoryFilter}</span>
+            )}
+          </h2>
         </div>
         <MonthNavigator year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
       </div>
 
-      <OperationsSpreadsheet data={monthData} />
+      {categoryFilter && (
+        <button onClick={() => setCategoryFilter(undefined)} className="text-xs text-navy-600 hover:underline">
+          clear category filter
+        </button>
+      )}
+
+      <OperationsSpreadsheet data={visibleData} />
     </div>
   )
 }

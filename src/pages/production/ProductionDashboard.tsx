@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
-import { Factory, Plus, ArrowRight } from 'lucide-react'
+import { useMemo, useState, useEffect } from 'react'
+import { Factory, Plus, ArrowRight, RotateCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { productionHooks, supplierHooks } from '@/hooks'
+import { productionHooks, supplierHooks, useFinanceHeaders } from '@/hooks'
 import { formatRp, FormField, Spinner } from '@/components/ui'
 import { MonthNavigator } from '@/components/ui/MonthNavigator'
 import { SpendBars } from '@/components/ui/SpendBars'
@@ -42,6 +42,23 @@ interface ProductionDashboardProps {
   selectedSupplierId?: number
 }
 
+// Kas Bon IDs follow "NN/KB/YY" (e.g. "01/KB/26") — same convention and
+// per-year restart as suggestNextOrderId/suggestNextDeliveryId elsewhere.
+// Takes the raw FinanceHeader list (not productionHooks' flattened rows)
+// so the suggestion accounts for every Kas Bon in use, including ones with
+// only Operations items on them so far — see the comment on
+// useFinanceHeaders in hooks/index.ts.
+function suggestNextKasBonId(headers: { id: string }[]): string {
+  const yy = new Date().getFullYear().toString().slice(-2)
+  const pattern = new RegExp(`^(\\d+)\\/KB\\/${yy}$`)
+  const usedNumbers = headers
+    .map(h => h.id.match(pattern))
+    .filter((m): m is RegExpMatchArray => !!m)
+    .map(m => parseInt(m[1], 10))
+  const next = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1
+  return `${String(next).padStart(2, '0')}/KB/${yy}`
+}
+
 // Price/Qty are kept as raw strings while the form is open so a controlled
 // input can actually go blank while typing — converting to Number on every
 // keystroke means backspacing to "" instantly snaps back to 0 and the field
@@ -54,12 +71,18 @@ const emptyQuickAdd = () => ({
 export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: ProductionDashboardProps) {
   const { data: allData = [], isLoading } = productionHooks.useList()
   const { data: suppliers = [] } = supplierHooks.useList()
+  const { data: headers = [] } = useFinanceHeaders()
   const create = productionHooks.useCreate()
 
   const now = new Date()
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() })
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [quickAdd, setQuickAdd] = useState(emptyQuickAdd())
+  // Only auto-fill/auto-refresh the Kas Bon ID while the user hasn't typed
+  // their own value into that field — once they touch it, we back off
+  // completely so we never clobber a manually-entered ID. Same convention
+  // as OrdersPage's idTouched.
+  const [idTouched, setIdTouched] = useState(false)
   // Tracks which required fields were empty on the last submit attempt, so
   // the fields themselves can flag red instead of the click just doing
   // nothing with no explanation.
@@ -69,6 +92,22 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
     () => allData.filter(row => isInMonth(row.date, cursor.year, cursor.month)),
     [allData, cursor]
   )
+
+  // Fill in the suggested next Kas Bon ID whenever the field is empty and
+  // the user hasn't typed their own — covers first opening Quick Add
+  // before `headers` has loaded (refills once it does) and clicking "New
+  // Kas Bon" (which clears header_id and re-triggers this).
+  useEffect(() => {
+    if (!idTouched && !quickAdd.header_id) {
+      setQuickAdd(p => ({ ...p, header_id: suggestNextKasBonId(headers) }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headers, quickAdd.header_id, idTouched])
+
+  const resetIdSuggestion = () => {
+    setIdTouched(false)
+    setQuickAdd(p => ({ ...p, header_id: suggestNextKasBonId(headers) }))
+  }
 
   const supplierTotals = useMemo(() => {
     const totals: Record<number, number> = {}
@@ -120,7 +159,7 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
     })
   }
 
-  const handleNewKasBon = () => { setQuickAdd(emptyQuickAdd()); setMissing(new Set()) }
+  const handleNewKasBon = () => { setQuickAdd(emptyQuickAdd()); setMissing(new Set()); setIdTouched(false) }
 
   if (isLoading) {
     return <Spinner />
@@ -173,12 +212,27 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
           )}
 
           <FormField label="Kas Bon ID" required>
-            <input
-              className={`field font-mono ${missing.has('header_id') ? '!border-red-400 !ring-red-100' : ''}`}
-              placeholder="01/KB/26"
-              value={quickAdd.header_id}
-              onChange={e => setQuickAdd(p => ({ ...p, header_id: e.target.value }))}
-            />
+            <div className="flex items-center gap-2">
+              <input
+                className={`field font-mono ${missing.has('header_id') ? '!border-red-400 !ring-red-100' : ''}`}
+                placeholder="01/KB/26"
+                value={quickAdd.header_id}
+                onChange={e => { setIdTouched(true); setQuickAdd(p => ({ ...p, header_id: e.target.value })) }}
+              />
+              <button
+                type="button"
+                className="btn-ghost btn-sm !px-2 shrink-0"
+                title="Reset to suggested next number"
+                onClick={resetIdSuggestion}
+              >
+                <RotateCcw size={14} />
+              </button>
+            </div>
+            {!idTouched && (
+              <p className="text-xs text-slate-400 mt-1">
+                Auto-suggested as next Kas Bon number for {new Date().getFullYear()} — edit if needed.
+              </p>
+            )}
           </FormField>
           <div className="md:col-span-3">
             <FormField label="Description" required>
@@ -203,26 +257,26 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
               ))}
             </select>
           </FormField>
-          <div className="md:col-span-2">
+          <div className="md:col-span-3">
             <FormField label="Material">
               <input className="field" placeholder="e.g. Basic 902" value={quickAdd.material_name}
                 onChange={e => setQuickAdd(p => ({ ...p, material_name: e.target.value }))} />
             </FormField>
           </div>
+
+          <FormField label="Qty">
+            <input className="field" type="text" inputMode="decimal" placeholder="1" value={quickAdd.amount}
+              onChange={e => setQuickAdd(p => ({ ...p, amount: e.target.value.replace(/[^\d.]/g, '') }))} />
+          </FormField>
           <FormField label="Unit">
             <select className="field" value={quickAdd.si_unit}
               onChange={e => setQuickAdd(p => ({ ...p, si_unit: e.target.value }))}>
               {SI_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
             </select>
           </FormField>
-
           <FormField label="Price / Unit">
             <input className="field font-mono" type="text" inputMode="numeric" placeholder="0" value={formatThousands(quickAdd.price)}
               onChange={e => setQuickAdd(p => ({ ...p, price: stripCommas(e.target.value) }))} />
-          </FormField>
-          <FormField label="Qty">
-            <input className="field" type="text" inputMode="decimal" placeholder="1" value={quickAdd.amount}
-              onChange={e => setQuickAdd(p => ({ ...p, amount: e.target.value.replace(/[^\d.]/g, '') }))} />
           </FormField>
           <FormField label="Date">
             <input className="field" type="date" value={quickAdd.date}

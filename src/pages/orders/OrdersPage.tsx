@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { ShoppingBag, Eye, RotateCcw } from 'lucide-react'
+import { ShoppingBag, Eye, RotateCcw, Building2, ArrowRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField } from '@/components/ui'
-import { orderHooks } from '@/hooks'
+import { orderHooks, clientHooks } from '@/hooks'
 import type { Order, CreateOrderRequest } from '@/types'
 import { useNavigate } from 'react-router-dom'
 
@@ -27,6 +27,7 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
   const update = orderHooks.useUpdate()
   const navigate = useNavigate()
   const { data: orders = [] } = orderHooks.useList()
+  const { data: clients = [] } = clientHooks.useList()
 
   // Only auto-fill/auto-refresh the ID while the user hasn't typed their
   // own value into that field — once they touch it, we back off completely
@@ -34,13 +35,32 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
   const [idTouched, setIdTouched] = useState(false)
 
   const [form, setForm] = useState<CreateOrderRequest>({
-    id :       editing?.id ?? '',
-    company:   editing?.company   ?? '',
-    po_number: editing?.po_number ?? '',
+    id :        editing?.id ?? '',
+    client_id:  editing?.client_id ?? null,
+    company:    editing?.company   ?? '',
+    po_number:  editing?.po_number ?? '',
     // Default new orders to today — almost always correct, and still
     // fully editable if the order was actually placed on another date.
-    date:      editing?.date ? editing.date.split('T')[0] : new Date().toISOString().split('T')[0],
+    date:       editing?.date ? editing.date.split('T')[0] : new Date().toISOString().split('T')[0],
   })
+
+  // Picking a client prefills Company from client_name — but only when
+  // Company is still blank or still matches the previously-selected
+  // client's name, so swapping the client doesn't clobber a manually
+  // typed/edited company name.
+  const handleClientChange = (idStr: string) => {
+    const newClientId = idStr ? Number(idStr) : null
+    const newClient = clients.find(c => c.id === newClientId)
+    const prevClient = clients.find(c => c.id === form.client_id)
+    setForm(p => {
+      const companyMatchesPrevClient = !p.company || (prevClient && p.company === prevClient.client_name)
+      return {
+        ...p,
+        client_id: newClientId,
+        company: newClient && companyMatchesPrevClient ? newClient.client_name : p.company,
+      }
+    })
+  }
 
   // As soon as the orders list is available, prefill the ID suggestion for
   // brand-new orders. Runs once orders load, and again if the user hasn't
@@ -132,6 +152,15 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
           </p>
         ) : null}
       </FormField>
+      <FormField label="Client">
+        <select className="field" value={form.client_id ?? ''} onChange={e => handleClientChange(e.target.value)}>
+          <option value="">No linked client (free-text company only)…</option>
+          {clients.map(c => <option key={c.id} value={c.id}>{c.client_name}</option>)}
+        </select>
+        <p className="text-xs text-slate-400 mt-1">
+          Linking a client ties this order to their record in Clients — new clients can be added from the Clients page.
+        </p>
+      </FormField>
       <FormField label="Company" required>
         <input className="field" placeholder="e.g. Zenbu Restaurant" value={form.company ?? ''} onChange={set('company')} />
       </FormField>
@@ -170,6 +199,15 @@ export function OrdersPage() {
       columns={[
         { header: 'Order ID',  key: 'id',         render: r => <span className="id-chip">{r.id}</span> },
         { header: 'Company',   key: 'company',     render: r => <span className="font-medium text-navy-900">{r.company ?? '—'}</span> },
+        { header: 'Client',    key: 'client_id',   render: r => r.client_id ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); navigate(`/clients/${r.client_id}`) }}
+              className="inline-flex items-center gap-1 text-sm font-medium text-navy-600 hover:text-navy-800"
+              title="Open client record"
+            >
+              <Building2 size={12} /> View <ArrowRight size={12} />
+            </button>
+          ) : <span className="text-slate-300 text-xs">Not linked</span> },
         { header: 'PO Number', key: 'po_number',   render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
         { header: 'Date',      key: 'date',        render: r => r.date ? format(new Date(r.date), 'dd MMM yyyy') : '—' },
       ]}

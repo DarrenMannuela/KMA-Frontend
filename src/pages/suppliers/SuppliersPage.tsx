@@ -45,7 +45,7 @@ function SupplierForm({ editing, onClose }: { editing: Supplier | null; onClose:
     <div className="space-y-4">
       <FormField label="Supplier Name" required>
         <input className="field" placeholder="e.g. SAI Textile" value={form.supplier_name}
-          onChange={e => setForm(p => ({ ...p, supplier_name: e.target.value }))} />
+          onChange={e => setForm(p => ({ ...p, supplier_name: e.target.value.toUpperCase() }))} />
       </FormField>
       <FormField label="Category" required>
         <select className="field" value={form.supplier_category}

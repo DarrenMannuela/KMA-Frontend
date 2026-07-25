@@ -22,6 +22,8 @@ export interface ColumnDef<T> {
   /** Free-text autocomplete suggestions (e.g. existing Kas Bon IDs) — cuts down on
    *  accidental near-duplicate IDs from typos, while still allowing new values. */
   suggestions?: string[]
+  /** Force text input to uppercase as it's typed (e.g. Kas Bon IDs). Only relevant for type="text". */
+  uppercase?: boolean
 }
 
 interface SpreadsheetViewProps<T> {
@@ -270,6 +272,7 @@ export function SpreadsheetView<T extends { id: string | number }>({
                               placeholder={col.placeholder}
                               suggestions={col.suggestions}
                               allowDecimal={col.allowDecimal}
+                              uppercase={col.uppercase}
                               format={val => (col.format ? col.format(val, row) : val)}
                               onSave={(newVal) => onUpdateRow(String(row.id), { ...row, [col.key]: newVal })}
                             />
@@ -365,6 +368,7 @@ export function SpreadsheetView<T extends { id: string | number }>({
                           placeholder={col.key === keyColumn ? (col.placeholder ?? 'new ID…') : col.placeholder}
                           suggestions={col.suggestions}
                           allowDecimal={col.allowDecimal}
+                          uppercase={col.uppercase}
                           format={val => (col.format ? col.format(val, row as unknown as T) : val)}
                           onSave={(newVal) => updateBlankField(row.__key, col.key, newVal)}
                         />
