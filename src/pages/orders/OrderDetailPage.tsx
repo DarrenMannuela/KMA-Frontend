@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Plus, FileText, Copy, Pencil, Building2, PackageSearch } from 'lucide-react'
 import { format } from 'date-fns'
-import { FormField, formatRp } from '@/components/ui'
+import { FormField, formatRp, UppercaseField } from '@/components/ui'
 import { orderHooks, itemHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
 import { itemsApi, invoicesApi } from '@/api'
 import type { Item, CreateItemRequest } from '@/types'
@@ -113,12 +113,12 @@ function ItemForm({
       )}
       <div className="grid grid-cols-2 gap-3">
         <FormField label="Item Name" required>
-          <input className="field" placeholder="e.g. Kemeja Server" value={form.item_name}
-            onChange={e => setForm(p => ({ ...p, item_name: e.target.value.toUpperCase() }))} />
+          <UppercaseField className="field" placeholder="e.g. Kemeja Server" value={form.item_name}
+            onChange={v => setForm(p => ({ ...p, item_name: v }))} />
         </FormField>
         <FormField label="Size">
-          <input className="field" placeholder="e.g. S, M, L" value={form.size ?? ''}
-            onChange={e => setForm(p => ({ ...p, size: e.target.value.toUpperCase() }))} />
+          <UppercaseField className="field" placeholder="e.g. S, M, L" value={form.size ?? ''}
+            onChange={v => setForm(p => ({ ...p, size: v }))} />
         </FormField>
         <FormField label="Qty" required>
           <input className="field" type="number" min={1} value={form.amount || ''}
@@ -349,15 +349,15 @@ export function OrderDetailPage() {
           onClose={() => setInvoiceFormType(null)}
           size="lg"
         >
-        <GenerateInvoiceForm
-          order={order}
-          items={orderItems}
-          forcedType={invoiceFormType}
-          existingInvoice={invoiceFormType === 'dp' ? dpInvoice : pelunasanInvoice}
-          prefillFrom={invoiceFormType === 'pelunasan' ? dpInvoice : null}
-          clientId={order.client_id}  
-          onClose={() => setInvoiceFormType(null)}
-        />
+          <GenerateInvoiceForm
+            order={order}
+            items={orderItems}
+            forcedType={invoiceFormType}
+            existingInvoice={invoiceFormType === 'dp' ? dpInvoice : pelunasanInvoice}
+            prefillFrom={invoiceFormType === 'pelunasan' ? dpInvoice : null}
+            clientId={order.client_id}
+            onClose={() => setInvoiceFormType(null)}
+          />
         </Modal>
       )}
     </div>

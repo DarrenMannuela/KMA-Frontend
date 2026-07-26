@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, Package, Image as ImageIcon, Pencil, X, Check } from 'lucide-react'
-import { FormField, Spinner, formatRp } from '@/components/ui'
+import { FormField, Spinner, formatRp, UppercaseField } from '@/components/ui'
 import { clientHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
 import { formatThousands, stripCommas } from '@/utils/NumberFormat'
 import { ClientItemPriceSpreadsheet } from './ClientItemPriceSpreadsheet'
@@ -94,16 +94,16 @@ function ItemDetailsPanel({ item }: { item: ClientItem }) {
   return (
     <div className="card p-4 flex-1 space-y-3">
       <FormField label="Item Name" required>
-        <input className="field" value={form.item_name ?? ''}
-          onChange={e => setForm(p => ({ ...p, item_name: e.target.value.toUpperCase() }))} />
+        <UppercaseField className="field" value={form.item_name ?? ''}
+          onChange={v => setForm(p => ({ ...p, item_name: v }))} />
       </FormField>
       <FormField label="Size">
-        <input className="field" value={form.size ?? ''}
-          onChange={e => setForm(p => ({ ...p, size: e.target.value.toUpperCase() || null }))} />
+        <UppercaseField className="field" value={form.size ?? ''}
+          onChange={v => setForm(p => ({ ...p, size: v || null }))} />
       </FormField>
       <FormField label="Notes">
-        <textarea className="field resize-none" rows={2} value={form.notes ?? ''}
-          onChange={e => setForm(p => ({ ...p, notes: e.target.value.toUpperCase() || null }))} />
+        <UppercaseField as="textarea" className="field resize-none" rows={2} value={form.notes ?? ''}
+          onChange={v => setForm(p => ({ ...p, notes: v || null }))} />
       </FormField>
       <div className="flex gap-2">
         <button className="btn-primary !py-1.5 !px-3 text-sm inline-flex items-center gap-1.5" disabled={update.isPending} onClick={save}>

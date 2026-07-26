@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ListOrdered } from 'lucide-react'
 import { CrudPage } from '@/components/ui/CrudPage'
-import { FormField, formatRp } from '@/components/ui'
+import { FormField, formatRp, UppercaseField } from '@/components/ui'
 import { itemHooks, orderHooks } from '@/hooks'
 import type { Item, CreateItemRequest } from '@/types'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
@@ -19,18 +19,14 @@ function ItemForm({ editing, onClose }: { editing: Item | null; onClose: () => v
     price:     editing?.price     ?? 0,
   })
 
-  // Item Name and Size get uppercased as-typed, same convention as the
-  // Order ID/PO Number fields — keeps names consistent across the catalog
-  // instead of "Kemeja" vs "kemeja" vs "KEMEJA" all floating around.
-  const UPPERCASE_FIELDS: (keyof typeof form)[] = ['item_name', 'size']
-
+  // Amount/Price get parsed on change; Item Name and Size now uppercase via
+  // UppercaseField directly (same convention as Order ID/PO Number) rather
+  // than through this generic setter.
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     if (k === 'price') {
       setForm(prev => ({ ...prev, price: Number(stripCommas(e.target.value)) || 0 }))
     } else if (k === 'amount') {
       setForm(prev => ({ ...prev, amount: Number(e.target.value) }))
-    } else if (UPPERCASE_FIELDS.includes(k)) {
-      setForm(prev => ({ ...prev, [k]: e.target.value.toUpperCase() }))
     } else {
       setForm(prev => ({ ...prev, [k]: e.target.value }))
     }
@@ -62,10 +58,12 @@ function ItemForm({ editing, onClose }: { editing: Item | null; onClose: () => v
       </FormField>
       <div className="grid grid-cols-2 gap-3">
         <FormField label="Item Name" required>
-          <input className="field" placeholder="e.g. Apron" value={form.item_name} onChange={set('item_name')} />
+          <UppercaseField className="field" placeholder="e.g. Apron" value={form.item_name}
+            onChange={v => setForm(p => ({ ...p, item_name: v }))} />
         </FormField>
         <FormField label="Size">
-          <input className="field" placeholder="e.g. S, M, L, XL" value={form.size ?? ''} onChange={set('size')} />
+          <UppercaseField className="field" placeholder="e.g. S, M, L, XL" value={form.size ?? ''}
+            onChange={v => setForm(p => ({ ...p, size: v }))} />
         </FormField>
         <FormField label="Amount" required>
           <input className="field" type="number" min={1} value={form.amount} onChange={set('amount')} />

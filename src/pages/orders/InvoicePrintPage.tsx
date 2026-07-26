@@ -41,13 +41,38 @@ function formatDate(date: string | Date | null | undefined) {
   return format(new Date(date), 'd-MMM-yy')
 }
 
+// Same fix as EditableCell.tsx's caret-jump bug: forcing .toUpperCase()
+// on every keystroke re-renders the input with a new string each time,
+// which resets the caret to the end unless something restores it — only
+// noticeable once you click into the middle of existing text and type.
+// Captures the caret position at the moment of each change and restores
+// it right after the value updates.
+function useUppercaseField(initial: string) {
+  const [value, setValue] = useState(initial)
+  const ref = useRef<HTMLInputElement>(null)
+  const caretPos = useRef<number | null>(null)
+
+  useLayoutEffect(() => {
+    if (ref.current && caretPos.current != null) {
+      ref.current.setSelectionRange(caretPos.current, caretPos.current)
+    }
+  }, [value])
+
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    caretPos.current = e.target.selectionStart
+    setValue(e.target.value.toUpperCase())
+  }
+
+  return { value, ref, onChange }
+}
+
 export function InvoicePrintPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const invoiceId = decodeURIComponent(id ?? '')
   const { rekening, setRekening } = useRekening()
-  const [signatoryName, setSignatoryName] = useState('FIFI LESMANA')
-  const [signatoryTitle, setSignatoryTitle] = useState('FOUNDER')
+  const signatoryName = useUppercaseField('FIFI LESMANA')
+  const signatoryTitle = useUppercaseField('FOUNDER')
   const [highlightChoice, setHighlightChoice] = useState<string>(HIGHLIGHT_PALETTE[0].value)
   // Per-row overrides — keyed by a stable id per row (see rowKey below).
   // Clicking a row paints it with whatever color is currently selected in
@@ -512,15 +537,17 @@ export function InvoicePrintPage() {
               <div style={{ borderTop: '1px solid #000', paddingTop: '4px', display: 'inline-block', width: '200px' }} />
               <div>
                 <input
-                  value={signatoryName}
-                  onChange={e => setSignatoryName(e.target.value.toUpperCase())}
+                  ref={signatoryName.ref}
+                  value={signatoryName.value}
+                  onChange={signatoryName.onChange}
                   style={{ border: 'none', background: 'transparent', font: 'inherit', textAlign: 'right', width: '200px', padding: 0 }}
                 />
               </div>
               <div>
                 <input
-                  value={signatoryTitle}
-                  onChange={e => setSignatoryTitle(e.target.value.toUpperCase())}
+                  ref={signatoryTitle.ref}
+                  value={signatoryTitle.value}
+                  onChange={signatoryTitle.onChange}
                   style={{ border: 'none', background: 'transparent', font: 'inherit', textAlign: 'right', width: '200px', padding: 0 }}
                 />
               </div>

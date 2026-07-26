@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { ShoppingBag, Eye, RotateCcw, Building2, ArrowRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { CrudPage } from '@/components/ui/CrudPage'
-import { FormField } from '@/components/ui'
+import { FormField, UppercaseField } from '@/components/ui'
 import { orderHooks, clientHooks } from '@/hooks'
 import type { Order, CreateOrderRequest } from '@/types'
 import { useNavigate } from 'react-router-dom'
@@ -75,14 +75,16 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
 
   // ID and PO Number are alphanumeric codes (e.g. "001/KMA/26", "P0000011")
   // — force them to uppercase as-typed so we never end up with "p0000011"
-  // and "P0000011" being treated as different POs.
-  const UPPERCASE_FIELDS: (keyof CreateOrderRequest)[] = ['id', 'po_number', 'company']
-
+  // and "P0000011" being treated as different POs. Handled by
+  // UppercaseField now for id/company/po_number; `set` is left for the
+  // one remaining plain field (Date).
   const set = (k: keyof CreateOrderRequest) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (k === 'id') setIdTouched(true)
-    const raw = e.target.value
-    const value = UPPERCASE_FIELDS.includes(k) ? raw.toUpperCase() : raw
-    setForm(prev => ({ ...prev, [k]: value }))
+    setForm(prev => ({ ...prev, [k]: e.target.value }))
+  }
+
+  const setId = (value: string) => {
+    setIdTouched(true)
+    setForm(prev => ({ ...prev, id: value }))
   }
 
   const resetIdSuggestion = () => {
@@ -121,11 +123,11 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
     <div className="space-y-4">
       <FormField label="ID" required>
         <div className="flex items-center gap-2">
-          <input
+          <UppercaseField
             className="field font-mono"
             placeholder="001/KMA/26"
             value={form.id ?? ''}
-            onChange={set('id')}
+            onChange={setId}
           />
           {!editing && (
             <button
@@ -162,10 +164,12 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
         </p>
       </FormField>
       <FormField label="Company" required>
-        <input className="field" placeholder="e.g. Zenbu Restaurant" value={form.company ?? ''} onChange={set('company')} />
+        <UppercaseField className="field" placeholder="e.g. Zenbu Restaurant" value={form.company ?? ''}
+          onChange={v => setForm(p => ({ ...p, company: v }))} />
       </FormField>
       <FormField label="PO Number">
-        <input className="field font-mono" placeholder="e.g. P0000011" value={form.po_number ?? ''} onChange={set('po_number')} />
+        <UppercaseField className="field font-mono" placeholder="e.g. P0000011" value={form.po_number ?? ''}
+          onChange={v => setForm(p => ({ ...p, po_number: v }))} />
       </FormField>
       <FormField label="Order Date" required>
         <input className="field" type="date" value={form.date} onChange={set('date')} />

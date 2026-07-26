@@ -1,3 +1,4 @@
+import { useRef, useLayoutEffect } from 'react'
 import { Loader2, AlertTriangle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -89,6 +90,77 @@ export function FormField({ label, children, required }: {
       </label>
       {children}
     </div>
+  )
+}
+
+// ─── UppercaseField ────────────────────────────────────────────────────────
+// Drop-in replacement for a plain <input>/<textarea> that force-uppercases
+// as you type — the convention used all over this app (Item Name, Company,
+// Address, Kas Bon ID, Supplier Name, etc.). Forcing .toUpperCase() on
+// every keystroke re-renders the field with a new string each time, which
+// resets the caret to the end unless something restores it — invisible
+// while typing at the end of the field, but breaks the moment you click
+// into the middle of existing text and type: the caret jumps to the end
+// after every character. This restores the caret position after every
+// change — same fix as EditableCell.tsx's inline-cell editor uses, just
+// packaged as a real component so every page shares one fix instead of
+// each hand-rolling its own onChange={e => setX(e.target.value.toUpperCase())}.
+//
+// Usage (input, the default):
+//   <UppercaseField className="field" value={form.item_name}
+//     onChange={v => setForm(p => ({ ...p, item_name: v }))} />
+//
+// Usage (textarea, e.g. Address/Notes/Description):
+//   <UppercaseField as="textarea" rows={2} className="field resize-none"
+//     value={form.address} onChange={v => setForm(p => ({ ...p, address: v }))} />
+type UppercaseFieldElement = HTMLInputElement | HTMLTextAreaElement
+
+type UppercaseInputProps = {
+  value: string
+  onChange: (value: string) => void
+  as?: 'input'
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>
+
+type UppercaseTextareaProps = {
+  value: string
+  onChange: (value: string) => void
+  as: 'textarea'
+} & Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange'>
+
+export function UppercaseField(props: UppercaseInputProps | UppercaseTextareaProps) {
+  const { value, onChange, as = 'input', ...rest } = props
+  const ref = useRef<UppercaseFieldElement>(null)
+  const caretPos = useRef<number | null>(null)
+
+  useLayoutEffect(() => {
+    if (caretPos.current != null && ref.current) {
+      ref.current.setSelectionRange(caretPos.current, caretPos.current)
+    }
+  }, [value])
+
+  const handleChange = (e: React.ChangeEvent<UppercaseFieldElement>) => {
+    caretPos.current = e.target.selectionStart
+    onChange(e.target.value.toUpperCase())
+  }
+
+  if (as === 'textarea') {
+    return (
+      <textarea
+        ref={ref as React.RefObject<HTMLTextAreaElement>}
+        value={value}
+        onChange={handleChange}
+        {...(rest as React.TextareaHTMLAttributes<HTMLTextAreaElement>)}
+      />
+    )
+  }
+
+  return (
+    <input
+      ref={ref as React.RefObject<HTMLInputElement>}
+      value={value}
+      onChange={handleChange}
+      {...(rest as React.InputHTMLAttributes<HTMLInputElement>)}
+    />
   )
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Wrench, Plus, ArrowRight, RotateCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { operationHooks, useFinanceHeaders } from '@/hooks'
-import { formatRp, FormField, Spinner } from '@/components/ui'
+import { formatRp, FormField, Spinner, UppercaseField } from '@/components/ui'
 import { MonthNavigator } from '@/components/ui/MonthNavigator'
 import { SpendBars } from '@/components/ui/SpendBars'
 import { isInMonth, todayISODate } from '@/utils/MonthUtils'
@@ -184,11 +184,11 @@ export function OperationsDashboard({ onOpenSheet, selectedCategory }: Operation
 
           <FormField label="Kas Bon ID" required>
             <div className="flex items-center gap-2">
-              <input
+              <UppercaseField
                 className={`field font-mono ${missing.has('header_id') ? '!border-red-400 !ring-red-100' : ''}`}
                 placeholder="01/KB/26"
                 value={quickAdd.header_id}
-                onChange={e => { setIdTouched(true); setQuickAdd(p => ({ ...p, header_id: e.target.value.toUpperCase() })) }}
+                onChange={v => { setIdTouched(true); setQuickAdd(p => ({ ...p, header_id: v })) }}
               />
               <button
                 type="button"
@@ -206,19 +206,19 @@ export function OperationsDashboard({ onOpenSheet, selectedCategory }: Operation
             )}
           </FormField>
           <FormField label="Category" required>
-            <input
+            <UppercaseField
               className={`field ${missing.has('category') ? '!border-red-400 !ring-red-100' : ''}`}
               placeholder="e.g. Transport, Utilities…"
               value={quickAdd.category}
-              onChange={e => setQuickAdd(p => ({ ...p, category: e.target.value.toUpperCase() }))}
+              onChange={v => setQuickAdd(p => ({ ...p, category: v }))}
             />
           </FormField>
           <FormField label="Description">
-            <input
+            <UppercaseField
               className="field"
               placeholder="e.g. Ojek to supplier"
               value={quickAdd.item}
-              onChange={e => setQuickAdd(p => ({ ...p, item: e.target.value.toUpperCase() }))}
+              onChange={v => setQuickAdd(p => ({ ...p, item: v }))}
             />
           </FormField>
           <FormField label="Amount (Rp)">

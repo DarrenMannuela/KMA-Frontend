@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react'
 import { Factory, Plus, ArrowRight, RotateCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { productionHooks, supplierHooks, useFinanceHeaders } from '@/hooks'
-import { formatRp, FormField, Spinner } from '@/components/ui'
+import { formatRp, FormField, Spinner, UppercaseField } from '@/components/ui'
 import { MonthNavigator } from '@/components/ui/MonthNavigator'
 import { SpendBars } from '@/components/ui/SpendBars'
 import { isInMonth, todayISODate } from '@/utils/MonthUtils'
@@ -213,11 +213,11 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
 
           <FormField label="Kas Bon ID" required>
             <div className="flex items-center gap-2">
-              <input
+              <UppercaseField
                 className={`field font-mono ${missing.has('header_id') ? '!border-red-400 !ring-red-100' : ''}`}
                 placeholder="01/KB/26"
                 value={quickAdd.header_id}
-                onChange={e => { setIdTouched(true); setQuickAdd(p => ({ ...p, header_id: e.target.value })) }}
+                onChange={v => { setIdTouched(true); setQuickAdd(p => ({ ...p, header_id: v })) }}
               />
               <button
                 type="button"
@@ -236,12 +236,13 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
           </FormField>
           <div className="md:col-span-3">
             <FormField label="Description" required>
-              <textarea
+              <UppercaseField
+                as="textarea"
                 className={`field resize-none ${missing.has('description') ? '!border-red-400 !ring-red-100' : ''}`}
                 rows={1}
                 placeholder="e.g. Beli bahan Basic 902"
                 value={quickAdd.description}
-                onChange={e => setQuickAdd(p => ({ ...p, description: e.target.value }))}
+                onChange={v => setQuickAdd(p => ({ ...p, description: v }))}
               />
             </FormField>
           </div>
@@ -259,8 +260,8 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
           </FormField>
           <div className="md:col-span-3">
             <FormField label="Material">
-              <input className="field" placeholder="e.g. Basic 902" value={quickAdd.material_name}
-                onChange={e => setQuickAdd(p => ({ ...p, material_name: e.target.value }))} />
+              <UppercaseField className="field" placeholder="e.g. Basic 902" value={quickAdd.material_name}
+                onChange={v => setQuickAdd(p => ({ ...p, material_name: v }))} />
             </FormField>
           </div>
 

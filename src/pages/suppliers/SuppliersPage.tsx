@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Users } from 'lucide-react'
 import { CrudPage } from '@/components/ui/CrudPage'
-import { FormField } from '@/components/ui'
+import { FormField, UppercaseField } from '@/components/ui'
 import { supplierHooks } from '@/hooks'
 import type { Supplier, CreateSupplierRequest, SupplierCategory } from '@/types'
 
@@ -44,8 +44,8 @@ function SupplierForm({ editing, onClose }: { editing: Supplier | null; onClose:
   return (
     <div className="space-y-4">
       <FormField label="Supplier Name" required>
-        <input className="field" placeholder="e.g. SAI Textile" value={form.supplier_name}
-          onChange={e => setForm(p => ({ ...p, supplier_name: e.target.value.toUpperCase() }))} />
+        <UppercaseField className="field" placeholder="e.g. SAI Textile" value={form.supplier_name}
+          onChange={v => setForm(p => ({ ...p, supplier_name: v }))} />
       </FormField>
       <FormField label="Category" required>
         <select className="field" value={form.supplier_category}

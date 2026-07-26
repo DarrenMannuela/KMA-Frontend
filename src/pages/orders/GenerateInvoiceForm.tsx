@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { RotateCcw, Building2 } from 'lucide-react'
-import { FormField, formatRp } from '@/components/ui'
+import { FormField, formatRp, UppercaseField } from '@/components/ui'
 import { invoicesApi } from '@/api'
 import { invoiceHooks, clientHooks, clientContactHooks } from '@/hooks'
 import type { Order, Item, Invoice, CreateInvoiceRequest, UpdateInvoiceRequest } from '@/types'
@@ -193,17 +193,19 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
   const idChanged = !!existingInvoice && form.id !== existingInvoice.id
 
   // Invoice No., Kepada Yth, Untuk, Alamat, Start Produksi, and Lama
-  // Produksi are all forced uppercase as-typed, matching the convention
-  // used on the Order/Item forms. Email is deliberately excluded — email
-  // addresses are conventionally lowercase and forcing case there tends
-  // to look wrong even though it's technically valid.
-  const UPPERCASE_FIELDS: (keyof typeof form)[] = [
-    'id', 'kepada_yth', 'untuk', 'alamat', 'start_produksi', 'lama_produksi', 'telp',
-  ]
-
+  // Produksi now uppercase via UppercaseField directly, matching the
+  // convention used on the Order/Item forms. Email is deliberately
+  // excluded — email addresses are conventionally lowercase and forcing
+  // case there tends to look wrong even though it's technically valid.
+  // `set` is left for the remaining plain fields (dates, discount inputs
+  // handled elsewhere).
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    if (k === 'id') setIdTouched(true)
-    setForm(p => ({ ...p, [k]: UPPERCASE_FIELDS.includes(k) ? e.target.value.toUpperCase() : e.target.value }))
+    setForm(p => ({ ...p, [k]: e.target.value }))
+  }
+
+  const setId = (value: string) => {
+    setIdTouched(true)
+    setForm(p => ({ ...p, id: value }))
   }
 
   // Total/Discount are comma-formatted as you type (e.g. "11,520,000")
@@ -281,8 +283,8 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
       <div className="grid grid-cols-2 gap-3">
         <FormField label="Invoice No." required>
           <div className="flex items-center gap-2">
-            <input className="field font-mono" placeholder="076/KMA/26"
-              value={form.id} onChange={set('id')} />
+            <UppercaseField className="field font-mono" placeholder="076/KMA/26"
+              value={form.id} onChange={setId} />
             {!existingInvoice && (
               <button
                 type="button"
@@ -356,8 +358,8 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
         </div>
         <div className="space-y-3">
           <FormField label="Kepada Yth (Company)" required>
-            <input className="field" placeholder="PT. Artisan Kuliner Indonesia"
-              value={form.kepada_yth} onChange={set('kepada_yth')} />
+            <UppercaseField className="field" placeholder="PT. Artisan Kuliner Indonesia"
+              value={form.kepada_yth} onChange={v => setForm(p => ({ ...p, kepada_yth: v }))} />
           </FormField>
           {clientId && contacts.length > 0 && (
             <FormField label="Contact (optional)">
@@ -375,20 +377,36 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
             </FormField>
           )}
           <FormField label="Untuk (Contact Person)" required>
-            <input className="field" placeholder="Ibu Cory"
-              value={form.untuk} onChange={set('untuk')} />
+            <UppercaseField className="field" placeholder="Ibu Cory"
+              value={form.untuk} onChange={v => setForm(p => ({ ...p, untuk: v }))} />
           </FormField>
           <FormField label="Alamat" required>
-            <textarea className="field" rows={2} placeholder="Jl. Boulevard Pantai Indah Kapuk..."
+            <UppercaseField as="textarea" className="field" rows={2} placeholder="Jl. Boulevard Pantai Indah Kapuk..."
               value={form.alamat}
-              onChange={set('alamat')} />
+              onChange={v => setForm(p => ({ ...p, alamat: v }))} />
+            {/* The auto-fill effect above only ever runs once for a brand
+                new invoice — it deliberately never overwrites an existing
+                invoice's saved Alamat, since the client's address may have
+                changed since. This is the escape hatch for that case: a
+                one-click pull instead of a silent overwrite, shown only
+                when there's actually something new to pull in. */}
+            {client?.address && client.address.toUpperCase() !== form.alamat && (
+              <button
+                type="button"
+                className="text-xs text-navy-600 hover:underline mt-1"
+                onClick={() => setForm(p => ({ ...p, alamat: client.address!.toUpperCase() }))}
+              >
+                Use client's current address: "{client.address.toUpperCase()}"
+              </button>
+            )}
           </FormField>
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Email">
               <input className="field" type="email" value={form.email ?? ''} onChange={set('email')} />
             </FormField>
             <FormField label="Telp">
-              <input className="field" value={form.telp ?? ''} onChange={set('telp')} />
+              <UppercaseField className="field" value={form.telp ?? ''}
+                onChange={v => setForm(p => ({ ...p, telp: v }))} />
             </FormField>
           </div>
         </div>
@@ -398,10 +416,12 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Production Info</p>
         <div className="grid grid-cols-2 gap-3">
           <FormField label="Start Produksi">
-            <input className="field" value={form.start_produksi ?? ''} onChange={set('start_produksi')} />
+            <UppercaseField className="field" value={form.start_produksi ?? ''}
+              onChange={v => setForm(p => ({ ...p, start_produksi: v }))} />
           </FormField>
           <FormField label="Lama Produksi">
-            <input className="field" value={form.lama_produksi ?? ''} onChange={set('lama_produksi')} />
+            <UppercaseField className="field" value={form.lama_produksi ?? ''}
+              onChange={v => setForm(p => ({ ...p, lama_produksi: v }))} />
           </FormField>
         </div>
       </div>

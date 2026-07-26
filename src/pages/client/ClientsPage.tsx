@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Building2, ArrowRight } from 'lucide-react'
 import { CrudPage } from '@/components/ui/CrudPage'
-import { FormField } from '@/components/ui'
+import { FormField, UppercaseField } from '@/components/ui'
 import { clientHooks } from '@/hooks'
 import type { Client, CreateClientRequest } from '@/types'
 
@@ -29,16 +29,16 @@ function ClientForm({ editing, onClose }: { editing: Client | null; onClose: () 
   return (
     <div className="space-y-4">
       <FormField label="Client Name" required>
-        <input className="field" placeholder="e.g. PT Sumber Makmur" value={form.client_name}
-          onChange={e => setForm(p => ({ ...p, client_name: e.target.value.toUpperCase() }))} />
+        <UppercaseField className="field" placeholder="e.g. PT Sumber Makmur" value={form.client_name}
+          onChange={v => setForm(p => ({ ...p, client_name: v }))} />
       </FormField>
       <FormField label="Address">
-        <textarea className="field resize-none" rows={2} placeholder="e.g. Jl. Industri No. 12, Cikarang" value={form.address ?? ''}
-          onChange={e => setForm(p => ({ ...p, address: e.target.value.toUpperCase() || null }))} />
+        <UppercaseField as="textarea" className="field resize-none" rows={2} placeholder="e.g. Jl. Industri No. 12, Cikarang" value={form.address ?? ''}
+          onChange={v => setForm(p => ({ ...p, address: v || null }))} />
       </FormField>
       <FormField label="Notes">
-        <textarea className="field resize-none" rows={2} value={form.notes ?? ''}
-          onChange={e => setForm(p => ({ ...p, notes: e.target.value.toUpperCase() || null }))} />
+        <UppercaseField as="textarea" className="field resize-none" rows={2} value={form.notes ?? ''}
+          onChange={v => setForm(p => ({ ...p, notes: v || null }))} />
       </FormField>
       <div className="flex gap-2 pt-1">
         <button className="btn-primary" disabled={busy} onClick={handleSubmit}>

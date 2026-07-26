@@ -4,8 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Truck, Eye, Plus, RotateCcw, Printer, Building2, ArrowRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { CrudPage } from '@/components/ui/CrudPage'
-import { FormField } from '@/components/ui'
-import { deliveryHooks, deliveryItemHooks, orderHooks, clientHooks } from '@/hooks'
+import { FormField, UppercaseField } from '@/components/ui'
+import { deliveryHooks, deliveryItemHooks, orderHooks, clientHooks, clientContactHooks } from '@/hooks'
 import { invoicesApi } from '@/api'
 import type {
   Delivery, CreateDeliveryRequest, Order, Invoice,
@@ -88,20 +88,26 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
   const [clientTouched, setClientTouched] = useState(!!editing)
 
   const [form, setForm] = useState<CreateDeliveryRequest>({
-    id:             editing?.id             ?? '', 
-    type:           editing?.type           ?? type,
-    client_id:      editing?.client_id      ?? null,
-    company:        editing?.company        ?? '',
-    address:        editing?.address        ?? '',
-    po_number:      editing?.po_number      ?? '',
-    phone_number:   editing?.phone_number   ?? '',
-    contact_person: editing?.contact_person ?? '',
-    date:           editing?.date ? editing.date.split('T')[0] : '',
+    id:                editing?.id                ?? '', 
+    type:              editing?.type               ?? type,
+    client_id:         editing?.client_id          ?? null,
+    client_contact_id: editing?.client_contact_id  ?? null,
+    company:           editing?.company            ?? '',
+    address:           editing?.address            ?? '',
+    po_number:         editing?.po_number          ?? '',
+    phone_number:      editing?.phone_number       ?? '',
+    contact_person:    editing?.contact_person     ?? '',
+    date:              editing?.date ? editing.date.split('T')[0] : '',
     // Only DO deliveries are tied to an order — a DO's box contents come
     // from that order's Items, capped by what's left to deliver. SJ
     // deliveries (documents) aren't order-item-constrained.
-    order_id:       editing?.order_id       ?? null,
+    order_id:          editing?.order_id           ?? null,
   })
+
+  // This client's contacts, for the optional Contact picker below — only
+  // fetched once a client is actually linked, same "enabled" gating as
+  // ClientDetailPage's POC list.
+  const { data: contacts = [] } = clientContactHooks.useByClient(form.client_id ?? undefined)
 
   // Shared by both the DO "Order" select and the SJ "Order (optional)"
   // select — picking an order fills Company/PO Number/Client from it
@@ -109,17 +115,26 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
   // uniformly applied in one place instead of duplicated per-type.
   const applyOrderSelection = (newOrderId: string | null) => {
     const selectedOrder = orders.find(o => o.id === newOrderId)
-    setForm(p => ({
-      ...p,
-      order_id: newOrderId,
-      company: !companyTouched && selectedOrder?.company ? selectedOrder.company.toUpperCase() : p.company,
-      po_number: !poNumberTouched && selectedOrder?.po_number ? selectedOrder.po_number.toUpperCase() : p.po_number,
-      client_id: !clientTouched ? (selectedOrder?.client_id ?? p.client_id) : p.client_id,
-    }))
+    setForm(p => {
+      const newClientId = !clientTouched ? (selectedOrder?.client_id ?? p.client_id) : p.client_id
+      return {
+        ...p,
+        order_id: newOrderId,
+        company: !companyTouched && selectedOrder?.company ? selectedOrder.company.toUpperCase() : p.company,
+        po_number: !poNumberTouched && selectedOrder?.po_number ? selectedOrder.po_number.toUpperCase() : p.po_number,
+        client_id: newClientId,
+        // A contact belongs to one specific client — if the order swap
+        // changed which client we're linked to, any previously-picked
+        // contact no longer applies.
+        client_contact_id: newClientId !== p.client_id ? null : p.client_contact_id,
+      }
+    })
   }
 
   // Picking a client prefills Company from client_name — same convention
   // as OrdersPage — but only when Company hasn't been touched directly.
+  // Any previously-picked contact is cleared, since it belonged to the
+  // old client.
   const handleClientChange = (idStr: string) => {
     setClientTouched(true)
     const newClientId = idStr ? Number(idStr) : null
@@ -127,7 +142,22 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
     setForm(p => ({
       ...p,
       client_id: newClientId,
+      client_contact_id: null,
       company: !companyTouched && newClient ? newClient.client_name : p.company,
+    }))
+  }
+
+  // Picking a contact fills Contact Person / Phone Number from it — same
+  // "touched" idea as everything else here, so it never clobbers a value
+  // you've already typed by hand.
+  const handleContactChange = (idStr: string) => {
+    const newContactId = idStr ? Number(idStr) : null
+    const contact = contacts.find(c => c.id === newContactId)
+    setForm(p => ({
+      ...p,
+      client_contact_id: newContactId,
+      contact_person: contact ? contact.name : p.contact_person,
+      phone_number: contact?.phone_number ? contact.phone_number : p.phone_number,
     }))
   }
 
@@ -148,19 +178,20 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
 
   const idAlreadyExists = deliveries.some(d => d.id === form.id && d.id !== editing?.id)
 
-  // Same convention as OrdersPage — force these to uppercase as-typed so
+  // Same convention as OrdersPage — Address/PO Number/Contact Person/
+  // Company uppercase as-typed via UppercaseField directly now, so
   // "jl. hayam wuruk" / "Jl. Hayam Wuruk" / "JL. HAYAM WURUK" don't end up
   // as three different-looking values across deliveries. Phone number is
-  // left alone since it's digits only.
-  const UPPERCASE_FIELDS: (keyof CreateDeliveryRequest)[] = ['address', 'po_number', 'contact_person', 'company']
-
+  // left alone since it's digits only. setStr now only handles the two
+  // remaining plain fields (Date, Phone Number).
   const setStr = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value
-    const value = UPPERCASE_FIELDS.includes(k) ? raw.toUpperCase() : raw
-    if (k === 'company') setCompanyTouched(true)
-    if (k === 'po_number') setPoNumberTouched(true)
-    setForm(p => ({ ...p, [k]: value }))
+    setForm(p => ({ ...p, [k]: e.target.value }))
   }
+
+  const setCompany = (value: string) => { setCompanyTouched(true); setForm(p => ({ ...p, company: value })) }
+  const setPoNumber = (value: string) => { setPoNumberTouched(true); setForm(p => ({ ...p, po_number: value })) }
+  const setAddress = (value: string) => setForm(p => ({ ...p, address: value }))
+  const setContactPerson = (value: string) => setForm(p => ({ ...p, contact_person: value }))
 
   const idPlaceholder = type === 'DO' ? '01/KMA/DO/26' : '01/KMA/SJ/26'
 
@@ -274,12 +305,12 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
 
       <FormField label={type === 'DO' ? 'Delivery Order No.' : 'Surat Jalan No.'} required>
         <div className="flex items-center gap-2">
-          <input
+          <UppercaseField
             className="field font-mono"
             placeholder={`e.g. ${idPlaceholder}`}
             readOnly={!!editing}
             value={form.id}
-            onChange={e => { setIdTouched(true); setForm(p => ({ ...p, id: e.target.value.toUpperCase() })) }}
+            onChange={v => { setIdTouched(true); setForm(p => ({ ...p, id: v })) }}
           />
           {!editing && (
             <button
@@ -315,21 +346,37 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
         </p>
       </FormField>
 
+      {form.client_id && contacts.length > 0 && (
+        <FormField label="Contact (optional)">
+          <select className="field" value={form.client_contact_id ?? ''} onChange={e => handleContactChange(e.target.value)}>
+            <option value="">No specific contact…</option>
+            {contacts.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.name}{c.role ? ` — ${c.role}` : ''}{c.is_primary ? ' (Primary)' : ''}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-400 mt-1">
+            Fills in Contact Person and Phone Number below — still editable, or leave unpicked to type them directly.
+          </p>
+        </FormField>
+      )}
+
       <FormField label="Company (NAMA)" required>
-        <input className="field" placeholder="e.g. The 101 Darmawangsa"
-          value={form.company ?? ''} onChange={setStr('company')} />
+        <UppercaseField className="field" placeholder="e.g. The 101 Darmawangsa"
+          value={form.company ?? ''} onChange={setCompany} />
       </FormField>
 
       <FormField label="Delivery Address" required>
-        <input className="field" placeholder="e.g. Jl. Hayam Wuruk No. 1"
-          value={form.address} onChange={setStr('address')} />
+        <UppercaseField className="field" placeholder="e.g. Jl. Hayam Wuruk No. 1"
+          value={form.address} onChange={setAddress} />
       </FormField>
 
       <div className="grid grid-cols-2 gap-3">
         {type === 'DO' && (
           <FormField label="PO Number">
-            <input className="field font-mono" placeholder="P0000011"
-              value={form.po_number ?? ''} onChange={setStr('po_number')} />
+            <UppercaseField className="field font-mono" placeholder="P0000011"
+              value={form.po_number ?? ''} onChange={setPoNumber} />
           </FormField>
         )}
         <FormField label="Delivery Date">
@@ -337,8 +384,8 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
             value={form.date} onChange={setStr('date')} />
         </FormField>
         <FormField label="Contact Person">
-          <input className="field" placeholder="e.g. Ibu Tuti"
-            value={form.contact_person ?? ''} onChange={setStr('contact_person')} />
+          <UppercaseField className="field" placeholder="e.g. Ibu Tuti"
+            value={form.contact_person ?? ''} onChange={setContactPerson} />
         </FormField>
         <FormField label="Phone Number">
           <input className="field font-mono" placeholder="081219201007"
