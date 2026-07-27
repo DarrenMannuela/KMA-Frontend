@@ -121,7 +121,7 @@ export interface OperationRow {
   header_id: string
   date: string                 // header-level
   description: string          // header-level
-  category: string             // item-level
+  category: string             // item-level — what OperationsDashboard/OperationsSpreadsheet group and filter by
   item_description: string     // item-level (the specific cost line)
   price: number                // item-level
 }
@@ -276,3 +276,4 @@ export type PageName =
   | 'suppliers'
   | 'operations'
   | 'clients'
+  | 'yearly-report'

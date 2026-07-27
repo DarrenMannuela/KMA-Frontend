@@ -1,8 +1,10 @@
-import { ShoppingBag, Truck, Factory, Wrench, Users, TrendingUp, ArrowUpRight, Package, AlertTriangle, Receipt } from 'lucide-react'
+import { ShoppingBag, Truck, Factory, Wrench, Users, TrendingUp, ArrowUpRight, Package, AlertTriangle, Receipt, BarChart3 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { formatRp } from '@/components/ui'
 import { orderHooks, deliveryHooks, productionHooks, operationHooks, supplierHooks, invoiceHooks } from '@/hooks'
 import { format, isPast } from 'date-fns'
+import { isInMonth } from '@/utils/MonthUtils'
+import { StackedBarChart } from '@/components/ui/Charts'
 import type { Order, Invoice, ProductionRow, OperationRow } from '@/types'
 
 // The amount THIS invoice document is for — D/P amount for a dp invoice,
@@ -27,6 +29,22 @@ interface KpiCardProps {
   sub?: string
 }
 
+// Picks a font size so a formatted value (usually a Rupiah string like
+// "Rp 18.400.000") has a real shot at fitting these narrow KPI cards.
+// Deliberately graduated in several steps rather than one cutoff — a
+// single threshold meant "long" values still landed on a size too big to
+// fit, and forcing a wrap with break-words at that size broke mid-digit
+// ("18.400.0" / "00") instead of at the space after "Rp". Sized so the
+// two normal-length buckets fit on ONE line, and wrapping (when it still
+// happens on longer values) only ever splits at that space.
+function kpiValueSizeClass(value: string | number): string {
+  const len = String(value).length
+  if (len > 16) return 'text-sm'
+  if (len > 12) return 'text-base'
+  if (len > 9)  return 'text-xl'
+  return 'text-3xl'
+}
+
 function KpiCard({ label, value, icon: Icon, accent, sub }: KpiCardProps) {
   return (
     // min-h + justify-between: a longer value (e.g. "Rp 1.656.000") wraps
@@ -35,7 +53,11 @@ function KpiCard({ label, value, icon: Icon, accent, sub }: KpiCardProps) {
     // neighbors in the same row. Anchoring the value/sub block to the
     // bottom with mt-auto keeps every card's number on the same baseline
     // regardless of how many lines it wraps to.
-    <div className={`rounded-2xl p-5 flex flex-col gap-3 min-h-[132px] ${
+    // Bumped up (p-6 / min-h-[160px] / bigger icon badge) now that the
+    // KPI row no longer shares a row with the full-width Orders vs
+    // Costs chart — that chart moved into the sidebar, so this row gets
+    // more visual weight on the page.
+    <div className={`h-full rounded-2xl p-6 flex flex-col gap-4 min-h-[160px] min-w-0 ${
       accent
         ? 'bg-navy-900 text-white'
         : 'bg-white border border-slate-100 shadow-card'
@@ -44,12 +66,18 @@ function KpiCard({ label, value, icon: Icon, accent, sub }: KpiCardProps) {
         <span className={`text-xs font-semibold uppercase tracking-widest ${accent ? 'text-navy-400' : 'text-slate-400'}`}>
           {label}
         </span>
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${accent ? 'bg-navy-800' : 'bg-slate-50'}`}>
-          <Icon className={`w-4 h-4 ${accent ? 'text-gold-400' : 'text-slate-400'}`} />
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${accent ? 'bg-navy-800' : 'bg-slate-50'}`}>
+          <Icon className={`w-5 h-5 ${accent ? 'text-gold-400' : 'text-slate-400'}`} />
         </div>
       </div>
-      <div className="mt-auto">
-        <p className={`text-2xl font-bold tabular-nums leading-tight ${accent ? 'text-white' : 'text-navy-900'}`}>
+      <div className="mt-auto min-w-0">
+        {/* No break-words here on purpose — it was breaking mid-digit
+            ("18.400.0" / "00") once the font was still a bit too wide.
+            Normal wrapping only breaks at whitespace, and formatRp
+            already puts a space between "Rp" and the number, so the
+            worst case is a clean two-line "Rp" / "18.400.000" split,
+            never a split inside the digits. */}
+        <p className={`font-bold tabular-nums leading-tight ${kpiValueSizeClass(value)} ${accent ? 'text-white' : 'text-navy-900'}`}>
           {value}
         </p>
         {sub && <p className={`text-xs mt-1.5 ${accent ? 'text-navy-400' : 'text-slate-400'}`}>{sub}</p>}
@@ -81,6 +109,44 @@ export function DashboardPage() {
   const totalProdCost = (safeProductions as ProductionRow[]).reduce((s, p) => s + (p.price * p.amount), 0)
   const totalOpsCost  = (safeOperations as OperationRow[]).reduce((s, o) => s + o.price, 0)
   const recentOrders  = (safeOrders as Order[]).slice(-5).reverse()
+
+  // ── This month: Orders (revenue) vs Costs, on one comparable scale ──
+  // Two bars, same isInMonth filter every other month-scoped section of
+  // this app already uses. Orders is split Paid/Unpaid (same
+  // invoiceAmountDue() the AR breakdown table below uses); Costs is split
+  // Production/Operations. Putting both on the SAME chart at the SAME
+  // scale is the point — the visual gap between the two bars' heights IS
+  // this month's profit or loss, not something that needs a separate
+  // number to explain it (though one's shown too, for precision).
+  const now = new Date()
+  const prodThisMonth = (safeProductions as ProductionRow[]).filter(p => isInMonth(p.date, now.getFullYear(), now.getMonth()))
+  const opsThisMonth  = (safeOperations as OperationRow[]).filter(o => isInMonth(o.date, now.getFullYear(), now.getMonth()))
+  const prodCostThisMonth = prodThisMonth.reduce((s, p) => s + p.price * p.amount, 0)
+  const opsCostThisMonth  = opsThisMonth.reduce((s, o) => s + o.price, 0)
+  const costThisMonthTotal = prodCostThisMonth + opsCostThisMonth
+
+  const invoicesThisMonth = (safeInvoices as Invoice[]).filter(i => isInMonth(i.tanggal, now.getFullYear(), now.getMonth()))
+  const paidThisMonth   = invoicesThisMonth.filter(i => i.status === 'paid').reduce((s, i) => s + invoiceAmountDue(i), 0)
+  const unpaidThisMonth = invoicesThisMonth.filter(i => i.status !== 'paid').reduce((s, i) => s + invoiceAmountDue(i), 0)
+  const invoicedThisMonthTotal = paidThisMonth + unpaidThisMonth
+
+  const profitThisMonth = invoicedThisMonthTotal - costThisMonthTotal
+
+  // One shared segment list covering both bars — each bar's `values`
+  // object only fills in the keys relevant to it (Orders → paid/unpaid,
+  // Costs → production/operations), so they render as two independent
+  // stacks with one combined legend, not two separate charts pretending
+  // to be comparable.
+  const ORDERS_VS_COSTS_SEGMENTS = [
+    { key: 'paid',        label: 'Paid',        color: '#34d399' },
+    { key: 'unpaid',       label: 'Unpaid',       color: '#f87171' },
+    { key: 'production',  label: 'Production',  color: '#2dd4bf' },
+    { key: 'operations',  label: 'Operations',  color: '#fbbf24' },
+  ]
+  const ordersVsCostsData = [
+    { category: 'Orders', values: { paid: paidThisMonth, unpaid: unpaidThisMonth } },
+    { category: 'Costs',  values: { production: prodCostThisMonth, operations: opsCostThisMonth } },
+  ]
 
   // Most urgent first: overdue invoices (oldest due date first), then
   // invoices with a due date coming up, then invoices with no due date
@@ -115,7 +181,7 @@ export function DashboardPage() {
       {/* ── KPI row ─────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-3">
         {/* AR spans 2 cols and is accented */}
-        <div className="col-span-2">
+        <div className="col-span-2 h-full">
           <KpiCard
             label="AR Receivable"
             value={formatRp(totalAR)}
@@ -199,8 +265,35 @@ export function DashboardPage() {
           </div>
         </div>
 
-        {/* Right column: suppliers + quick links */}
+        {/* Right column: this month's chart + suppliers + quick links */}
         <div className="flex flex-col gap-3">
+          {/* Orders vs Costs — moved here from its own full-width row so
+              the KPI cards above get the whole row to themselves. Same
+              data/segments as before, just resized (narrower bars,
+              shorter height, tighter header) to fit this column instead
+              of the page width. */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 fade-up delay-1">
+            <div className="flex items-center gap-2 mb-1">
+              <BarChart3 className="w-4 h-4 text-navy-400 shrink-0" />
+              <h3 className="font-semibold text-navy-900 text-sm truncate">{format(now, 'MMMM')} — Orders vs Costs</h3>
+            </div>
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <span className={`font-semibold text-xs tabular-nums ${profitThisMonth >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                {profitThisMonth >= 0 ? 'Profit' : 'Loss'}: {formatRp(Math.abs(profitThisMonth))}
+              </span>
+              <a href="/reports/yearly" className="flex items-center gap-1 text-xs text-navy-500 hover:text-navy-800 transition-colors font-medium shrink-0">
+                Yearly <ArrowUpRight className="w-3 h-3" />
+              </a>
+            </div>
+            <StackedBarChart
+              data={ordersVsCostsData}
+              segments={ORDERS_VS_COSTS_SEGMENTS}
+              height={110}
+              maxBarWidth={80}
+              emptyLabel="No activity yet this month"
+            />
+          </div>
+
           {/* Supplier count */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 fade-up delay-2">
             <div className="flex items-center justify-between mb-3">
@@ -222,6 +315,7 @@ export function DashboardPage() {
                 { label: 'New Delivery',   href: '/delivery',   icon: Truck },
                 { label: 'Add Production', href: '/production', icon: Factory },
                 { label: 'Add Supplier',   href: '/suppliers',  icon: Users },
+                { label: 'Yearly Report',  href: '/reports/yearly', icon: BarChart3 },
               ].map(({ label, href, icon: Icon }) => (
                 <a
                   key={href}

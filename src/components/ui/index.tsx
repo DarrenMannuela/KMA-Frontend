@@ -52,6 +52,17 @@ export function ConfirmDialog({ message, onConfirm, onCancel }: {
 }
 
 // ─── StatCard ─────────────────────────────────────────────────────────────────
+// Same sizing helper as DashboardPage's KpiCard — kept as a separate copy
+// rather than a shared import since the two live in different modules and
+// this is small enough not to be worth a shared util for.
+function statValueSizeClass(value: string | number): string {
+  const len = String(value).length
+  if (len > 16) return 'text-sm'
+  if (len > 12) return 'text-base'
+  if (len > 9)  return 'text-xl'
+  return 'text-2xl'
+}
+
 export function StatCard({ label, value, sub, icon: Icon, accent = false }: {
   label: string
   value: string | number
@@ -60,16 +71,20 @@ export function StatCard({ label, value, sub, icon: Icon, accent = false }: {
   accent?: boolean
 }) {
   return (
-    <div className={`card p-5 fade-up ${accent ? 'bg-navy-900 border-navy-800' : ''}`}>
+    <div className={`card p-5 fade-up min-w-0 ${accent ? 'bg-navy-900 border-navy-800' : ''}`}>
       <div className="flex items-start justify-between mb-3">
         <p className={`text-xs font-medium uppercase tracking-wider ${accent ? 'text-navy-300' : 'text-slate-400'}`}>
           {label}
         </p>
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${accent ? 'bg-navy-800' : 'bg-slate-100'}`}>
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${accent ? 'bg-navy-800' : 'bg-slate-100'}`}>
           <Icon className={`w-4 h-4 ${accent ? 'text-gold-400' : 'text-slate-500'}`} />
         </div>
       </div>
-      <p className={`text-2xl font-semibold tabular-nums ${accent ? 'text-white' : 'text-navy-900'}`}>
+      {/* No break-words — at a still-too-large font it broke mid-digit
+          ("18.400.0" / "00") instead of at the space after "Rp". Sizing
+          the font down first, and letting normal wrapping fall back to
+          the "Rp" / number space only, keeps any wrap clean. */}
+      <p className={`font-semibold tabular-nums ${statValueSizeClass(value)} ${accent ? 'text-white' : 'text-navy-900'}`}>
         {value}
       </p>
       {sub && <p className={`text-xs mt-1 ${accent ? 'text-navy-400' : 'text-slate-400'}`}>{sub}</p>}

@@ -18,6 +18,7 @@ import { KwitansiPrintPage} from '@/pages/orders/KiwitansiPrintPage'
 import { ClientsPage } from '@/pages/client/ClientsPage'
 import { ClientDetailPage } from '@/pages/client/ClientDetailPage'
 import { ClientItemDetailPage } from '@/pages/client/ClientItemDetailPage'
+import { YearlyReportPage } from '@/pages/reports/YearlyReportPage'
 
 
 export default function App() {
@@ -46,6 +47,7 @@ export default function App() {
               <Route path="/clients"                        element={<ClientsPage />} />
               <Route path="/clients/:id"                    element={<ClientDetailPage />} />
               <Route path="/clients/:clientId/items/:itemId" element={<ClientItemDetailPage />} />
+              <Route path="/reports/yearly"                   element={<YearlyReportPage />} />
             </Routes>
           </main>
         </div>
