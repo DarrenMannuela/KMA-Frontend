@@ -1,8 +1,8 @@
 import { ShoppingBag, Truck, Factory, Wrench, Users, TrendingUp, ArrowUpRight, Package, AlertTriangle, Receipt, BarChart3 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { formatRp } from '@/components/ui'
-import { orderHooks, deliveryHooks, productionHooks, operationHooks, supplierHooks, invoiceHooks } from '@/hooks'
-import { format, isPast } from 'date-fns'
+import { orderHooks, deliveryHooks, productionHooks, operationHooks, invoiceHooks } from '@/hooks'
+import { format, isPast, differenceInDays } from 'date-fns'
 import { isInMonth } from '@/utils/MonthUtils'
 import { StackedBarChart } from '@/components/ui/Charts'
 import type { Order, Invoice, ProductionRow, OperationRow } from '@/types'
@@ -29,21 +29,14 @@ interface KpiCardProps {
   sub?: string
 }
 
-// Picks a font size so a formatted value (usually a Rupiah string like
-// "Rp 18.400.000") has a real shot at fitting these narrow KPI cards.
-// Deliberately graduated in several steps rather than one cutoff — a
-// single threshold meant "long" values still landed on a size too big to
-// fit, and forcing a wrap with break-words at that size broke mid-digit
-// ("18.400.0" / "00") instead of at the space after "Rp". Sized so the
-// two normal-length buckets fit on ONE line, and wrapping (when it still
-// happens on longer values) only ever splits at that space.
-function kpiValueSizeClass(value: string | number): string {
-  const len = String(value).length
-  if (len > 16) return 'text-sm'
-  if (len > 12) return 'text-base'
-  if (len > 9)  return 'text-xl'
-  return 'text-3xl'
-}
+// One fixed size for every KPI card's value, regardless of how long the
+// formatted string is. A length-based graduated size (e.g. jumping a
+// whole tier between a 12-char and 13-char Rupiah string) made cards
+// showing the same kind of number — two cost figures a digit apart —
+// look inconsistent with each other for no real reason. Long values still
+// wrap safely: no break-words here (see below), so the worst case is a
+// clean two-line "Rp" / "18.400.000" split, never a break mid-digit.
+const KPI_VALUE_SIZE = 'text-2xl'
 
 function KpiCard({ label, value, icon: Icon, accent, sub }: KpiCardProps) {
   return (
@@ -77,10 +70,41 @@ function KpiCard({ label, value, icon: Icon, accent, sub }: KpiCardProps) {
             already puts a space between "Rp" and the number, so the
             worst case is a clean two-line "Rp" / "18.400.000" split,
             never a split inside the digits. */}
-        <p className={`font-bold tabular-nums leading-tight ${kpiValueSizeClass(value)} ${accent ? 'text-white' : 'text-navy-900'}`}>
+        <p className={`font-bold tabular-nums leading-tight ${KPI_VALUE_SIZE} ${accent ? 'text-white' : 'text-navy-900'}`}>
           {value}
         </p>
         {sub && <p className={`text-xs mt-1.5 ${accent ? 'text-navy-400' : 'text-slate-400'}`}>{sub}</p>}
+      </div>
+    </div>
+  )
+}
+
+// Two metrics stacked in one card instead of each claiming its own
+// KpiCard slot — used for Production + Operations Cost, which read fine
+// as a compact pair. Matches KpiCard's overall footprint (min-h-[160px])
+// so it still lines up with its row-mates; each row just gets half the
+// height and a smaller value size to fit two numbers instead of one.
+function StackedCostCard({ top, bottom }: { top: KpiCardProps; bottom: KpiCardProps }) {
+  return (
+    <div className="h-full rounded-2xl bg-white border border-slate-100 shadow-card min-h-[160px] min-w-0 flex flex-col divide-y divide-slate-100">
+      <StackedCostRow {...top} />
+      <StackedCostRow {...bottom} />
+    </div>
+  )
+}
+
+function StackedCostRow({ label, value, icon: Icon, sub }: KpiCardProps) {
+  return (
+    <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 truncate">{label}</span>
+        <div className="w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
+          <Icon className="w-3.5 h-3.5 text-slate-400" />
+        </div>
+      </div>
+      <div className="mt-1 min-w-0">
+        <p className="font-bold tabular-nums leading-tight text-lg text-navy-900">{value}</p>
+        {sub && <p className="text-[11px] text-slate-400 mt-0.5 truncate">{sub}</p>}
       </div>
     </div>
   )
@@ -92,7 +116,6 @@ export function DashboardPage() {
   const { data: deliveries  = [] } = deliveryHooks.useList()
   const { data: productions = [] } = productionHooks.useList()
   const { data: operations  = [] } = operationHooks.useList()
-  const { data: suppliers   = [] } = supplierHooks.useList()
   const { data: invoices      = [] } = invoiceHooks.useList()
 
   const safeInvoices      = Array.isArray(invoices)      ? invoices      : []
@@ -105,7 +128,6 @@ export function DashboardPage() {
   // to paid it shouldn't keep inflating this KPI.
   const unpaidInvoices = (safeInvoices as Invoice[]).filter(i => i.status !== 'paid')
   const totalAR       = unpaidInvoices.reduce((s, r) => s + (r.ar_receivable ?? 0), 0)
-  const overdueCount  = unpaidInvoices.filter(i => i.due_date && isPast(new Date(i.due_date))).length
   const totalProdCost = (safeProductions as ProductionRow[]).reduce((s, p) => s + (p.price * p.amount), 0)
   const totalOpsCost  = (safeOperations as OperationRow[]).reduce((s, o) => s + o.price, 0)
   const recentOrders  = (safeOrders as Order[]).slice(-5).reverse()
@@ -159,6 +181,12 @@ export function DashboardPage() {
     return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
   })
 
+  // Just the subset of arBreakdown that's actually overdue, for the
+  // sidebar card — same "unpaid + has a past due_date" definition as the
+  // Overdue KPI count above, so the two always agree. Oldest due date
+  // (longest overdue, most urgent) first.
+  const overdueInvoices = arBreakdown.filter(i => i.due_date && isPast(new Date(i.due_date)))
+
   // Per-order invoice status for the Recent Orders table — an order can
   // have 0, 1, or 2 invoices (DP/Pelunasan) now, each independently
   // paid/unpaid, so "is this order invoiced/paid" isn't a single field
@@ -179,7 +207,7 @@ export function DashboardPage() {
     <div className="p-6 space-y-6 max-w-[1400px]">
 
       {/* ── KPI row ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
         {/* AR spans 2 cols and is accented */}
         <div className="col-span-2 h-full">
           <KpiCard
@@ -190,16 +218,15 @@ export function DashboardPage() {
             sub="Total outstanding receivables"
           />
         </div>
-        <KpiCard
-          label="Overdue"
-          value={overdueCount}
-          icon={AlertTriangle}
-          sub="Unpaid past due date"
+        <KpiCard label="Orders"      value={orders.length}     icon={ShoppingBag} sub="Total orders" />
+        <KpiCard label="Deliveries"  value={deliveries.length} icon={Truck}       sub="Total deliveries" />
+        {/* Production + Operations stacked in one card rather than two
+            side-by-side cards — they're both "cost" figures and read
+            fine as a compact pair instead of each claiming a full slot. */}
+        <StackedCostCard
+          top={{ label: 'Production Cost', value: formatRp(totalProdCost), icon: Factory, sub: 'Materials purchased' }}
+          bottom={{ label: 'Operations Cost', value: formatRp(totalOpsCost), icon: Wrench, sub: 'Operational spend' }}
         />
-        <KpiCard label="Orders"          value={orders.length}       icon={ShoppingBag} sub="Total orders" />
-        <KpiCard label="Deliveries"      value={deliveries.length}   icon={Truck}       sub="Total deliveries" />
-        <KpiCard label="Production Cost" value={formatRp(totalProdCost)} icon={Factory} sub="Materials purchased" />
-        <KpiCard label="Operations Cost" value={formatRp(totalOpsCost)}  icon={Wrench}  sub="Operational spend" />
       </div>
 
       {/* ── Second row: recent orders + supplier count ───────── */}
@@ -265,7 +292,7 @@ export function DashboardPage() {
           </div>
         </div>
 
-        {/* Right column: this month's chart + suppliers + quick links */}
+        {/* Right column: this month's chart + overdue invoices + quick links */}
         <div className="flex flex-col gap-3">
           {/* Orders vs Costs — moved here from its own full-width row so
               the KPI cards above get the whole row to themselves. Same
@@ -294,16 +321,49 @@ export function DashboardPage() {
             />
           </div>
 
-          {/* Supplier count */}
+          {/* Overdue invoices — replaces the old static Suppliers count.
+              The Overdue KPI up top only shows a number with nowhere to
+              act on it; this gives the same count somewhere to go, most
+              urgent (oldest due date) first, so a click takes you
+              straight to the invoice instead of via the full list page. */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 fade-up delay-2">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Suppliers</span>
-              <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center">
-                <Users className="w-4 h-4 text-slate-400" />
+              <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Overdue Invoices</span>
+              <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center">
+                <AlertTriangle className="w-4 h-4 text-red-500" />
               </div>
             </div>
-            <p className="text-3xl font-bold text-navy-900 tabular-nums">{suppliers.length}</p>
-            <p className="text-xs text-slate-400 mt-1.5">Registered suppliers</p>
+            {overdueInvoices.length === 0 ? (
+              <div className="flex flex-col items-center py-6 text-slate-300">
+                <Receipt className="w-6 h-6 mb-1.5 opacity-40" />
+                <p className="text-xs text-slate-400">Nothing overdue</p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {overdueInvoices.slice(0, 4).map(inv => {
+                  const daysOverdue = differenceInDays(now, new Date(inv.due_date!))
+                  return (
+                    <button
+                      key={inv.id}
+                      onClick={() => navigate(`/invoice/${encodeURIComponent(inv.id)}`)}
+                      className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg text-left
+                                 hover:bg-slate-50 transition-colors"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-navy-900 truncate">{inv.kepada_yth}</span>
+                        <span className="block text-xs text-red-600">{daysOverdue}d overdue</span>
+                      </span>
+                      <span className="font-mono text-xs font-semibold text-navy-900 shrink-0">
+                        {formatRp(invoiceAmountDue(inv))}
+                      </span>
+                    </button>
+                  )
+                })}
+                {overdueInvoices.length > 4 && (
+                  <p className="text-xs text-slate-400 pt-1 px-2">+{overdueInvoices.length - 4} more</p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Quick links */}

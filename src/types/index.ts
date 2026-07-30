@@ -212,6 +212,18 @@ export interface ClientItemPrice {
   effective_date: string | null   // ISO date string, e.g. when the new price kicks in
 }
 
+// ─── Matches auth-service's dto/User.go (publicUser() shape) ────────────────
+// The auth service is a separate backend and owns the full User record
+// (password hash, lockout fields, etc.) — this is just the public subset it
+// actually returns to the frontend via /me and /login.
+export interface AuthUser {
+  id: number
+  email: string
+  name: string
+  role: string
+}
+ 
+
 // ─── Request / Create DTOs ────────────────────────────────────────────────────
 export type CreateOrderRequest = Order
 export type UpdateOrderRequest = Partial<CreateOrderRequest>
@@ -263,6 +275,9 @@ export type UpdateClientItemRequest = Partial<CreateClientItemRequest>
 
 export type CreateClientItemPriceRequest = Omit<ClientItemPrice, 'id'>
 export type UpdateClientItemPriceRequest = Partial<CreateClientItemPriceRequest>
+
+
+
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 export type PageName =
