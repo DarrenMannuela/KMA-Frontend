@@ -22,6 +22,22 @@ import type {
 // See vite.config.ts proxy config.
 // Port is 8000 (Go server) — not 8080.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Thrown by the response interceptor below for any failed request against
+// the main Go API (orders, items, invoices, etc). Mirrors AuthApiError's
+// shape (a `.status` field carrying the HTTP status) so callers — e.g.
+// OrdersPage's 409-on-duplicate-order-id handling — can branch on the
+// specific status instead of just getting an opaque Error with a message.
+export class ApiError extends Error {
+  status?: number
+
+  constructor(message: string, status?: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
 const http = axios.create({
   baseURL: '/api/v1',
   headers: { 'Content-Type': 'application/json' },
@@ -29,8 +45,9 @@ const http = axios.create({
 
 http.interceptors.response.use(
   (r) => r,
-  (e) => Promise.reject(new Error(
-    e.response?.data?.error ?? e.response?.data?.message ?? e.message ?? 'Error'
+  (e) => Promise.reject(new ApiError(
+    e.response?.data?.error ?? e.response?.data?.message ?? e.message ?? 'Error',
+    e.response?.status
   ))
 )
 

@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { ShoppingBag, Eye, RotateCcw, Building2, ArrowRight } from 'lucide-react'
 import { format } from 'date-fns'
+import toast from 'react-hot-toast'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField, UppercaseField } from '@/components/ui'
 import { orderHooks, clientHooks } from '@/hooks'
 import type { Order, CreateOrderRequest } from '@/types'
 import { useNavigate } from 'react-router-dom'
+import { ApiError } from '@/api'
 
 // ─── ID auto-numbering ────────────────────────────────────────────────────
 // Order IDs follow "NNN/KMA/YY" (e.g. "015/KMA/26"). For a brand new order
@@ -112,7 +114,21 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
         onSuccess: (newOrder) => {
           onClose()
           navigate(`/orders/${encodeURIComponent(newOrder.id)}`)
-        }
+        },
+        onError: (err) => {
+          // Two people can both load the "next" suggested ID before either
+          // submits — the backend is the real source of truth and rejects
+          // the second submit with 409 (see PostOrders). Rather than
+          // showing a raw/confusing failure, tell the user plainly what
+          // happened and hand them a fresh, still-open number so the only
+          // cost is one extra click, not a dead end.
+          if (err instanceof ApiError && err.status === 409) {
+            toast.error('That order number was just taken by someone else — grabbing you a new one.')
+            resetIdSuggestion()
+            return
+          }
+          toast.error('Could not create the order — please try again.')
+        },
       })
     }
   }
