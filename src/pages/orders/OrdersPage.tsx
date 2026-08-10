@@ -28,7 +28,7 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
   const create = orderHooks.useCreate()
   const update = orderHooks.useUpdate()
   const navigate = useNavigate()
-  const { data: orders = [] } = orderHooks.useList()
+  const { data: orders = [], refetch: refetchOrders } = orderHooks.useList()
   const { data: clients = [] } = clientHooks.useList()
 
   // Only auto-fill/auto-refresh the ID while the user hasn't typed their
@@ -89,9 +89,15 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
     setForm(prev => ({ ...prev, id: value }))
   }
 
-  const resetIdSuggestion = () => {
+  // Refetches before recomputing — our local `orders` cache can be stale
+  // by the time this runs (e.g. right after a 409, where a DIFFERENT
+  // client's order — the one that just caused the conflict — hasn't
+  // landed in our cache yet). Suggesting off stale data risked handing
+  // the user right back the same number that just collided.
+  const resetIdSuggestion = async () => {
     setIdTouched(false)
-    setForm(p => ({ ...p, id: suggestNextOrderId(orders) }))
+    const { data: freshOrders } = await refetchOrders()
+    setForm(p => ({ ...p, id: suggestNextOrderId(freshOrders ?? orders) }))
   }
 
   const idAlreadyExists = orders.some(o => o.id === form.id && o.id !== editing?.id)

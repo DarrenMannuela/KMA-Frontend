@@ -3,9 +3,10 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingBag, ListOrdered, FileText,
   Truck, PackageCheck, ScrollText, Factory, Users, Wrench,
-  Building2, Circle, ChevronDown,
+  Building2, Circle, ChevronDown, ShieldCheck,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
 
 type RouteStatus = 'live' | 'stub'
 
@@ -112,6 +113,8 @@ function NavGroupSection({ group }: { group: NavGroup }) {
 }
 
 export function Sidebar() {
+  const { user } = useAuth()
+
   return (
     <aside className="fixed top-0 left-0 h-screen w-[240px] bg-navy-950 sidebar-pattern flex flex-col z-30 shadow-sidebar">
       {/* Logo */}
@@ -140,6 +143,15 @@ export function Sidebar() {
           {/* Finances group */}
           <NavGroupSection group={GROUPS[1]} />
         </div>
+
+        {/* Admin-only: user management. Assumes useAuth()'s user has a
+            `role` field matching the Go backend ('admin' | 'staff') —
+            same assumption as Topbar's AccountMenu. */}
+        {user?.role === 'admin' && (
+          <div className="pt-2 mt-2 border-t border-navy-800 space-y-0.5">
+            <NavItemLink item={{ label: 'Users', path: '/admin/users', icon: ShieldCheck }} />
+          </div>
+        )}
       </nav>
 
       {/* Legend — dev-only, see SHOW_DEV_STATUS above */}

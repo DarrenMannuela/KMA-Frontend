@@ -27,7 +27,11 @@ export class AuthApiError extends Error {
   }
 }
 
-const authHttp = axios.create({
+// Exported so other admin-only API modules (e.g. usersApi.ts) hit the
+// same auth service through the same baseURL, CSRF header injection,
+// and error normalization — instead of each one reimplementing (and
+// risking drifting from) those details separately.
+export const authHttp = axios.create({
   baseURL: '/auth/api/v1/auth',
   headers: { 'Content-Type': 'application/json' },
   // Required so the browser sends/receives the session + CSRF cookies —

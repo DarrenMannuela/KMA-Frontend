@@ -60,10 +60,16 @@ function ItemForm({
     if (!item) return
     setCatalogueItemId(id)
     const price = latestPriceFor(id)
+    // Manual entry goes through UppercaseField before it ever reaches
+    // `form`; picking from the catalogue bypassed that and could leave
+    // item_name/size in whatever casing the catalogue record happened to
+    // have. Since the backend's dedupe-merge (idx_items_dedupe) is an
+    // exact string match, mismatched casing meant two visually-identical
+    // items could silently fail to merge into one row.
     setForm(p => ({
       ...p,
-      item_name: item.item_name,
-      size: item.size ?? '',
+      item_name: item.item_name.toUpperCase(),
+      size: (item.size ?? '').toUpperCase(),
       price: price ?? p.price,
     }))
   }

@@ -20,8 +20,10 @@ import { ClientDetailPage } from '@/pages/client/ClientDetailPage'
 import { ClientItemDetailPage } from '@/pages/client/ClientItemDetailPage'
 import { YearlyReportPage } from '@/pages/reports/YearlyReportPage'
 import { LoginPage } from '@/pages/auth/LoginPage'
+import { UsersPage } from '@/pages/users/UsersPage'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
+import { AdminRoute } from '@/components/auth/AdminRoute'
 
 // Print pages stay outside the Sidebar/Topbar chrome (unchanged from
 // before) — they're meant to be a clean printable page, not the app
@@ -50,6 +52,7 @@ function AppShell() {
             <Route path="/clients/:id"                    element={<ClientDetailPage />} />
             <Route path="/clients/:clientId/items/:itemId" element={<ClientItemDetailPage />} />
             <Route path="/reports/yearly"                   element={<YearlyReportPage />} />
+            <Route path="/admin/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
           </Routes>
         </main>
       </div>

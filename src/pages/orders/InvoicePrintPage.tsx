@@ -448,7 +448,12 @@ export function InvoicePrintPage() {
               {invoice.down_payment != null && invoice.down_payment > 0 ? (
                 <tr onClick={() => toggleRowHighlight('dp')} className="cursor-pointer print:cursor-default">
                   <td style={{ padding: '6px 8px', textAlign: 'right', borderTop: '1px solid #ccc' }} colSpan={3}>
-                    {invoice.due_date ? `LUNAS - ${format(new Date(invoice.due_date), 'd MMMM yyyy').toUpperCase()}` : 'LUNAS'}
+                    {/* "LUNAS" (paid off) should reflect paid_date, not
+                        due_date — this previously read due_date, which
+                        would print a due date next to a "paid" label.
+                        PLEASE VERIFY against a real printed kwitansi
+                        before relying on this. */}
+                    {invoice.paid_date ? `LUNAS - ${format(new Date(invoice.paid_date), 'd MMMM yyyy').toUpperCase()}` : 'LUNAS'}
                   </td>
                   <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
                   <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
@@ -479,9 +484,14 @@ export function InvoicePrintPage() {
               {/* Pelunasan row — same click-to-override behavior as DP above. */}
               <tr onClick={() => toggleRowHighlight('pelunasan')} className="cursor-pointer print:cursor-default">
                 <td style={{ padding: '6px 8px', textAlign: 'right' }} colSpan={3}>
+                  {/* Same fix as the D/P row above: "LUNAS" → paid_date,
+                      "J/T" (jatuh tempo = due date) → due_date. Both were
+                      previously reading the other field. PLEASE VERIFY
+                      against a real printed kwitansi before relying on
+                      this. */}
                   {isFullInvoice
-                    ? (invoice.due_date ? `LUNAS - ${format(new Date(invoice.due_date), 'd MMMM yyyy').toUpperCase()}` : 'LUNAS')
-                    : (invoice.paid_date ? `J/T : ${format(new Date(invoice.paid_date), 'd MMMM yyyy').toUpperCase()}` : '')}
+                    ? (invoice.paid_date ? `LUNAS - ${format(new Date(invoice.paid_date), 'd MMMM yyyy').toUpperCase()}` : 'LUNAS')
+                    : (invoice.due_date ? `J/T : ${format(new Date(invoice.due_date), 'd MMMM yyyy').toUpperCase()}` : '')}
                 </td>
                 <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
                 <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>

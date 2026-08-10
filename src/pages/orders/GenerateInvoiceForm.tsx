@@ -157,7 +157,13 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
     ? Math.min(alreadyPaidAmount, form.total)
     : Math.round(form.total * (dpPercentNum / 100))
   const remaining = form.total - downPayment
-  const ar = remaining - (Number(form.discount) ?? 0)
+  // A discount bigger than what's left to collect (or a shrunken order
+  // total after the D/P was already raised) would otherwise print a
+  // negative "amount due" with no warning — clamp to 0 and flag it
+  // instead of silently showing a number that doesn't make sense.
+  const arRaw = remaining - (Number(form.discount) ?? 0)
+  const ar = Math.max(0, arRaw)
+  const discountExceedsRemaining = arRaw < 0
 
   // form.total was previously set only once, in useState's initializer —
   // which meant if this form auto-opened (e.g. via the pencil-icon deep
@@ -436,6 +442,11 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
           <FormField label="Discount (Rp)">
             <input className="field font-mono" type="text" inputMode="numeric"
               value={form.discount ? formatThousands(String(form.discount)) : ''} onChange={setCommaNum('discount')} />
+            {discountExceedsRemaining && (
+              <p className="text-xs text-red-500 mt-1">
+                Discount is larger than the {formatRp(remaining)} left to collect — Pelunasan (AR) has been floored to Rp 0.
+              </p>
+            )}
           </FormField>
         </div>
         <div className="bg-slate-50 rounded-lg px-4 py-3 mt-3 space-y-1.5 text-sm">
