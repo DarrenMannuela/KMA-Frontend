@@ -20,10 +20,12 @@ import { ClientDetailPage } from '@/pages/client/ClientDetailPage'
 import { ClientItemDetailPage } from '@/pages/client/ClientItemDetailPage'
 import { YearlyReportPage } from '@/pages/reports/YearlyReportPage'
 import { LoginPage } from '@/pages/auth/LoginPage'
+import { ChangePasswordPage } from '@/pages/auth/ChangePasswordPage'
 import { UsersPage } from '@/pages/users/UsersPage'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { AdminRoute } from '@/components/auth/AdminRoute'
+import { MustChangePasswordRoute } from '@/components/auth/MustChangePasswordRoute'
 
 // Print pages stay outside the Sidebar/Topbar chrome (unchanged from
 // before) — they're meant to be a clean printable page, not the app
@@ -67,6 +69,13 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
 
+          {/* Reached from MustChangePasswordRoute below (or directly, by
+              a user who bookmarks it). Deliberately only wrapped in
+              ProtectedRoute — NOT in MustChangePasswordRoute itself, or
+              a user who still needs to change their password would be
+              redirected right back here in a loop. */}
+          <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
+
           {/* Print routes: no sidebar/topbar chrome, but still require
               a session — someone printing an invoice is still a
               logged-in staff member. */}
@@ -76,8 +85,20 @@ export default function App() {
 
           {/* Everything else lives behind the app shell, and the whole
               shell is gated by one ProtectedRoute rather than wrapping
-              each inner <Route> individually. */}
-          <Route path="/*" element={<ProtectedRoute><AppShell /></ProtectedRoute>} />
+              each inner <Route> individually. MustChangePasswordRoute
+              sits just inside that: anyone with a still-temporary
+              password gets bounced to /change-password before they can
+              reach any page in the shell. */}
+          <Route
+            path="/*"
+            element={
+              <ProtectedRoute>
+                <MustChangePasswordRoute>
+                  <AppShell />
+                </MustChangePasswordRoute>
+              </ProtectedRoute>
+            }
+          />
         </Routes>
 
         <Toaster

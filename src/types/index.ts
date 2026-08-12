@@ -221,6 +221,10 @@ export interface AuthUser {
   email: string
   name: string
   role: string
+  // True when the account still has an admin-set password the user
+  // hasn't replaced yet. Frontend routing (see MustChangePasswordRoute)
+  // uses this to force a change-password step before the app shell.
+  must_change_password: boolean
 }
  
 

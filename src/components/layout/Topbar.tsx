@@ -99,10 +99,13 @@ export function Topbar() {
   const { pathname } = useLocation()
   const title = TITLES[pathname] ?? 'KMA'
 
-  // Ping the supplier endpoint to check if backend is up
+  // Ping the dedicated health endpoint — deliberately not an
+  // auth-gated route like /api/v1/supplier, so this reflects whether
+  // the backend process is actually up, not whether the current
+  // session happens to be valid right now.
   const { data: isUp } = useQuery({
     queryKey: ['health'],
-    queryFn: () => axios.get('/api/v1/supplier').then(() => true).catch(() => false),
+    queryFn: () => axios.get('/api/v1/healthz').then(() => true).catch(() => false),
     refetchInterval: 30_000,
     staleTime: 15_000,
   })
