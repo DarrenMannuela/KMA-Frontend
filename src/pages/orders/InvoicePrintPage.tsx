@@ -15,6 +15,15 @@ import { useRekening } from '@/utils/RekeningStore'
 const PAGE_HEIGHT_MM = 297
 const MM_TO_PX = 96 / 25.4
 const PAGE_HEIGHT_PX = PAGE_HEIGHT_MM * MM_TO_PX
+// Screen and print media don't always agree to the pixel on how tall a page
+// is (font hinting/rounding differ slightly between the two), so a document
+// that just barely measures as "fits on one page" on screen has occasionally
+// been overflowing to a mostly-blank second page once actually printed. This
+// margin gives up a little vertical room on purpose so the on-screen fit
+// decision — and the "Halaman X dari Y" counter driven by it — errs toward
+// matching what actually comes out of the printer/PDF, not what fits in the
+// browser tab.
+const PAGE_FIT_SAFETY_PX = 6
 const BASE_FONT_PX = 11
 const MIN_FONT_PX = 9
 const MIN_SCALE = MIN_FONT_PX / BASE_FONT_PX
@@ -91,13 +100,21 @@ export function InvoicePrintPage() {
   }
 
   // Fit-to-page: contentRef is the actual invoice sheet. We inflate its
-  // CSS width by 1/scale before shrinking it back down with
-  // transform:scale(scale) — the standard "zoom out to fit" trick, so the
-  // whole page (text, spacing, everything) shrinks together instead of
-  // just the font, while still rendering edge-to-edge at 210mm rather than
-  // leaving a gap on the right. wrapperHeightPx holds the actual space the
-  // scaled-down sheet occupies, so the surrounding layout — and print
-  // pagination — reflows correctly around it.
+  // CSS width by 1/scale before shrinking it back down with the CSS `zoom`
+  // property — the whole page (text, spacing, everything) shrinks together
+  // instead of just the font, while still rendering edge-to-edge at 210mm
+  // rather than leaving a gap on the right. wrapperHeightPx holds the
+  // actual space the scaled-down sheet occupies, so the surrounding
+  // layout — and print pagination — reflows correctly around it.
+  //
+  // Deliberately `zoom`, not `transform: scale()`: a transform is a
+  // paint-time effect that never changes what the browser considers the
+  // element's actual layout size, so Chrome's print engine was deciding
+  // where to put page breaks based on the *unscaled* height — meaning a
+  // "shrunk to fit one page" invoice could still get physically paginated
+  // as if it were its original, taller size, splitting it across two pages
+  // for no visible reason. `zoom` genuinely resizes the layout box, so
+  // what fits on screen is what the print engine sees as fitting too.
   const contentRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
   const [wrapperHeightPx, setWrapperHeightPx] = useState(PAGE_HEIGHT_PX)
@@ -127,16 +144,17 @@ export function InvoicePrintPage() {
 
   // Re-measures after every render (deliberately no dependency array) so
   // it reacts to anything that can change content height — item count,
-  // notes, the editable bank-account inputs. Each pass compares the
-  // natural (pre-transform) height against one page and either converges
-  // (change too small to matter) or nudges scale again; capped at a few
-  // attempts so it can't oscillate forever if something keeps changing
-  // height on every render.
+  // notes, the editable bank-account inputs. scrollHeight reflects
+  // whatever zoom level is CURRENTLY applied, so we divide that back out
+  // to get the natural (zoom:1) height before deciding how much further
+  // to shrink. Each pass either converges (change too small to matter) or
+  // nudges scale again; capped at a few attempts so it can't oscillate
+  // forever if something keeps changing height on every render.
   useLayoutEffect(() => {
     if (!contentRef.current || !invoice) return
     if (convergeAttempts.current > 6) return
-    const natural = contentRef.current.scrollHeight
-    const needed = PAGE_HEIGHT_PX / natural
+    const natural = contentRef.current.scrollHeight / scale
+    const needed = (PAGE_HEIGHT_PX - PAGE_FIT_SAFETY_PX) / natural
     const nextScale = Math.min(1, Math.max(needed, MIN_SCALE))
     const nextWrapperHeight = natural * nextScale
     if (Math.abs(nextScale - scale) > 0.002) {
@@ -148,7 +166,7 @@ export function InvoicePrintPage() {
     }
   })
 
-  const spillsToSecondPage = scale <= MIN_SCALE + 0.002 && wrapperHeightPx > PAGE_HEIGHT_PX + 1
+  const spillsToSecondPage = scale <= MIN_SCALE + 0.002 && wrapperHeightPx > PAGE_HEIGHT_PX - PAGE_FIT_SAFETY_PX + 1
 
   if (invoiceLoading) return <div className="p-8 text-slate-400">Loading…</div>
   if (!invoice) return <div className="p-8 text-red-400">Invoice not found.</div>
@@ -241,14 +259,27 @@ export function InvoicePrintPage() {
             id="invoice"
             className="bg-white shadow-lg print:shadow-none"
             style={{
-              width: `${100 / scale}%`,
+              // border-box is essential here: minHeight (297mm) and width
+              // (~210mm) are meant to describe the OUTER size of the A4
+              // sheet. Without border-box, the browser adds the vertical
+              // padding (20mm + 15mm) on TOP of minHeight, making the
+              // sheet's real minimum height 332mm — already taller than a
+              // physical A4 page before a single line of content is drawn,
+              // which guaranteed a sliver of overflow onto an almost-empty
+              // second page on every invoice, however short.
+              boxSizing: 'border-box',
+              // Same "inflate then shrink back to 210mm" trick as before,
+              // just expressed for zoom instead of transform: zoom shrinks
+              // width along with everything else, so without this the
+              // sheet would render narrower than 210mm and leave a blank
+              // strip down the right edge once zoomed out.
+              width: `${210 / scale}mm`,
               minHeight: '297mm',
               padding: '20mm 20mm 15mm 20mm',
               fontFamily: 'Arial, sans-serif',
               fontSize: '11px',
               color: '#000',
-              transform: `scale(${scale})`,
-              transformOrigin: 'top left',
+              zoom: scale,
             }}
           >
           {/* Header */}
@@ -505,7 +536,7 @@ export function InvoicePrintPage() {
           </table>
 
           {/* Notes */}
-          <div style={{ marginTop: '24px', fontSize: '11px' }}>
+          <div style={{ marginTop: '24px', fontSize: '11px', pageBreakInside: 'avoid' }}>
             <div style={{ fontWeight: 'bold', textDecoration: 'underline', marginBottom: '4px' }}>CATATAN :</div>
             <ol style={{ margin: 0, paddingLeft: '16px', lineHeight: '1.8' }}>
               <li>Barang akan di proses setelah mock up sudah di ACC dan saat D/P 50% sudah masuk</li>
@@ -533,54 +564,81 @@ export function InvoicePrintPage() {
             </ol>
           </div>
 
-          {/* Signature block */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', marginTop: '40px', fontSize: '11px' }}>
-            <div>
-              <div style={{ fontWeight: 'bold', marginBottom: '60px' }}>ASLI INVOICE DI TERIMA OLEH</div>
-              <div style={{ borderTop: '1px solid #000', paddingTop: '4px', width: '200px' }} />
-              <div>TANDA TANGAN</div>
-              <div style={{ marginTop: '4px' }}>NAMA JELAS</div>
-              <div>JABATAN</div>
+          {/* Page 1 counter — only shown once we know the document is
+              spilling onto a second physical page; a single-page invoice
+              doesn't need "Halaman 1 dari 1" cluttering the bottom. */}
+          {spillsToSecondPage && (
+            <div style={{ textAlign: 'right', fontSize: '9px', color: '#94a3b8', marginTop: '16px' }}>
+              Halaman 1 dari 2
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontWeight: 'bold', marginBottom: '60px' }}>DI BUAT OLEH</div>
-              <div style={{ borderTop: '1px solid #000', paddingTop: '4px', display: 'inline-block', width: '200px' }} />
+          )}
+
+          {/* Signature block + Copy labels + Footer are grouped into a
+              single page-break-inside:avoid unit so they always move
+              together — previously these had no page-break hints at all,
+              so a print that ran just past one page could split mid-block
+              (e.g. the "Asli / Copy 1 / Copy 2" list cut after its first
+              row, with the rest stranded alone on page 2). break-inside is
+              enough on its own to push the whole group to the next page
+              when it doesn't fit — deliberately NOT forcing a break here
+              regardless, since that wasted the remaining space on page 1
+              even when the group would have comfortably fit there. */}
+          <div style={{ pageBreakInside: 'avoid' }}>
+            {/* Signature block */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', marginTop: '40px', fontSize: '11px' }}>
               <div>
-                <input
-                  ref={signatoryName.ref}
-                  value={signatoryName.value}
-                  onChange={signatoryName.onChange}
-                  style={{ border: 'none', background: 'transparent', font: 'inherit', textAlign: 'right', width: '200px', padding: 0 }}
-                />
+                <div style={{ fontWeight: 'bold', marginBottom: '60px' }}>ASLI INVOICE DI TERIMA OLEH</div>
+                <div style={{ borderTop: '1px solid #000', paddingTop: '4px', width: '200px' }} />
+                <div>TANDA TANGAN</div>
+                <div style={{ marginTop: '4px' }}>NAMA JELAS</div>
+                <div>JABATAN</div>
               </div>
-              <div>
-                <input
-                  ref={signatoryTitle.ref}
-                  value={signatoryTitle.value}
-                  onChange={signatoryTitle.onChange}
-                  style={{ border: 'none', background: 'transparent', font: 'inherit', textAlign: 'right', width: '200px', padding: 0 }}
-                />
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '60px' }}>DI BUAT OLEH</div>
+                <div style={{ borderTop: '1px solid #000', paddingTop: '4px', display: 'inline-block', width: '200px' }} />
+                <div>
+                  <input
+                    ref={signatoryName.ref}
+                    value={signatoryName.value}
+                    onChange={signatoryName.onChange}
+                    style={{ border: 'none', background: 'transparent', font: 'inherit', textAlign: 'right', width: '200px', padding: 0 }}
+                  />
+                </div>
+                <div>
+                  <input
+                    ref={signatoryTitle.ref}
+                    value={signatoryTitle.value}
+                    onChange={signatoryTitle.onChange}
+                    style={{ border: 'none', background: 'transparent', font: 'inherit', textAlign: 'right', width: '200px', padding: 0 }}
+                  />
+                </div>
+                <div style={{ fontWeight: 'bold' }}>KREASI MAKMUR ABADI</div>
               </div>
-              <div style={{ fontWeight: 'bold' }}>KREASI MAKMUR ABADI</div>
             </div>
-          </div>
 
-          {/* Copy labels */}
-          <div style={{ marginTop: '24px', fontSize: '10px' }}>
-            {[['Asli', 'Client'], ['Copy 1', 'KMA'], ['Copy 2', 'Produksi KMA']].map(([label, value]) => (
-              <div key={label} style={{ display: 'grid', gridTemplateColumns: '60px 12px 1fr', marginBottom: '2px' }}>
-                <span style={{ color: '#c0392b' }}>{label}</span>
-                <span>:</span>
-                <span style={{ color: '#1a56db' }}>{value}</span>
-              </div>
-            ))}
-          </div>
+            {/* Copy labels */}
+            <div style={{ marginTop: '24px', fontSize: '10px' }}>
+              {[['Asli', 'Client'], ['Copy 1', 'KMA'], ['Copy 2', 'Produksi KMA']].map(([label, value]) => (
+                <div key={label} style={{ display: 'grid', gridTemplateColumns: '60px 12px 1fr', marginBottom: '2px' }}>
+                  <span style={{ color: '#c0392b' }}>{label}</span>
+                  <span>:</span>
+                  <span style={{ color: '#1a56db' }}>{value}</span>
+                </div>
+              ))}
+            </div>
 
-          {/* Footer */}
-          <div style={{ textAlign: 'center', marginTop: '32px', paddingTop: '12px', borderTop: '1px solid #ccc', fontSize: '10px' }}>
-            <div>MUARA KARANG BLOK 9 SELATAN NO. 52 - 55 , JAKARTA UTARA 14450</div>
-            <div>TELP. 021.300.253.99 / Hp. 0811.857.372</div>
-            <div>Email : fifi67@yahoo.com</div>
+            {/* Footer */}
+            <div style={{ textAlign: 'center', marginTop: '32px', paddingTop: '12px', borderTop: '1px solid #ccc', fontSize: '10px' }}>
+              <div>MUARA KARANG BLOK 9 SELATAN NO. 52 - 55 , JAKARTA UTARA 14450</div>
+              <div>TELP. 021.300.253.99 / Hp. 0811.857.372</div>
+              <div>Email : fifi67@yahoo.com</div>
+            </div>
+
+            {/* Page counter — "Halaman 1 dari 1" for the common single-page
+                case, "Halaman 2 dari 2" once it's spilled to a second page. */}
+            <div style={{ textAlign: 'right', fontSize: '9px', color: '#94a3b8', marginTop: '10px' }}>
+              {spillsToSecondPage ? 'Halaman 2 dari 2' : 'Halaman 1 dari 1'}
+            </div>
           </div>
           </div>
         </div>
@@ -594,7 +652,26 @@ export function InvoicePrintPage() {
           .print\\:shadow-none { box-shadow: none !important; }
           .print\\:p-0 { padding: 0 !important; }
           @page { size: A4; margin: 0; }
-          
+
+          /* Without this, browsers silently drop background colors when
+             printing/exporting to PDF unless the person has manually
+             ticked "Background graphics" in the print dialog — so the row
+             highlighting (the D/P vs Pelunasan color, the KETERANGAN
+             header fill) would print as plain white even though it's
+             clearly colored on screen. Force it on regardless of that
+             setting. */
+          #invoice, #invoice * {
+            print-color-adjust: exact !important;
+            -webkit-print-color-adjust: exact !important;
+          }
+
+          /* Belt-and-suspenders alongside the pageBreakInside:'avoid' on the
+             signature/copy/footer block above: also stop any individual
+             table row (an item row, the TOTAL row, the D/P/Pelunasan rows)
+             from being sliced in half by a page break on a very long
+             invoice. */
+          #invoice tr { page-break-inside: avoid; }
+
           /* ← Add these to hide sidebar and topbar when printing */
           aside { display: none !important; }
           header { display: none !important; }
