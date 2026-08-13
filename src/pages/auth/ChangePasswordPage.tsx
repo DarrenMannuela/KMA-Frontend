@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { KeyRound, Lock, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { KeyRound, Lock, Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { authApi, AuthApiError } from '@/api/authApi'
+import { useAuth } from '@/contexts/AuthContext'
 
 // Reached via MustChangePasswordRoute whenever the current user's account
 // still carries an admin-set temporary password. ChangePassword on the
@@ -12,6 +13,13 @@ import { authApi, AuthApiError } from '@/api/authApi'
 // user back to /login to re-authenticate with their new password.
 export function ChangePasswordPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+
+  // Reached two ways: forced (must_change_password is true — no way
+  // out, the account can't be used until this is done) or voluntary
+  // (clicked "Change password" from the account menu — should be
+  // cancelable). Only show a way back for the voluntary case.
+  const isForced = user?.must_change_password ?? false
 
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -45,13 +53,27 @@ export function ChangePasswordPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <div className="w-full max-w-sm">
+        {!isForced && (
+          <button
+            onClick={() => navigate('/')}
+            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-navy-700 transition-colors mb-6"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+        )}
+
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-xl bg-navy-900 flex items-center justify-center mx-auto mb-4">
             <KeyRound className="w-5 h-5 text-gold-400" />
           </div>
-          <h1 className="text-xl font-bold text-navy-900">Set a new password</h1>
+          <h1 className="text-xl font-bold text-navy-900">
+            {isForced ? 'Set a new password' : 'Change your password'}
+          </h1>
           <p className="text-sm text-slate-400 mt-1">
-            You're signing in with a temporary password — choose one only you know before continuing.
+            {isForced
+              ? "You're signing in with a temporary password — choose one only you know before continuing."
+              : 'Enter your current password and choose a new one.'}
           </p>
         </div>
 
@@ -61,7 +83,7 @@ export function ChangePasswordPage() {
         >
           <div>
             <label htmlFor="current" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">
-              Temporary password
+              {isForced ? 'Temporary password' : 'Current password'}
             </label>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -74,7 +96,7 @@ export function ChangePasswordPage() {
                 onChange={e => setCurrentPassword(e.target.value)}
                 className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 text-sm text-navy-900
                            focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors"
-                placeholder="What was shared with you"
+                placeholder={isForced ? 'What was shared with you' : 'Your current password'}
               />
             </div>
           </div>
