@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, Fragment } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Plus, FileText, Copy, Pencil, Building2, PackageSearch } from 'lucide-react'
+import { ArrowLeft, Plus, FileText, Copy, Pencil, Building2, PackageSearch, ChevronDown, ChevronRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { FormField, formatRp, UppercaseField } from '@/components/ui'
 import { orderHooks, itemHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
@@ -10,6 +10,43 @@ import type { Item, CreateItemRequest } from '@/types'
 import { GenerateInvoiceForm } from './GenerateInvoiceForm'
 import { Modal } from '@/components/ui/Modal'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
+
+// Same caret-jump problem as the uppercase fields elsewhere (see
+// InvoicePrintPage.tsx's useUppercaseField): re-rendering a controlled
+// input with a freshly-computed string on every keystroke resets the caret
+// to the end unless something restores it. Formatted numbers have it worse
+// than a plain uppercase transform, because formatThousands can also
+// insert/remove a thousands separator on the very keystroke that changed
+// the digit next to it — so the caret can't just be put back at "the same
+// index", the separators around it may have shifted. What's stable across
+// a reformat is how many DIGITS sit to the left of the caret, so that's
+// what gets captured and restored instead of a raw character offset.
+function useFormattedNumberField(value: number, onValueChange: (n: number) => void) {
+  const ref = useRef<HTMLInputElement>(null)
+  const digitsBeforeCaret = useRef<number | null>(null)
+  const display = value ? formatThousands(String(value)) : ''
+
+  useLayoutEffect(() => {
+    if (!ref.current || digitsBeforeCaret.current == null) return
+    let digits = 0
+    let pos = display.length
+    for (let i = 0; i < display.length; i++) {
+      if (/\d/.test(display[i])) digits++
+      if (digits === digitsBeforeCaret.current) { pos = i + 1; break }
+    }
+    if (digitsBeforeCaret.current === 0) pos = 0
+    ref.current.setSelectionRange(pos, pos)
+  }, [display])
+
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value
+    const caretPos = e.target.selectionStart ?? raw.length
+    digitsBeforeCaret.current = (raw.slice(0, caretPos).match(/\d/g) ?? []).length
+    onValueChange(Number(stripCommas(raw)) || 0)
+  }
+
+  return { ref, display, onChange }
+}
 
 function ItemForm({
   orderId,
@@ -75,6 +112,7 @@ function ItemForm({
   }
 
   const subTotal = form.amount * form.price
+  const priceField = useFormattedNumberField(form.price, price => setForm(p => ({ ...p, price })))
 
   const handleSubmit = () => {
     // Size is sent as '' rather than null when blank — SQLite treats every
@@ -127,13 +165,27 @@ function ItemForm({
             onChange={v => setForm(p => ({ ...p, size: v }))} />
         </FormField>
         <FormField label="Qty" required>
-          <input className="field" type="number" min={1} value={form.amount || ''}
-            onChange={e => setForm(p => ({ ...p, amount: Number(e.target.value) }))} />
+          {/* Qty counts whole items. type="number" only blocks keyboard
+              input, not paste/drag-drop/IME text, so a pasted "12abc" could
+              still land in the field. Filtering to digits-only in onChange
+              closes that gap regardless of how the character got in. */}
+          <input
+            className="field"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={form.amount || ''}
+            onChange={e => {
+              const digits = e.target.value.replace(/\D/g, '')
+              setForm(p => ({ ...p, amount: digits === '' ? 0 : Math.trunc(Number(digits)) }))
+            }}
+          />
         </FormField>
         <FormField label="Unit Price (Rp)" required>
           <input className="field font-mono" type="text" inputMode="numeric"
-            value={form.price ? formatThousands(String(form.price)) : ''}
-            onChange={e => setForm(p => ({ ...p, price: Number(stripCommas(e.target.value)) || 0 }))} />
+            ref={priceField.ref}
+            value={priceField.display}
+            onChange={priceField.onChange} />
         </FormField>
       </div>
       <div className="bg-slate-50 rounded-lg px-4 py-3 flex justify-between">
@@ -200,6 +252,37 @@ export function OrderDetailPage() {
   }, [location.state])
 
   const total = orderItems.reduce((s, i) => s + i.sub_total, 0)
+
+  // Group rows by item_name — e.g. 5 "KEMEJA SERVER" rows (one per size)
+  // collapse into a single dropdown entry instead of flooding the table.
+  // A group of exactly one item renders as a plain flat row (no
+  // chevron/dropdown affordance — nothing to collapse). Preserves each
+  // name's first-appearance order rather than alphabetizing, so the list
+  // still reads in the order items were added.
+  const itemGroups: { name: string; items: Item[] }[] = []
+  const groupIndex = new Map<string, number>()
+  for (const item of orderItems) {
+    const idx = groupIndex.get(item.item_name)
+    if (idx === undefined) {
+      groupIndex.set(item.item_name, itemGroups.length)
+      itemGroups.push({ name: item.item_name, items: [item] })
+    } else {
+      itemGroups[idx].items.push(item)
+    }
+  }
+
+  // Collapsed by default — expanding is opt-in per group, keyed by
+  // item_name. Only matters for groups with 2+ items; single-item groups
+  // never look at this since they don't render a toggle at all.
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const toggleGroup = (name: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
 
   const openAdd = () => {
     setEditing(null)
@@ -283,10 +366,18 @@ export function OrderDetailPage() {
             />
           </div>
         )}
-        <div>
+        {/* Item list scrolls on its own once it grows past a comfortable
+            height — previously every item pushed the Total row further
+            down the page with it, so a 12-item order buried the total off
+            the visible screen. Capping the table at a fixed height and
+            scrolling *inside* it keeps Total pinned directly under the
+            list at all times, however many items there are. The header
+            row stays sticky within that scroll area so column labels don't
+            scroll away with row 1. */}
+        <div className="max-h-[420px] overflow-y-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs text-slate-400 uppercase border-b border-slate-100">
+              <tr className="text-xs text-slate-400 uppercase border-b border-slate-100 sticky top-0 bg-white z-10">
                 <th className="text-left p-4">Item</th>
                 <th className="text-left p-4">Size</th>
                 <th className="text-right p-4">Qty</th>
@@ -298,51 +389,122 @@ export function OrderDetailPage() {
             <tbody>
               {orderItems.length === 0 ? (
                 <tr><td colSpan={6} className="text-center text-slate-400 py-8">No items yet — add one above</td></tr>
-              ) : orderItems.map(item => (
-                <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50">
-                  <td className="p-4 font-medium">{item.item_name}</td>
-                  <td className="p-4">{item.size ?? '—'}</td>
-                  <td className="p-4 text-right">{item.amount}</td>
-                  <td className="p-4 text-right font-mono">{formatRp(item.price)}</td>
-                  <td className="p-4 text-right font-mono font-semibold">{formatRp(item.sub_total)}</td>
-                  <td className="p-4 text-right">
-                    <div className="flex items-center justify-end gap-3">
-                      <button
-                        className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1"
-                        onClick={() => openDuplicate(item)}
-                        title="Duplicate item"
-                      >
-                        <Copy size={12} /> Copy
-                      </button>
-                      <button
-                        className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1"
-                        onClick={() => openEdit(item)}
-                        title="Edit item"
-                      >
-                        <Pencil size={12} /> Edit
-                      </button>
-                      <button
-                        className="text-slate-400 hover:text-red-500 text-xs"
-                        onClick={() => del.mutate(item.id)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              ) : itemGroups.map(group => {
+                // A single-size item (the common case for one-off items) —
+                // no size variants to collapse, so it's just a plain row,
+                // same as before grouping existed.
+                if (group.items.length === 1) {
+                  const item = group.items[0]
+                  return (
+                    <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="p-4 font-medium">{item.item_name}</td>
+                      <td className="p-4">{item.size ?? '—'}</td>
+                      <td className="p-4 text-right">{item.amount}</td>
+                      <td className="p-4 text-right font-mono">{formatRp(item.price)}</td>
+                      <td className="p-4 text-right font-mono font-semibold">{formatRp(item.sub_total)}</td>
+                      <td className="p-4 text-right">
+                        <div className="flex items-center justify-end gap-3">
+                          <button
+                            className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1"
+                            onClick={() => openDuplicate(item)}
+                            title="Duplicate item"
+                          >
+                            <Copy size={12} /> Copy
+                          </button>
+                          <button
+                            className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1"
+                            onClick={() => openEdit(item)}
+                            title="Edit item"
+                          >
+                            <Pencil size={12} /> Edit
+                          </button>
+                          <button
+                            className="text-slate-400 hover:text-red-500 text-xs"
+                            onClick={() => del.mutate(item.id)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                }
+
+                // Multiple sizes of the same item — collapse into one
+                // dropdown row. Header shows the combined Qty/Subtotal
+                // across every size; Price only shows a value when every
+                // size in the group actually shares one (the common case)
+                // — otherwise it's left blank rather than showing a
+                // misleading single number, since the per-size prices are
+                // visible once expanded anyway.
+                const groupQty = group.items.reduce((s, i) => s + i.amount, 0)
+                const groupSubtotal = group.items.reduce((s, i) => s + i.sub_total, 0)
+                const uniquePrices = new Set(group.items.map(i => i.price))
+                const expanded = expandedGroups.has(group.name)
+
+                return (
+                  <Fragment key={group.name}>
+                    <tr
+                      className="border-b border-slate-50 hover:bg-slate-50 cursor-pointer"
+                      onClick={() => toggleGroup(group.name)}
+                    >
+                      <td className="p-4 font-medium">
+                        <div className="flex items-center gap-1.5">
+                          {expanded ? <ChevronDown size={14} className="text-slate-400 shrink-0" /> : <ChevronRight size={14} className="text-slate-400 shrink-0" />}
+                          {group.name}
+                        </div>
+                      </td>
+                      <td className="p-4 text-slate-400 text-xs">{group.items.length} sizes</td>
+                      <td className="p-4 text-right">{groupQty}</td>
+                      <td className="p-4 text-right font-mono">{uniquePrices.size === 1 ? formatRp(group.items[0].price) : '—'}</td>
+                      <td className="p-4 text-right font-mono font-semibold">{formatRp(groupSubtotal)}</td>
+                      <td className="p-4" />
+                    </tr>
+                    {expanded && group.items.map(item => (
+                      <tr key={item.id} className="border-b border-slate-50 bg-slate-50/60 hover:bg-slate-100">
+                        <td className="p-4 pl-9 text-slate-400 text-xs">↳</td>
+                        <td className="p-4">{item.size ?? '—'}</td>
+                        <td className="p-4 text-right">{item.amount}</td>
+                        <td className="p-4 text-right font-mono">{formatRp(item.price)}</td>
+                        <td className="p-4 text-right font-mono font-semibold">{formatRp(item.sub_total)}</td>
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-3" onClick={e => e.stopPropagation()}>
+                            <button
+                              className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1"
+                              onClick={() => openDuplicate(item)}
+                              title="Duplicate item"
+                            >
+                              <Copy size={12} /> Copy
+                            </button>
+                            <button
+                              className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1"
+                              onClick={() => openEdit(item)}
+                              title="Edit item"
+                            >
+                              <Pencil size={12} /> Edit
+                            </button>
+                            <button
+                              className="text-slate-400 hover:text-red-500 text-xs"
+                              onClick={() => del.mutate(item.id)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                )
+              })}
             </tbody>
-            {orderItems.length > 0 && (
-            <tfoot className="sticky bottom-0">
-              <tr className="bg-navy-900 text-white">
-                <td colSpan={4} className="p-4 font-semibold">Total</td>
-                <td className="p-4 text-right font-mono font-bold">{formatRp(total)}</td>
-                <td />
-              </tr>
-            </tfoot>
-            )}
           </table>
         </div>
+        {orderItems.length > 0 && (
+          <div className="flex items-center justify-between bg-navy-900 text-white p-4">
+            <span className="font-semibold">Total</span>
+            <span className="font-mono font-bold">{formatRp(total)}</span>
+          </div>
+        )}
       </div>
 
       {invoiceFormType && (

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -24,6 +24,41 @@ function suggestNextInvoiceId(invoices: Invoice[]): string {
     .map(m => parseInt(m[1], 10))
   const next = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1
   return `${String(next).padStart(3, '0')}/KMA/${yy}`
+}
+
+// Same caret-jump problem as the Unit Price field on the item forms:
+// re-rendering a controlled input with a freshly-computed formatted string
+// on every keystroke resets the caret to the end unless something restores
+// it, and formatThousands can shift the thousands separators around the
+// very digit that was just typed/deleted — so what's stable across a
+// reformat is how many DIGITS sit to the left of the caret, not a raw
+// character offset. Total/Discount are comma-formatted the same way as
+// Unit Price, so they need the same fix.
+function useFormattedNumberField(value: number, onValueChange: (n: number) => void) {
+  const ref = useRef<HTMLInputElement>(null)
+  const digitsBeforeCaret = useRef<number | null>(null)
+  const display = value ? formatThousands(String(value)) : ''
+
+  useLayoutEffect(() => {
+    if (!ref.current || digitsBeforeCaret.current == null) return
+    let digits = 0
+    let pos = display.length
+    for (let i = 0; i < display.length; i++) {
+      if (/\d/.test(display[i])) digits++
+      if (digits === digitsBeforeCaret.current) { pos = i + 1; break }
+    }
+    if (digitsBeforeCaret.current === 0) pos = 0
+    ref.current.setSelectionRange(pos, pos)
+  }, [display])
+
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value
+    const caretPos = e.target.selectionStart ?? raw.length
+    digitsBeforeCaret.current = (raw.slice(0, caretPos).match(/\d/g) ?? []).length
+    onValueChange(Number(stripCommas(raw)) || 0)
+  }
+
+  return { ref, display, onChange }
 }
 
 interface Props {
@@ -215,12 +250,15 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
   }
 
   // Total/Discount are comma-formatted as you type (e.g. "11,520,000")
-  // while the underlying state stays a plain number, same trick as the
-  // Unit Price field on the item forms.
-  const setCommaNum = (k: 'total' | 'discount') => (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (k === 'total') setTotalTouched(true)
-    setForm(p => ({ ...p, [k]: Number(stripCommas(e.target.value)) || 0 }))
-  }
+  // while the underlying state stays a plain number, same trick — and same
+  // caret-preserving hook — as the Unit Price field on the item forms.
+  const totalField = useFormattedNumberField(form.total, total => {
+    setTotalTouched(true)
+    setForm(p => ({ ...p, total }))
+  })
+  const discountField = useFormattedNumberField(form.discount, discount => {
+    setForm(p => ({ ...p, discount }))
+  })
 
   const create = useMutation({
     mutationFn: (body: CreateInvoiceRequest) => invoicesApi.create(body),
@@ -437,11 +475,11 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
         <div className="grid grid-cols-2 gap-3">
           <FormField label="Total (Rp)">
             <input className="field font-mono" type="text" inputMode="numeric"
-              value={form.total ? formatThousands(String(form.total)) : ''} onChange={setCommaNum('total')} />
+              ref={totalField.ref} value={totalField.display} onChange={totalField.onChange} />
           </FormField>
           <FormField label="Discount (Rp)">
             <input className="field font-mono" type="text" inputMode="numeric"
-              value={form.discount ? formatThousands(String(form.discount)) : ''} onChange={setCommaNum('discount')} />
+              ref={discountField.ref} value={discountField.display} onChange={discountField.onChange} />
             {discountExceedsRemaining && (
               <p className="text-xs text-red-500 mt-1">
                 Discount is larger than the {formatRp(remaining)} left to collect — Pelunasan (AR) has been floored to Rp 0.

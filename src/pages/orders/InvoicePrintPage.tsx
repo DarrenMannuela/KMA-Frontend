@@ -12,6 +12,27 @@ import { useRekening } from '@/utils/RekeningStore'
 // past MIN_SCALE (~9px body text) — beyond that it's no longer legible,
 // so we stop shrinking and let the extra content spill onto a second
 // printed page instead of being crushed unreadably small.
+// ─── Multi-page policy ─────────────────────────────────────────────────────
+// Preference order when a document doesn't comfortably fit one A4 sheet:
+//   1. Shrink everything (via `zoom`, see below) down to MIN_SCALE — most
+//      invoices settle here and never leave page 1.
+//   2. If it still doesn't fit even at MIN_SCALE (spillsToSecondPage), stop
+//      shrinking and let it spill onto a second sheet instead of crushing
+//      text past legibility. What moves to page 2 is specifically the
+//      closing block — signature panel, Asli/Copy labels, company footer —
+//      kept together as one atomic pageBreakInside:'avoid' unit (see below)
+//      so it never gets sliced mid-block. The item table + notes are assumed
+//      to already fit on page 1 alongside the shrink; this policy does NOT
+//      split the item table itself across pages, so an invoice with an
+//      extremely long item list can still overflow past 2 sheets — that
+//      case isn't handled yet.
+//   3. Every page that actually prints gets a "Halaman X dari Y" counter in
+//      the bottom-right (see totalPages below), and — while still on
+//      screen, before anything is printed — a dashed divider + badge marks
+//      exactly where the page 1/page 2 split will fall (see the
+//      print:hidden overlay near the bottom of the render), so the person
+//      editing never has to open print preview just to find out whether
+//      their invoice spilled.
 const PAGE_HEIGHT_MM = 297
 const MM_TO_PX = 96 / 25.4
 const PAGE_HEIGHT_PX = PAGE_HEIGHT_MM * MM_TO_PX
@@ -251,6 +272,10 @@ export function InvoicePrintPage() {
   // (the full amount) instead of a Rp 0 D/P line.
   const isFullInvoice = invoice.type === 'dp' && (invoice.down_payment ?? 0) === 0
   const highlightDp = invoice.type === 'dp' && !isFullInvoice
+  // See the "Multi-page policy" comment near the top of the file — capped
+  // at 2 for now, since this layout only ever spills the closing block onto
+  // a second sheet, never the item table itself.
+  const totalPages = spillsToSecondPage ? 2 : 1
   const highlightColor = '#d4e6c3'
   // General-purpose "highlight this cell" background — spread
   // highlightCellStyle into any <td>/<th>'s style object to mark it (e.g.
@@ -318,7 +343,7 @@ export function InvoicePrintPage() {
 
       {/* Invoice document */}
       <div className="p-8 print:p-0">
-        <div style={{ width: '210mm', height: `${wrapperHeightPx}px` }} className="mx-auto">
+        <div style={{ width: '210mm', height: `${wrapperHeightPx}px`, position: 'relative' }} className="mx-auto">
           <div
             ref={contentRef}
             id="invoice"
@@ -656,7 +681,7 @@ export function InvoicePrintPage() {
               doesn't need "Halaman 1 dari 1" cluttering the bottom. */}
           {spillsToSecondPage && (
             <div style={{ textAlign: 'right', fontSize: '9px', color: '#94a3b8', marginTop: '16px' }}>
-              Halaman 1 dari 2
+              Halaman 1 dari {totalPages}
             </div>
           )}
 
@@ -681,6 +706,18 @@ export function InvoicePrintPage() {
               different numbers, still fits everything on one real sheet,
               landing both labels on the same physical page. */}
           <div style={{ pageBreakInside: 'avoid', pageBreakBefore: spillsToSecondPage ? 'always' : 'auto' }}>
+            {/* Continuation header — only rendered when this block has
+                actually been pushed onto its own page. Without it, page 2
+                opened directly on "ASLI INVOICE DI TERIMA OLEH" with no
+                context tying it back to the invoice it belongs to and a
+                lot of dead space above it — this line is the whole reason
+                page 2 exists, so it should say so. */}
+            {spillsToSecondPage && (
+              <div style={{ fontSize: '10px', color: '#94a3b8', marginBottom: '16px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0' }}>
+                INVOICE {invoice.id} — {invoice.kepada_yth} (lanjutan)
+              </div>
+            )}
+
             {/* Signature block */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', marginTop: '40px', fontSize: '11px' }}>
               <div>
@@ -734,10 +771,56 @@ export function InvoicePrintPage() {
             {/* Page counter — "Halaman 1 dari 1" for the common single-page
                 case, "Halaman 2 dari 2" once it's spilled to a second page. */}
             <div style={{ textAlign: 'right', fontSize: '9px', color: '#94a3b8', marginTop: '10px' }}>
-              {spillsToSecondPage ? 'Halaman 2 dari 2' : 'Halaman 1 dari 1'}
+              Halaman {totalPages} dari {totalPages}
             </div>
           </div>
           </div>
+
+          {/* On-screen page-break indicator. This is purely an editing aid —
+              it plays no part in what actually prints (print:hidden) and
+              isn't what decides where the real break falls; that's the
+              pageBreakBefore on the block above, driven by
+              spillsToSecondPage. Its only job is to show, live and before
+              anyone opens print preview, exactly where that break will
+              land. PAGE_HEIGHT_PX is the right offset to draw it at because
+              `zoom` (not `transform`) is what shrinks the sheet above —
+              zoom genuinely resizes the layout box, so one page's worth of
+              *rendered* height in this wrapper's coordinate space is still
+              PAGE_HEIGHT_PX regardless of how far the content's been
+              shrunk to get there. */}
+          {spillsToSecondPage && (
+            <div
+              className="print:hidden"
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: `${PAGE_HEIGHT_PX}px`,
+                transform: 'translateY(-50%)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                pointerEvents: 'none',
+              }}
+            >
+              <div style={{ flex: 1, borderTop: '2px dashed #94a3b8' }} />
+              <span
+                style={{
+                  background: '#1e293b',
+                  color: '#fff',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  padding: '3px 10px',
+                  borderRadius: '9999px',
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                }}
+              >
+                Page 1 ends · Page 2 begins
+              </span>
+              <div style={{ flex: 1, borderTop: '2px dashed #94a3b8' }} />
+            </div>
+          )}
         </div>
       </div>
 
