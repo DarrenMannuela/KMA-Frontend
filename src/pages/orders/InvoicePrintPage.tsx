@@ -23,7 +23,17 @@ const PAGE_HEIGHT_PX = PAGE_HEIGHT_MM * MM_TO_PX
 // decision — and the "Halaman X dari Y" counter driven by it — errs toward
 // matching what actually comes out of the printer/PDF, not what fits in the
 // browser tab.
-const PAGE_FIT_SAFETY_PX = 6
+//
+// Was 40px. That turned out to be too conservative in the other direction:
+// on a borderline invoice sitting right at MIN_SCALE, 40px was enough on its
+// own to push the estimate into "doesn't fit" even though the invoice really
+// does print on a single page — and because that estimate then forces an
+// actual page-break before the signature block (see spillsToSecondPage
+// below), the false positive was self-fulfilling: it manufactured a real,
+// mostly-blank second page rather than just mislabeling one. 12px is enough
+// to absorb the screen/print rounding difference this margin exists for,
+// without being big enough to tip a genuinely-fitting document over the edge.
+const PAGE_FIT_SAFETY_PX = 12
 const BASE_FONT_PX = 11
 const MIN_FONT_PX = 9
 const MIN_SCALE = MIN_FONT_PX / BASE_FONT_PX
@@ -82,6 +92,13 @@ export function InvoicePrintPage() {
   const { rekening, setRekening } = useRekening()
   const signatoryName = useUppercaseField('FIFI LESMANA')
   const signatoryTitle = useUppercaseField('FOUNDER')
+  // The D/P row's "paid off" label — only meaningful on a Pelunasan
+  // invoice (the D/P really was already received by the time this
+  // document is printed), so it's user-typable rather than derived from
+  // paid_date: paid_date isn't reliably set/accurate for this purpose,
+  // and a free-text field lets it also carry a date or note if wanted.
+  // Defaults to "LUNAS" since that's what it almost always ends up saying.
+  const dpPaidLabel = useUppercaseField('LUNAS')
   const [highlightChoice, setHighlightChoice] = useState<string>(HIGHLIGHT_PALETTE[0].value)
   // Per-row overrides — keyed by a stable id per row (see rowKey below).
   // Clicking a row paints it with whatever color is currently selected in
@@ -118,7 +135,30 @@ export function InvoicePrintPage() {
   const contentRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
   const [wrapperHeightPx, setWrapperHeightPx] = useState(PAGE_HEIGHT_PX)
+  // Whether the document still doesn't fit even once shrunk as far as
+  // legibility allows. Deliberately its own piece of state, computed fresh
+  // from the DOM every measurement pass below — NOT derived from `scale`/
+  // `wrapperHeightPx` after the fact. Those two only settle gradually over
+  // several renders (the shrink is nudged a little closer each pass), and
+  // the loop that nudges them is capped so it can't run forever — so if a
+  // particular invoice happened to need more passes than the cap to fully
+  // settle, deriving the spill verdict from wherever they'd stopped could
+  // freeze on a stale, wrong answer with no way to self-correct. Computing
+  // it directly here means it's always right on THIS render's actual
+  // measurement, independent of whether the cosmetic shrink has finished.
+  const [spillsToSecondPage, setSpillsToSecondPage] = useState(false)
   const convergeAttempts = useRef(0)
+  // The logo <img> loads asynchronously; if the height measurement below
+  // runs before it's loaded, "natural" comes out shorter than the sheet's
+  // real final height (missing the logo's rendered space), so the scale
+  // it settles on can look like it comfortably fits when the real,
+  // fully-loaded document doesn't — and nothing re-triggers a
+  // re-measurement afterward, since an <img> finishing its own async load
+  // doesn't cause React to re-render on its own. This just forces one
+  // extra render (and therefore one more measurement pass, since the
+  // sizing effect below has no dependency array) once the logo is
+  // actually in place.
+  const [, forceRemeasure] = useState(0)
 
   const { data: invoice, isLoading: invoiceLoading } = useQuery({
     queryKey: ['invoice', invoiceId],
@@ -144,19 +184,32 @@ export function InvoicePrintPage() {
 
   // Re-measures after every render (deliberately no dependency array) so
   // it reacts to anything that can change content height — item count,
-  // notes, the editable bank-account inputs. scrollHeight reflects
-  // whatever zoom level is CURRENTLY applied, so we divide that back out
-  // to get the natural (zoom:1) height before deciding how much further
-  // to shrink. Each pass either converges (change too small to matter) or
-  // nudges scale again; capped at a few attempts so it can't oscillate
-  // forever if something keeps changing height on every render.
+  // notes, the editable bank-account inputs. getBoundingClientRect()
+  // reflects whatever zoom level is CURRENTLY applied, so we divide that
+  // back out to get the natural (zoom:1) height before deciding how much
+  // further to shrink. Each pass either converges (change too small to
+  // matter) or nudges scale again; capped at a few attempts so it can't
+  // oscillate forever if something keeps changing height on every render.
+  //
+  // getBoundingClientRect(), not scrollHeight: scrollHeight is an integer
+  // that rounds UP, and that rounding error compounds across every nested
+  // box in the document. On a borderline invoice that's enough on its own
+  // to read as a few pixels taller than it really is — right where it
+  // matters most, since that's exactly the case this whole measurement
+  // exists to get right. getBoundingClientRect() returns the actual
+  // sub-pixel float the browser is using, so the estimate matches reality
+  // instead of a rounded-up approximation of it.
   useLayoutEffect(() => {
     if (!contentRef.current || !invoice) return
-    if (convergeAttempts.current > 6) return
-    const natural = contentRef.current.scrollHeight / scale
+    if (convergeAttempts.current > 20) return
+    const natural = contentRef.current.getBoundingClientRect().height / scale
     const needed = (PAGE_HEIGHT_PX - PAGE_FIT_SAFETY_PX) / natural
     const nextScale = Math.min(1, Math.max(needed, MIN_SCALE))
     const nextWrapperHeight = natural * nextScale
+    const nextSpills = nextScale <= MIN_SCALE + 0.0005 && natural * MIN_SCALE > PAGE_HEIGHT_PX - PAGE_FIT_SAFETY_PX
+    if (nextSpills !== spillsToSecondPage) {
+      setSpillsToSecondPage(nextSpills)
+    }
     if (Math.abs(nextScale - scale) > 0.002) {
       convergeAttempts.current += 1
       setScale(nextScale)
@@ -166,7 +219,19 @@ export function InvoicePrintPage() {
     }
   })
 
-  const spillsToSecondPage = scale <= MIN_SCALE + 0.002 && wrapperHeightPx > PAGE_HEIGHT_PX - PAGE_FIT_SAFETY_PX + 1
+  // Uses the same safety-shrunk threshold as the shrink-to-fit target
+  // above (PAGE_HEIGHT_PX - PAGE_FIT_SAFETY_PX), because the on-screen
+  // scrollHeight this is derived from can under-read the real printed
+  // height by a few px (font hinting/rounding differences between the
+  // screen and print renderers) — so this flag is a "might not fit for
+  // real" estimate, not a guarantee. What makes that safe to lean on is
+  // that this flag itself now FORCES the actual break below
+  // (pageBreakBefore on the signature block) rather than just hoping the
+  // browser's natural pagination lands in the same place: whichever way
+  // this estimate comes out, that's what actually gets printed, so the
+  // "Halaman X dari Y" labels can never end up on the wrong number of
+  // physical pages — worst case a borderline invoice uses one more sheet
+  // than strictly necessary, never a mismatched label.
 
   if (invoiceLoading) return <div className="p-8 text-slate-400">Loading…</div>
   if (!invoice) return <div className="p-8 text-red-400">Invoice not found.</div>
@@ -285,7 +350,7 @@ export function InvoicePrintPage() {
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '16px' }}>
             <div>
-              <img src="/Logo.png" alt="KMA Logo" style={{ width: '80px', height: 'auto', marginBottom: '6px' }} />
+              <img src="/Logo.png" alt="KMA Logo" style={{ width: '80px', height: 'auto', marginBottom: '6px' }} onLoad={() => forceRemeasure(n => n + 1)} />
               <div style={{ fontWeight: 'bold', fontSize: '13px', letterSpacing: '2px' }}>KREASI  MAKMUR  ABADI</div>
             </div>
           </div>
@@ -457,7 +522,16 @@ export function InvoicePrintPage() {
                 className="cursor-pointer print:cursor-default"
                 style={{ background: rowHighlights['total'] }}
               >
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} colSpan={3} />
+                {/* Blank spacer over NO/KETERANGAN/SIZE. Top border stays —
+                    that's the item table's own closing edge (matches every
+                    other item row's border, so the grid still reads as
+                    "closed" before the totals start). Only the bottom edge
+                    is force-suppressed with border-style:'hidden', so no
+                    line appears between this spacer and the D/P row's
+                    spacer below it — 'hidden' is needed rather than just
+                    leaving it unset, since border-collapse otherwise lets a
+                    real border set by either neighboring cell win. */}
+                <td style={{ padding: '6px 8px', borderTop: '1px solid #ccc', borderBottomStyle: 'hidden' }} colSpan={3} />
                 <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold' }}>
                   {items.reduce((s, i) => s + i.amount, 0).toLocaleString('id-ID')}
                 </td>
@@ -478,15 +552,28 @@ export function InvoicePrintPage() {
                   to the automatic behavior. */}
               {invoice.down_payment != null && invoice.down_payment > 0 ? (
                 <tr onClick={() => toggleRowHighlight('dp')} className="cursor-pointer print:cursor-default">
-                  <td style={{ padding: '6px 8px', textAlign: 'right', borderTop: '1px solid #ccc' }} colSpan={3}>
-                    {/* "LUNAS" (paid off) should reflect paid_date, not
-                        due_date — this previously read due_date, which
-                        would print a due date next to a "paid" label.
-                        PLEASE VERIFY against a real printed kwitansi
-                        before relying on this. */}
-                    {invoice.paid_date ? `LUNAS - ${format(new Date(invoice.paid_date), 'd MMMM yyyy').toUpperCase()}` : 'LUNAS'}
+                  {/* Blank spacer over NO/KETERANGAN/SIZE — same
+                      border-style:'hidden' technique as the TOTAL row's
+                      spacer above, so no line bleeds through from either
+                      neighboring row regardless of their own borders. Only
+                      the LUNAS cell next to it should read as a box. */}
+                  <td style={{ padding: '6px 8px', borderTopStyle: 'hidden', borderBottomStyle: 'hidden' }} colSpan={3} />
+                  {/* Only a Pelunasan invoice is printed after the D/P was
+                      actually received, so only it gets a typable "LUNAS"
+                      label here — a fresh D/P invoice hasn't been paid yet,
+                      so there's nothing to mark. Sized to just the QTY
+                      column, same as every other cell in this row. */}
+                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
+                    {invoice.type === 'pelunasan' && (
+                      <input
+                        ref={dpPaidLabel.ref}
+                        value={dpPaidLabel.value}
+                        onChange={dpPaidLabel.onChange}
+                        onClick={e => e.stopPropagation()}
+                        style={{ border: 'none', background: 'transparent', font: 'inherit', textAlign: 'right', width: '100%', padding: 0 }}
+                      />
+                    )}
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
                   <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
                     D/P {dpPercent} %
                   </td>
@@ -514,7 +601,7 @@ export function InvoicePrintPage() {
 
               {/* Pelunasan row — same click-to-override behavior as DP above. */}
               <tr onClick={() => toggleRowHighlight('pelunasan')} className="cursor-pointer print:cursor-default">
-                <td style={{ padding: '6px 8px', textAlign: 'right' }} colSpan={3}>
+                <td style={{ padding: '6px 8px', textAlign: 'right', borderTopStyle: 'hidden', borderBottomStyle: 'hidden' }} colSpan={3}>
                   {/* Same fix as the D/P row above: "LUNAS" → paid_date,
                       "J/T" (jatuh tempo = due date) → due_date. Both were
                       previously reading the other field. PLEASE VERIFY
@@ -580,10 +667,20 @@ export function InvoicePrintPage() {
               (e.g. the "Asli / Copy 1 / Copy 2" list cut after its first
               row, with the rest stranded alone on page 2). break-inside is
               enough on its own to push the whole group to the next page
-              when it doesn't fit — deliberately NOT forcing a break here
-              regardless, since that wasted the remaining space on page 1
-              even when the group would have comfortably fit there. */}
-          <div style={{ pageBreakInside: 'avoid' }}>
+              when it doesn't fit, so for the common single-page invoice we
+              leave it at that rather than forcing a break — forcing here
+              unconditionally would waste the remaining space on page 1
+              even when the group would have comfortably fit there.
+              But once our own fit-to-page measurement has already decided
+              the document needs a second page (spillsToSecondPage), we
+              force this block onto it explicitly (pageBreakBefore) instead
+              of leaving it to the browser's natural pagination — otherwise
+              a borderline document could measure as "spills" (printing
+              both "Halaman 1 dari 2" and "Halaman 2 dari 2") while the
+              browser's own layout engine, working from very slightly
+              different numbers, still fits everything on one real sheet,
+              landing both labels on the same physical page. */}
+          <div style={{ pageBreakInside: 'avoid', pageBreakBefore: spillsToSecondPage ? 'always' : 'auto' }}>
             {/* Signature block */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', marginTop: '40px', fontSize: '11px' }}>
               <div>
