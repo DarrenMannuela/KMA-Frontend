@@ -7,57 +7,49 @@ import { invoicesApi, ordersApi, itemsApi } from '@/api'
 import { formatRp } from '@/components/ui'
 import { useRekening } from '@/utils/RekeningStore'
 
-// Page is fit dynamically to one physical page (see the scale effect
-// below): shrink everything down together as content grows, but never
-// past MIN_SCALE (~9px body text) — beyond that it's no longer legible,
-// so we stop shrinking and let the extra content spill onto a second
-// printed page instead of being crushed unreadably small.
 // ─── Multi-page policy ─────────────────────────────────────────────────────
-// Preference order when a document doesn't comfortably fit one A4 sheet:
-//   1. Shrink everything (via `zoom`, see below) down to MIN_SCALE — most
-//      invoices settle here and never leave page 1.
-//   2. If it still doesn't fit even at MIN_SCALE (spillsToSecondPage), stop
-//      shrinking and let it spill onto a second sheet instead of crushing
-//      text past legibility. What moves to page 2 is specifically the
-//      closing block — signature panel, Asli/Copy labels, company footer —
-//      kept together as one atomic pageBreakInside:'avoid' unit (see below)
-//      so it never gets sliced mid-block. The item table + notes are assumed
-//      to already fit on page 1 alongside the shrink; this policy does NOT
-//      split the item table itself across pages, so an invoice with an
-//      extremely long item list can still overflow past 2 sheets — that
-//      case isn't handled yet.
-//   3. Every page that actually prints gets a "Halaman X dari Y" counter in
-//      the bottom-right (see totalPages below), and — while still on
-//      screen, before anything is printed — a dashed divider + badge marks
-//      exactly where the page 1/page 2 split will fall (see the
-//      print:hidden overlay near the bottom of the render), so the person
-//      editing never has to open print preview just to find out whether
-//      their invoice spilled.
+// Previously this page tried to force everything onto a single physical
+// sheet: shrink the whole document down via CSS `zoom` until it fit, and if
+// it still didn't fit even at the smallest legible font, forcibly push just
+// the closing block (signature/copy/footer) onto a manufactured second
+// page. That required a fragile JS measurement loop to guess where the real
+// print engine would break the page — and every time that guess was wrong
+// (screen vs. print rounding differences, async image loads, etc.) it
+// produced a visibly broken document: mismatched "Halaman X dari Y" labels,
+// or a signature block sliced in half.
+//
+// Simpler and more robust: let the document paginate NATURALLY, the same
+// way any normal printed HTML table does.
+//   - The item table is a real <table> with <thead>/<tbody> (see below), so
+//     the browser automatically repeats the KETERANGAN/SIZE/QTY/... header
+//     row at the top of every page the table spills onto — no JS involved.
+//   - `#invoice tr { page-break-inside: avoid }` (see the print <style>
+//     block near the bottom) keeps any single row from being sliced in
+//     half; the browser just moves that whole row to the next page instead.
+//   - The closing block (signature/copy/footer) is wrapped in its own
+//     `pageBreakInside: 'avoid'` div, so it's likewise never split — it
+//     either continues right after the table on whatever page has room, or
+//     moves to the next page as a whole unit if it doesn't.
+// A short invoice still lands entirely on one page, exactly as before; a
+// long one now spreads across as many pages as it actually needs, with
+// proper repeating headers, instead of being crushed to fit or awkwardly
+// stranding one small block alone on a second sheet.
 const PAGE_HEIGHT_MM = 297
+const PAGE_WIDTH_MM = 210
 const MM_TO_PX = 96 / 25.4
 const PAGE_HEIGHT_PX = PAGE_HEIGHT_MM * MM_TO_PX
-// Screen and print media don't always agree to the pixel on how tall a page
-// is (font hinting/rounding differ slightly between the two), so a document
-// that just barely measures as "fits on one page" on screen has occasionally
-// been overflowing to a mostly-blank second page once actually printed. This
-// margin gives up a little vertical room on purpose so the on-screen fit
-// decision — and the "Halaman X dari Y" counter driven by it — errs toward
-// matching what actually comes out of the printer/PDF, not what fits in the
-// browser tab.
-//
-// Was 40px. That turned out to be too conservative in the other direction:
-// on a borderline invoice sitting right at MIN_SCALE, 40px was enough on its
-// own to push the estimate into "doesn't fit" even though the invoice really
-// does print on a single page — and because that estimate then forces an
-// actual page-break before the signature block (see spillsToSecondPage
-// below), the false positive was self-fulfilling: it manufactured a real,
-// mostly-blank second page rather than just mislabeling one. 12px is enough
-// to absorb the screen/print rounding difference this margin exists for,
-// without being big enough to tip a genuinely-fitting document over the edge.
-const PAGE_FIT_SAFETY_PX = 12
-const BASE_FONT_PX = 11
-const MIN_FONT_PX = 9
-const MIN_SCALE = MIN_FONT_PX / BASE_FONT_PX
+// Base font size for the whole sheet, and also the floor: text never
+// renders smaller than this. There's deliberately no shrink-to-fit logic
+// tied to it — the old system tried to guess a scale factor that would
+// squeeze a long invoice onto one physical sheet, which needed a fragile
+// JS measurement loop to predict where the real print engine would break
+// the page (see the multi-page policy comment above for why that was
+// dropped). At a fixed floor, that guessing isn't needed at all: text
+// simply never gets smaller than this, and whenever a document has more
+// content than one page can hold at that size, the natural table/row flow
+// described above just continues it onto as many further pages as it
+// takes — the same mechanism that already handles a long item list.
+const BASE_FONT_PX = 14
 
 // Preset options for the header-highlight color picker in the toolbar —
 // muted, desaturated pastels in the same family as the existing D/P vs
@@ -137,49 +129,48 @@ export function InvoicePrintPage() {
     })
   }
 
-  // Fit-to-page: contentRef is the actual invoice sheet. We inflate its
-  // CSS width by 1/scale before shrinking it back down with the CSS `zoom`
-  // property — the whole page (text, spacing, everything) shrinks together
-  // instead of just the font, while still rendering edge-to-edge at 210mm
-  // rather than leaving a gap on the right. wrapperHeightPx holds the
-  // actual space the scaled-down sheet occupies, so the surrounding
-  // layout — and print pagination — reflows correctly around it.
+  // Manual page breaks — keyed by item_name (same key each item group is
+  // already grouped/rendered under below), so a break is "start a new page
+  // right before this item group" rather than before an individual
+  // size-variant row. Scoped to whole groups on purpose: each group already
+  // has pageBreakInside:'avoid' on its own <tbody> so its rows are never
+  // split apart, and forcing a break in the middle of that same protected
+  // unit would just be asking the print engine to satisfy two conflicting
+  // instructions at once. A plain Set rather than the rowHighlights pattern
+  // above (map to a color) — a break is binary, on or off, nothing to pick.
+  const [manualBreaks, setManualBreaks] = useState<Set<string>>(new Set())
+  const toggleManualBreak = (name: string) => {
+    setManualBreaks(prev => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  // Purely decorative: a rough, one-shot estimate of whether the document
+  // is long enough that the closing block will likely end up starting its
+  // own page, used only to decide whether to show the small continuation
+  // letterhead in front of it (see the closing block below). This is NOT
+  // trying to precisely predict the real print engine's page breaks the
+  // way the old shrink-to-fit system did — the actual pagination is left
+  // entirely to the browser's natural table/row flow described above.
+  // Worst case this guesses wrong and the little context strip shows up
+  // when not strictly needed (or doesn't show up once when it would have
+  // been nice to have) — low-stakes either way.
   //
-  // Deliberately `zoom`, not `transform: scale()`: a transform is a
-  // paint-time effect that never changes what the browser considers the
-  // element's actual layout size, so Chrome's print engine was deciding
-  // where to put page breaks based on the *unscaled* height — meaning a
-  // "shrunk to fit one page" invoice could still get physically paginated
-  // as if it were its original, taller size, splitting it across two pages
-  // for no visible reason. `zoom` genuinely resizes the layout box, so
-  // what fits on screen is what the print engine sees as fitting too.
-  const contentRef = useRef<HTMLDivElement>(null)
-  const [scale, setScale] = useState(1)
-  const [wrapperHeightPx, setWrapperHeightPx] = useState(PAGE_HEIGHT_PX)
-  // Whether the document still doesn't fit even once shrunk as far as
-  // legibility allows. Deliberately its own piece of state, computed fresh
-  // from the DOM every measurement pass below — NOT derived from `scale`/
-  // `wrapperHeightPx` after the fact. Those two only settle gradually over
-  // several renders (the shrink is nudged a little closer each pass), and
-  // the loop that nudges them is capped so it can't run forever — so if a
-  // particular invoice happened to need more passes than the cap to fully
-  // settle, deriving the spill verdict from wherever they'd stopped could
-  // freeze on a stale, wrong answer with no way to self-correct. Computing
-  // it directly here means it's always right on THIS render's actual
-  // measurement, independent of whether the cosmetic shrink has finished.
-  const [spillsToSecondPage, setSpillsToSecondPage] = useState(false)
-  const convergeAttempts = useRef(0)
-  // The logo <img> loads asynchronously; if the height measurement below
-  // runs before it's loaded, "natural" comes out shorter than the sheet's
-  // real final height (missing the logo's rendered space), so the scale
-  // it settles on can look like it comfortably fits when the real,
-  // fully-loaded document doesn't — and nothing re-triggers a
-  // re-measurement afterward, since an <img> finishing its own async load
-  // doesn't cause React to re-render on its own. This just forces one
-  // extra render (and therefore one more measurement pass, since the
-  // sizing effect below has no dependency array) once the logo is
-  // actually in place.
-  const [, forceRemeasure] = useState(0)
+  // Deliberately computed straight from `items` rather than measured off
+  // the live DOM (getBoundingClientRect inside a dependency-less
+  // useLayoutEffect, which this used to be): that measure-then-setState
+  // pattern re-fires after every single commit with nothing to stop it,
+  // and if the real height ever lands close enough to the threshold that
+  // font loading, scrollbar changes, or the hint text's own presence
+  // nudges it back and forth across that line, each nudge is itself a
+  // state update — a feedback loop that trips React's "Maximum update
+  // depth exceeded" (error #185) and blanks the whole page. A plain
+  // derived number can't oscillate like that: it's recomputed from
+  // `items` on each render, never feeds back into itself, and never
+  // needs its own effect or state at all.
 
   const { data: invoice, isLoading: invoiceLoading } = useQuery({
     queryKey: ['invoice', invoiceId],
@@ -199,60 +190,24 @@ export function InvoicePrintPage() {
     enabled: !!invoice?.order_id,
   })
 
-  useLayoutEffect(() => {
-    convergeAttempts.current = 0
-  }, [invoice?.id])
+  // Rough row-based estimate — see the comment above for why this is a
+  // plain calculation rather than a DOM measurement. Overhead covers the
+  // masthead/customer-detail block, the fixed CATATAN notes, and the
+  // signature/footer block, all roughly constant regardless of item
+  // count; each item row and each item-group gap row adds its own slice
+  // on top of that.
+  const groupCount = new Set(items.map(i => i.item_name)).size
+  const rowCount = items.length + groupCount /* gap row per group */ + 4 /* company + total + dp + pelunasan rows */
+  const approxRowPx = BASE_FONT_PX + 14 /* cell padding */
+  const approxOverheadPx = 620 /* masthead + customer detail + notes + signature/footer, roughly */
+  const likelyMultiPage = approxOverheadPx + rowCount * approxRowPx > PAGE_HEIGHT_PX * 1.05
 
-  // Re-measures after every render (deliberately no dependency array) so
-  // it reacts to anything that can change content height — item count,
-  // notes, the editable bank-account inputs. getBoundingClientRect()
-  // reflects whatever zoom level is CURRENTLY applied, so we divide that
-  // back out to get the natural (zoom:1) height before deciding how much
-  // further to shrink. Each pass either converges (change too small to
-  // matter) or nudges scale again; capped at a few attempts so it can't
-  // oscillate forever if something keeps changing height on every render.
-  //
-  // getBoundingClientRect(), not scrollHeight: scrollHeight is an integer
-  // that rounds UP, and that rounding error compounds across every nested
-  // box in the document. On a borderline invoice that's enough on its own
-  // to read as a few pixels taller than it really is — right where it
-  // matters most, since that's exactly the case this whole measurement
-  // exists to get right. getBoundingClientRect() returns the actual
-  // sub-pixel float the browser is using, so the estimate matches reality
-  // instead of a rounded-up approximation of it.
-  useLayoutEffect(() => {
-    if (!contentRef.current || !invoice) return
-    if (convergeAttempts.current > 20) return
-    const natural = contentRef.current.getBoundingClientRect().height / scale
-    const needed = (PAGE_HEIGHT_PX - PAGE_FIT_SAFETY_PX) / natural
-    const nextScale = Math.min(1, Math.max(needed, MIN_SCALE))
-    const nextWrapperHeight = natural * nextScale
-    const nextSpills = nextScale <= MIN_SCALE + 0.0005 && natural * MIN_SCALE > PAGE_HEIGHT_PX - PAGE_FIT_SAFETY_PX
-    if (nextSpills !== spillsToSecondPage) {
-      setSpillsToSecondPage(nextSpills)
-    }
-    if (Math.abs(nextScale - scale) > 0.002) {
-      convergeAttempts.current += 1
-      setScale(nextScale)
-    }
-    if (Math.abs(nextWrapperHeight - wrapperHeightPx) > 0.5) {
-      setWrapperHeightPx(nextWrapperHeight)
-    }
-  })
-
-  // Uses the same safety-shrunk threshold as the shrink-to-fit target
-  // above (PAGE_HEIGHT_PX - PAGE_FIT_SAFETY_PX), because the on-screen
-  // scrollHeight this is derived from can under-read the real printed
-  // height by a few px (font hinting/rounding differences between the
-  // screen and print renderers) — so this flag is a "might not fit for
-  // real" estimate, not a guarantee. What makes that safe to lean on is
-  // that this flag itself now FORCES the actual break below
-  // (pageBreakBefore on the signature block) rather than just hoping the
-  // browser's natural pagination lands in the same place: whichever way
-  // this estimate comes out, that's what actually gets printed, so the
-  // "Halaman X dari Y" labels can never end up on the wrong number of
-  // physical pages — worst case a borderline invoice uses one more sheet
-  // than strictly necessary, never a mismatched label.
+  // Same grouping the item table itself builds further down (first
+  // appearance order, one entry per distinct item_name) — kept in sync
+  // deliberately rather than shared as one computed value, since the
+  // table's version also needs each group's actual rows alongside the
+  // name, not just the name list this toolbar picker needs.
+  const groupNames = [...new Set(items.map(i => i.item_name))]
 
   if (invoiceLoading) return <div className="p-8 text-slate-400">Loading…</div>
   if (!invoice) return <div className="p-8 text-red-400">Invoice not found.</div>
@@ -272,10 +227,6 @@ export function InvoicePrintPage() {
   // (the full amount) instead of a Rp 0 D/P line.
   const isFullInvoice = invoice.type === 'dp' && (invoice.down_payment ?? 0) === 0
   const highlightDp = invoice.type === 'dp' && !isFullInvoice
-  // See the "Multi-page policy" comment near the top of the file — capped
-  // at 2 for now, since this layout only ever spills the closing block onto
-  // a second sheet, never the item table itself.
-  const totalPages = spillsToSecondPage ? 2 : 1
   const highlightColor = '#d4e6c3'
   // General-purpose "highlight this cell" background — spread
   // highlightCellStyle into any <td>/<th>'s style object to mark it (e.g.
@@ -298,8 +249,7 @@ export function InvoicePrintPage() {
         </button>
         <span className="text-slate-400 text-sm flex-1">
           {invoice.id}
-          {scale < 0.999 && !spillsToSecondPage && ` · fitted to one page (${Math.round(scale * 100)}%)`}
-          {spillsToSecondPage && ' · long invoice — prints across 2 pages'}
+          {likelyMultiPage && ' · long invoice — prints across multiple pages'}
         </span>
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-slate-400 mr-0.5">Click a row to color it:</span>
@@ -341,16 +291,49 @@ export function InvoicePrintPage() {
         </button>
       </div>
 
+      {/* Manual page-break picker — only worth showing once there's more
+          than one item group to break between; a single-group invoice has
+          nowhere meaningful to put a manual break anyway. Purely a toolbar
+          affordance: the actual break is applied down in the item table's
+          per-group <tbody>, keyed by the same item_name shown here. */}
+      {groupNames.length > 1 && (
+        <div className="print:hidden bg-white border-b border-slate-200 px-6 py-2 flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-slate-400 mr-0.5">Start a new page before:</span>
+          {groupNames.map(name => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => toggleManualBreak(name)}
+              className={`px-2 py-0.5 rounded text-xs font-medium border transition-colors ${
+                manualBreaks.has(name)
+                  ? 'bg-navy-900 text-white border-navy-900'
+                  : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              {name}
+            </button>
+          ))}
+          {manualBreaks.size > 0 && (
+            <button
+              type="button"
+              onClick={() => setManualBreaks(new Set())}
+              className="text-xs text-slate-400 hover:text-slate-600 underline ml-1"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Invoice document */}
       <div className="p-8 print:p-0">
-        <div style={{ width: '210mm', height: `${wrapperHeightPx}px`, position: 'relative' }} className="mx-auto">
+        <div id="invoice-page-wrap" style={{ width: `${PAGE_WIDTH_MM}mm`, position: 'relative' }} className="mx-auto">
           <div
-            ref={contentRef}
             id="invoice"
             className="bg-white shadow-lg print:shadow-none"
             style={{
               // border-box is essential here: minHeight (297mm) and width
-              // (~210mm) are meant to describe the OUTER size of the A4
+              // (210mm) are meant to describe the OUTER size of the A4
               // sheet. Without border-box, the browser adds the vertical
               // padding (20mm + 15mm) on TOP of minHeight, making the
               // sheet's real minimum height 332mm — already taller than a
@@ -358,24 +341,18 @@ export function InvoicePrintPage() {
               // which guaranteed a sliver of overflow onto an almost-empty
               // second page on every invoice, however short.
               boxSizing: 'border-box',
-              // Same "inflate then shrink back to 210mm" trick as before,
-              // just expressed for zoom instead of transform: zoom shrinks
-              // width along with everything else, so without this the
-              // sheet would render narrower than 210mm and leave a blank
-              // strip down the right edge once zoomed out.
-              width: `${210 / scale}mm`,
+              width: `${PAGE_WIDTH_MM}mm`,
               minHeight: '297mm',
               padding: '20mm 20mm 15mm 20mm',
               fontFamily: 'Arial, sans-serif',
-              fontSize: '11px',
+              fontSize: `${BASE_FONT_PX}px`,
               color: '#000',
-              zoom: scale,
             }}
           >
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '16px' }}>
             <div>
-              <img src="/Logo.png" alt="KMA Logo" style={{ width: '80px', height: 'auto', marginBottom: '6px' }} onLoad={() => forceRemeasure(n => n + 1)} />
+              <img src="/Logo.png" alt="KMA Logo" style={{ width: '80px', height: 'auto', marginBottom: '6px' }} />
               <div style={{ fontWeight: 'bold', fontSize: '13px', letterSpacing: '2px' }}>KREASI  MAKMUR  ABADI</div>
             </div>
           </div>
@@ -388,7 +365,7 @@ export function InvoicePrintPage() {
           {/* Client + Invoice Info grid */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px', marginBottom: '24px' }}>
             {/* Left — client info */}
-            <table style={{ borderCollapse: 'collapse', fontSize: '11px' }}>
+            <table style={{ borderCollapse: 'collapse', fontSize: `${BASE_FONT_PX}px` }}>
               <tbody>
                 <tr>
                   <td style={{ fontWeight: 'bold', paddingRight: '12px', paddingBottom: '4px', whiteSpace: 'nowrap' }}>KEPADA YTH</td>
@@ -418,7 +395,7 @@ export function InvoicePrintPage() {
             </table>
 
             {/* Right — invoice meta */}
-            <table style={{ borderCollapse: 'collapse', fontSize: '11px' }}>
+            <table style={{ borderCollapse: 'collapse', fontSize: `${BASE_FONT_PX}px` }}>
               <tbody>
                 <tr>
                   <td style={{ fontWeight: 'bold', paddingRight: '12px', paddingBottom: '4px' }}>TANGGAL</td>
@@ -449,7 +426,7 @@ export function InvoicePrintPage() {
           </div>
 
           {/* Items table */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0', fontSize: '11px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0', fontSize: `${BASE_FONT_PX}px` }}>
             <thead>
               {/* Column dividers use a darker border (#94a3b8) than the
                   rest of the table (#ccc) — against a light highlight
@@ -489,15 +466,63 @@ export function InvoicePrintPage() {
                   different sizes always sit together), numbered 1, 2, 3…
                   with the number only on each group's first row; the
                   size-variant rows underneath it leave NO. blank. */}
-              {(() => {
-                const groups: { name: string; rows: typeof items }[] = []
-                items.forEach(item => {
-                  const group = groups.find(g => g.name === item.item_name)
-                  if (group) group.rows.push(item)
-                  else groups.push({ name: item.item_name, rows: [item] })
-                })
-                return groups.flatMap((group, groupIdx) => [
-                  ...group.rows.map((item, rowIdx) => {
+            </tbody>
+
+            {/* Each item group gets its own <tbody> (a table can have as
+                many as it needs) instead of one giant shared tbody, purely
+                so `pageBreakInside: 'avoid'` can be scoped to it — that
+                property only ever protects the single element it's set
+                on, so with everything in one tbody there was no way to
+                say "keep THIS item's size-variant rows together" without
+                also claiming to protect the entire table. Best-effort
+                like everything else here: if a single group is too tall
+                to fit in what's left of a page at all, the browser still
+                has to break it somewhere rather than leave it off the
+                page entirely — this just stops an ordinary-sized group
+                from splitting when it didn't need to. */}
+            {(() => {
+              const groups: { name: string; rows: typeof items }[] = []
+              items.forEach(item => {
+                const group = groups.find(g => g.name === item.item_name)
+                if (group) group.rows.push(item)
+                else groups.push({ name: item.item_name, rows: [item] })
+              })
+              return groups.map((group, groupIdx) => (
+                <tbody
+                  key={group.name}
+                  style={{
+                    pageBreakInside: 'avoid',
+                    // Applied to the whole tbody rather than just its first
+                    // row: page-break-before on a <tr> only reliably forces
+                    // a break when the browser treats that row as the
+                    // start of its own fragmentable unit, which is exactly
+                    // what this tbody boundary already establishes above
+                    // via pageBreakInside — putting the break on the same
+                    // element keeps both rules talking about the same
+                    // unit instead of two different ones that could
+                    // disagree. Skipped for the very first group: a break
+                    // "before" the first item would just be a blank first
+                    // page, which was never the intent of picking it in
+                    // the toolbar.
+                    ...(manualBreaks.has(group.name) && groupIdx > 0
+                      ? { pageBreakBefore: 'always', breakBefore: 'page' }
+                      : {}),
+                  }}
+                >
+                  {/* Screen-only marker so the break is visible before you
+                      ever open the print dialog — print:hidden removes it
+                      from the actual output, where the real page boundary
+                      speaks for itself. */}
+                  {manualBreaks.has(group.name) && groupIdx > 0 && (
+                    <tr className="print:hidden">
+                      <td colSpan={6} style={{ padding: '2px 0', borderTop: '2px dashed #1a56db' }}>
+                        <span style={{ fontSize: '10px', color: '#1a56db', fontWeight: 'bold' }}>
+                          — new page starts here —
+                        </span>
+                      </td>
+                    </tr>
+                  )}
+                  {group.rows.map((item, rowIdx) => {
                     const key = `item-${item.id}`
                     return (
                       <tr
@@ -516,15 +541,15 @@ export function InvoicePrintPage() {
                         <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right' }}>{item.sub_total.toLocaleString('id-ID')}</td>
                       </tr>
                     )
-                  }),
-                  // Gap after every item group — a real visible row (not
-                  // just a bordered-empty hairline, which collapses to
-                  // almost nothing with border-collapse when the cell has
-                  // no content). Plain white by default — the KETERANGAN
-                  // table's column headers are what's highlighted
-                  // automatically — but still clickable/paintable like
-                  // every other row here.
-                  (() => {
+                  })}
+                  {/* Gap after every item group — a real visible row (not
+                      just a bordered-empty hairline, which collapses to
+                      almost nothing with border-collapse when the cell has
+                      no content). Plain white by default — the KETERANGAN
+                      table's column headers are what's highlighted
+                      automatically — but still clickable/paintable like
+                      every other row here. */}
+                  {(() => {
                     const key = `gap-${group.name}`
                     const cellStyle = { border: '1px solid #ccc', padding: '6px 8px', height: '20px', background: rowHighlights[key] }
                     return (
@@ -537,10 +562,17 @@ export function InvoicePrintPage() {
                         <td style={cellStyle} />
                       </tr>
                     )
-                  })(),
-                ])
-              })()}
+                  })()}
+                </tbody>
+              ))
+            })()}
 
+            {/* TOTAL / D.P / PELUNASAN together in their own tbody, same
+                reasoning as the per-item groups above — these three rows
+                read as one unit, so a page break landing between e.g.
+                TOTAL and PELUNASAN would be far more confusing than one
+                between two ordinary item rows. */}
+            <tbody style={{ pageBreakInside: 'avoid' }}>
               {/* Total row */}
               <tr
                 onClick={() => toggleRowHighlight('total')}
@@ -587,7 +619,17 @@ export function InvoicePrintPage() {
                       actually received, so only it gets a typable "LUNAS"
                       label here — a fresh D/P invoice hasn't been paid yet,
                       so there's nothing to mark. Sized to just the QTY
-                      column, same as every other cell in this row. */}
+                      column, same as every other cell in this row. An
+                      <input>'s text clips silently against its own box
+                      instead of wrapping or forcing the column wider the
+                      way a plain <td>'s text would, so at the 60px column
+                      width "LUNAS" needs a font a couple sizes under the
+                      document's usual floor to comfortably fit — widening
+                      the column instead was tried, but that redistributes
+                      width across the whole table and nudged the totals
+                      block's height just enough to change which page it
+                      lands on. This is scoped to only the one input, so
+                      it can't affect layout anywhere else. */}
                   <td style={{ border: '1px solid #ccc', padding: '6px 8px', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
                     {invoice.type === 'pelunasan' && (
                       <input
@@ -595,7 +637,7 @@ export function InvoicePrintPage() {
                         value={dpPaidLabel.value}
                         onChange={dpPaidLabel.onChange}
                         onClick={e => e.stopPropagation()}
-                        style={{ border: 'none', background: 'transparent', font: 'inherit', textAlign: 'right', width: '100%', padding: 0 }}
+                        style={{ border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: '11px', textAlign: 'right', width: '100%', padding: 0 }}
                       />
                     )}
                   </td>
@@ -648,7 +690,7 @@ export function InvoicePrintPage() {
           </table>
 
           {/* Notes */}
-          <div style={{ marginTop: '24px', fontSize: '11px', pageBreakInside: 'avoid' }}>
+          <div style={{ marginTop: '24px', fontSize: `${BASE_FONT_PX}px`, pageBreakInside: 'avoid' }}>
             <div style={{ fontWeight: 'bold', textDecoration: 'underline', marginBottom: '4px' }}>CATATAN :</div>
             <ol style={{ margin: 0, paddingLeft: '16px', lineHeight: '1.8' }}>
               <li>Barang akan di proses setelah mock up sudah di ACC dan saat D/P 50% sudah masuk</li>
@@ -676,59 +718,27 @@ export function InvoicePrintPage() {
             </ol>
           </div>
 
-          {/* Page 1 counter — only shown once we know the document is
-              spilling onto a second physical page; a single-page invoice
-              doesn't need "Halaman 1 dari 1" cluttering the bottom. */}
-          {spillsToSecondPage && (
-            <div style={{ textAlign: 'right', fontSize: '9px', color: '#94a3b8', marginTop: '16px' }}>
-              Halaman 1 dari {totalPages}
-            </div>
-          )}
-
-          {/* Signature block + Copy labels + Footer are grouped into a
-              single page-break-inside:avoid unit so they always move
-              together — previously these had no page-break hints at all,
-              so a print that ran just past one page could split mid-block
-              (e.g. the "Asli / Copy 1 / Copy 2" list cut after its first
-              row, with the rest stranded alone on page 2). break-inside is
-              enough on its own to push the whole group to the next page
-              when it doesn't fit, so for the common single-page invoice we
-              leave it at that rather than forcing a break — forcing here
-              unconditionally would waste the remaining space on page 1
-              even when the group would have comfortably fit there.
-              But once our own fit-to-page measurement has already decided
-              the document needs a second page (spillsToSecondPage), we
-              force this block onto it explicitly (pageBreakBefore) instead
-              of leaving it to the browser's natural pagination — otherwise
-              a borderline document could measure as "spills" (printing
-              both "Halaman 1 dari 2" and "Halaman 2 dari 2") while the
-              browser's own layout engine, working from very slightly
-              different numbers, still fits everything on one real sheet,
-              landing both labels on the same physical page. */}
-          <div style={{ pageBreakInside: 'avoid', pageBreakBefore: spillsToSecondPage ? 'always' : 'auto' }}>
-            {/* Continuation header — only rendered when this block has
-                actually been pushed onto its own page. Without it, page 2
-                opened directly on "ASLI INVOICE DI TERIMA OLEH" with no
-                context tying it back to the invoice it belongs to and a
-                lot of dead space above it — this line is the whole reason
-                page 2 exists, so it should say so. */}
-            {spillsToSecondPage && (
-              <div style={{ fontSize: '10px', color: '#94a3b8', marginBottom: '16px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0' }}>
-                INVOICE {invoice.id} — {invoice.kepada_yth} (lanjutan)
-              </div>
-            )}
-
+          {/* Signature block + Footer are grouped into a single
+              page-break-inside:avoid unit so they're never split mid-block.
+              Deliberately NOT forcing a page-break before this block —
+              that's the whole point of the natural-flow policy above: it
+              either continues right after the table/notes on whatever page
+              has room, or moves to the next page as a whole unit if it
+              doesn't, same as any other row-level content here. Forcing it
+              to always start a fresh page wasted the rest of the previous
+              page whenever it would have fit fine. */}
+          <div style={{ pageBreakInside: 'avoid' }}>
             {/* Signature block */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', marginTop: '40px', fontSize: '11px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginTop: '24px', fontSize: `${BASE_FONT_PX}px` }}>
               <div>
-                <div style={{ fontWeight: 'bold', marginBottom: '60px' }}>ASLI INVOICE DI TERIMA OLEH</div>
+                <div style={{ fontWeight: 'bold', marginBottom: '36px' }}>ASLI INVOICE DI TERIMA OLEH</div>
                 <div style={{ borderTop: '1px solid #000', paddingTop: '4px', width: '200px' }} />
                 <div>TANDA TANGAN</div>
                 <div style={{ marginTop: '4px' }}>NAMA JELAS</div>
                 <div>JABATAN</div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: '60px' }}>DI BUAT OLEH</div>
+                <div style={{ fontWeight: 'bold', marginBottom: '36px' }}>DI BUAT OLEH</div>
                 <div style={{ borderTop: '1px solid #000', paddingTop: '4px', display: 'inline-block', width: '200px' }} />
                 <div>
                   <input
@@ -750,77 +760,43 @@ export function InvoicePrintPage() {
               </div>
             </div>
 
-            {/* Copy labels */}
-            <div style={{ marginTop: '24px', fontSize: '10px' }}>
-              {[['Asli', 'Client'], ['Copy 1', 'KMA'], ['Copy 2', 'Produksi KMA']].map(([label, value]) => (
-                <div key={label} style={{ display: 'grid', gridTemplateColumns: '60px 12px 1fr', marginBottom: '2px' }}>
-                  <span style={{ color: '#c0392b' }}>{label}</span>
-                  <span>:</span>
-                  <span style={{ color: '#1a56db' }}>{value}</span>
-                </div>
-              ))}
-            </div>
-
             {/* Footer */}
-            <div style={{ textAlign: 'center', marginTop: '32px', paddingTop: '12px', borderTop: '1px solid #ccc', fontSize: '10px' }}>
+            <div style={{ textAlign: 'center', marginTop: '20px', paddingTop: '8px', borderTop: '1px solid #ccc', fontSize: `${BASE_FONT_PX}px` }}>
               <div>MUARA KARANG BLOK 9 SELATAN NO. 52 - 55 , JAKARTA UTARA 14450</div>
               <div>TELP. 021.300.253.99 / Hp. 0811.857.372</div>
               <div>Email : fifi67@yahoo.com</div>
             </div>
-
-            {/* Page counter — "Halaman 1 dari 1" for the common single-page
-                case, "Halaman 2 dari 2" once it's spilled to a second page. */}
-            <div style={{ textAlign: 'right', fontSize: '9px', color: '#94a3b8', marginTop: '10px' }}>
-              Halaman {totalPages} dari {totalPages}
-            </div>
-          </div>
           </div>
 
-          {/* On-screen page-break indicator. This is purely an editing aid —
-              it plays no part in what actually prints (print:hidden) and
-              isn't what decides where the real break falls; that's the
-              pageBreakBefore on the block above, driven by
-              spillsToSecondPage. Its only job is to show, live and before
-              anyone opens print preview, exactly where that break will
-              land. PAGE_HEIGHT_PX is the right offset to draw it at because
-              `zoom` (not `transform`) is what shrinks the sheet above —
-              zoom genuinely resizes the layout box, so one page's worth of
-              *rendered* height in this wrapper's coordinate space is still
-              PAGE_HEIGHT_PX regardless of how far the content's been
-              shrunk to get there. */}
-          {spillsToSecondPage && (
-            <div
-              className="print:hidden"
-              style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                top: `${PAGE_HEIGHT_PX}px`,
-                transform: 'translateY(-50%)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                pointerEvents: 'none',
-              }}
-            >
-              <div style={{ flex: 1, borderTop: '2px dashed #94a3b8' }} />
-              <span
-                style={{
-                  background: '#1e293b',
-                  color: '#fff',
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  padding: '3px 10px',
-                  borderRadius: '9999px',
-                  whiteSpace: 'nowrap',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                }}
-              >
-                Page 1 ends · Page 2 begins
-              </span>
-              <div style={{ flex: 1, borderTop: '2px dashed #94a3b8' }} />
-            </div>
-          )}
+          {/* Running per-page footer — a small "invoice no. + client"
+              strip pinned to the bottom of every physical page, print-only.
+              Chrome (and most print engines) repeat any `position: fixed`
+              element once per printed page automatically — this is the one
+              reliable way to put real, per-page context on an invoice that
+              can now span an unknown number of pages, without needing JS
+              to know the actual page count (which isn't obtainable at all
+              here — Chrome doesn't expose CSS Paged Media running headers/
+              footers or counter(pages) to arbitrary HTML content, only to
+              print engines like Prince/WeasyPrint). No exact "Halaman X
+              dari Y" anymore for the same reason: with the table itself
+              now free to spill across pages, we can no longer know the
+              total page count in advance the way the old 1-or-2-page
+              system could. */}
+          <div
+            className="hidden print:block"
+            style={{
+              position: 'fixed',
+              bottom: '8mm',
+              left: '20mm',
+              right: '20mm',
+              fontSize: `${BASE_FONT_PX}px`,
+              color: '#94a3b8',
+              textAlign: 'right',
+            }}
+          >
+            INVOICE {invoice.id} — {invoice.kepada_yth}
+          </div>
+          </div>
         </div>
       </div>
 
@@ -831,6 +807,31 @@ export function InvoicePrintPage() {
           .print\\:hidden { display: none !important; }
           .print\\:shadow-none { box-shadow: none !important; }
           .print\\:p-0 { padding: 0 !important; }
+
+          /* @page margin was tried twice here (20mm/20mm/15mm/20mm) as the
+             theoretically-correct way to get real per-page insets on every
+             physical page, not just the first/last. Both times it printed
+             completely edge-to-edge instead — not just failing to add a
+             margin, but with #invoice's own padding also stripped out (on
+             the assumption @page would supply it), that left literally
+             nothing creating any inset on any side. Something in this
+             environment's actual PDF/print pipeline isn't honoring @page
+             at all — most likely another @page rule elsewhere in the app
+             (same-specificity @page rules resolve by whichever the
+             pipeline processes last, which may not match plain HTML
+             document order the way normal cascade does), or the export
+             path isn't running through a real paginated-print engine in
+             the first place. Back to the one thing that's actually been
+             reliable: a single padding block on #invoice. Left/right stay
+             correct on every page no matter how many there are, because
+             that padding runs the full height of one continuous box —
+             page breaks happening partway down it don't remove it. Top/
+             bottom only apply once, at the very start and very end of the
+             whole document, so page 2 through second-to-last will still
+             start flush at the top and end flush at the bottom — a real
+             gap, but a far smaller one than zero margin everywhere, and
+             the only one of these two problems solvable without @page
+             actually working. */
           @page { size: A4; margin: 0; }
 
           /* Without this, browsers silently drop background colors when
