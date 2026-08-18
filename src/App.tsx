@@ -26,6 +26,7 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { AdminRoute } from '@/components/auth/AdminRoute'
 import { MustChangePasswordRoute } from '@/components/auth/MustChangePasswordRoute'
+import { RedirectDirectAccess } from '@/components/auth/RedirectDirectAccess'
 
 // Print pages stay outside the Sidebar/Topbar chrome (unchanged from
 // before) — they're meant to be a clean printable page, not the app
@@ -78,10 +79,15 @@ export default function App() {
 
           {/* Print routes: no sidebar/topbar chrome, but still require
               a session — someone printing an invoice is still a
-              logged-in staff member. */}
-          <Route path="/invoice/:id" element={<ProtectedRoute><InvoicePrintPage /></ProtectedRoute>} />
-          <Route path="/invoice/:id/kwitansi" element={<ProtectedRoute><KwitansiPrintPage /></ProtectedRoute>} />
-          <Route path="/delivery/:id/print" element={<ProtectedRoute><DeliveryPrintPage /></ProtectedRoute>} />
+              logged-in staff member. RedirectDirectAccess sends a
+              cold/direct hit on one of these (typed URL, reopened tab,
+              refresh) to the dashboard instead — see its own comment for
+              why and for the refresh trade-off. Nested inside
+              ProtectedRoute so an unauthenticated direct hit still goes
+              to /login first, same as before. */}
+          <Route path="/invoice/:id" element={<ProtectedRoute><RedirectDirectAccess><InvoicePrintPage /></RedirectDirectAccess></ProtectedRoute>} />
+          <Route path="/invoice/:id/kwitansi" element={<ProtectedRoute><RedirectDirectAccess><KwitansiPrintPage /></RedirectDirectAccess></ProtectedRoute>} />
+          <Route path="/delivery/:id/print" element={<ProtectedRoute><RedirectDirectAccess><DeliveryPrintPage /></RedirectDirectAccess></ProtectedRoute>} />
 
           {/* Everything else lives behind the app shell, and the whole
               shell is gated by one ProtectedRoute rather than wrapping

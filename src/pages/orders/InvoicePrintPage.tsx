@@ -1,11 +1,15 @@
 import { useRef, useLayoutEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Printer, Receipt } from 'lucide-react'
+import { ArrowLeft, Printer, Receipt, Plus } from 'lucide-react'
 import { format } from 'date-fns'
 import { invoicesApi, ordersApi, itemsApi } from '@/api'
 import { formatRp } from '@/components/ui'
 import { useRekening } from '@/utils/RekeningStore'
+import { itemHooks } from '@/hooks'
+import { useColumnWidths, setColumnWidth, setColumnWidths, resetColumnWidths, type ColumnKey } from '@/utils/ColumnnWidthStore'
+import { usePaperFormat, PAPER_FORMATS, type PaperFormat } from '@/utils/PaperFormatStore'
+import type { Invoice, Item, Order } from '@/types'
 
 // ─── Multi-page policy ─────────────────────────────────────────────────────
 // Previously this page tried to force everything onto a single physical
@@ -34,10 +38,7 @@ import { useRekening } from '@/utils/RekeningStore'
 // long one now spreads across as many pages as it actually needs, with
 // proper repeating headers, instead of being crushed to fit or awkwardly
 // stranding one small block alone on a second sheet.
-const PAGE_HEIGHT_MM = 297
-const PAGE_WIDTH_MM = 210
 const MM_TO_PX = 96 / 25.4
-const PAGE_HEIGHT_PX = PAGE_HEIGHT_MM * MM_TO_PX
 // Base font size for the whole sheet, and also the floor: text never
 // renders smaller than this. There's deliberately no shrink-to-fit logic
 // tied to it — the old system tried to guess a scale factor that would
@@ -49,7 +50,62 @@ const PAGE_HEIGHT_PX = PAGE_HEIGHT_MM * MM_TO_PX
 // content than one page can hold at that size, the natural table/row flow
 // described above just continues it onto as many further pages as it
 // takes — the same mechanism that already handles a long item list.
+// Escapes a runtime string for safe use inside a CSS `content: "..."` value
+// — used below to drop invoice.id/invoice.kepada_yth into the @page
+// footer's margin-box content. Without this, a stray literal `"` in either
+// field (unlikely but not impossible — a client name, say) would terminate
+// the CSS string early and corrupt the rest of the stylesheet.
+function escapeCssString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
 const BASE_FONT_PX = 14
+// Reserved strictly for the print-only running footer added below (page
+// number + invoice/client context) — carved out of the EXISTING bottom
+// padding rather than added on top of it, so the physical page size and
+// on-screen preview are both untouched; only the print-time split between
+// "#invoice's own padding" and "true @page margin" changes. See the @page
+// rule's own comment near the bottom of this file for why only the bottom
+// side moves, and why that's a deliberately smaller, more isolated attempt
+// at @page margin than the two that already failed here before.
+const FOOTER_MARGIN_MM = 14
+
+// ─── Column auto-fit ───────────────────────────────────────────────────────
+// Replaces dragging a column border to a guessed pixel width. A drag has no
+// "just right" — it's exactly how the NO. column ended up too narrow to
+// show anything but "N…" in the first place, with no easy way back short of
+// resetting every column to its default. Auto-fit sizes a column directly
+// from what's actually printed in it, measured with a canvas 2d context
+// using the same font the table itself renders with. A live DOM measurement
+// of the real <th>/<td> elements was the other option, but that needs the
+// table taken out of table-layout:'fixed' (which fixed layout depends on to
+// keep a set width authoritative — see the table's own comment below) and a
+// render/paint cycle to read the result back; canvas measureText gives an
+// exact width synchronously without touching the table at all.
+let measureCanvas: HTMLCanvasElement | null = null
+function measureTextWidth(text: string, font: string): number {
+  if (typeof document === 'undefined') return 0
+  if (!measureCanvas) measureCanvas = document.createElement('canvas')
+  const ctx = measureCanvas.getContext('2d')
+  if (!ctx) return 0
+  ctx.font = font
+  return ctx.measureText(text).width
+}
+// Always the bold weight, not each cell's actual one — SIZE, and the
+// TOTAL/D-P/PELUNASAN labels sharing the HARGA NET/JUMLAH columns, render
+// bold while ordinary item numbers don't. Measuring everything at the
+// heavier weight means the fitted width is never a hair too narrow for
+// whichever cell in that column IS bold — overshooting a plain-weight cell
+// by a couple px is invisible; undershooting a bold one clips it.
+const AUTOFIT_FONT = `bold ${BASE_FONT_PX}px Arial`
+// Matches each <th>/<td>'s own padding (6px 8px → 8px each side) plus a
+// bit more slack than a plain sub-pixel-rounding buffer would need — the
+// QTY column also holds an <input> (the Pelunasan row's "LUNAS" field),
+// and an <input> clips its own text at its box edge no matter what the
+// surrounding <td> allows, so undershooting there doesn't overflow
+// visibly the way a plain cell now does — it just silently clips again.
+// Worth a few extra px everywhere for that one column's sake.
+const AUTOFIT_PADDING = 8 + 8 + 6
 
 // Preset options for the header-highlight color picker in the toolbar —
 // muted, desaturated pastels in the same family as the existing D/P vs
@@ -95,7 +151,43 @@ function useUppercaseField(initial: string) {
     setValue(e.target.value.toUpperCase())
   }
 
-  return { value, ref, onChange }
+  // Exposed alongside the caret-preserving onChange above so a caller can
+  // still reset the field programmatically (e.g. clearing the add-item
+  // form after a successful submit) without needing its own separate
+  // piece of state duplicating what this hook already tracks.
+  return { value, ref, onChange, setValue }
+}
+
+// A thin strip laid over a <th>'s right edge (the <th> needs
+// position:'relative' for this to align correctly) that auto-fits that one
+// column on click — see the "Column auto-fit" comment above for why this
+// replaced dragging. A visible tick mark (styled in the stylesheet at the
+// bottom of this file, via the column-autofit-handle class) sits on the
+// border so it actually reads as clickable, rather than being a fully
+// invisible hit target that only a hover tooltip explained — that was the
+// whole handle before, and it made auto-fit undiscoverable. print:hidden —
+// a handle to interact with on screen has no meaning once the page is
+// actually printed, only the width it already set does.
+function ColumnAutoFitHandle({ onAutoFit }: { onAutoFit: () => void }) {
+  return (
+    <div
+      onClick={e => {
+        e.stopPropagation()
+        onAutoFit()
+      }}
+      className="print:hidden column-autofit-handle"
+      title="Click to auto-fit this column to its content"
+      style={{
+        position: 'absolute',
+        top: 0,
+        right: '-6px',
+        width: '12px',
+        height: '100%',
+        cursor: 'pointer',
+        zIndex: 5,
+      }}
+    />
+  )
 }
 
 export function InvoicePrintPage() {
@@ -103,6 +195,7 @@ export function InvoicePrintPage() {
   const navigate = useNavigate()
   const invoiceId = decodeURIComponent(id ?? '')
   const { rekening, setRekening } = useRekening()
+  const columnWidths = useColumnWidths()
   const signatoryName = useUppercaseField('FIFI LESMANA')
   const signatoryTitle = useUppercaseField('FOUNDER')
   // The D/P row's "paid off" label — only meaningful on a Pelunasan
@@ -178,17 +271,75 @@ export function InvoicePrintPage() {
     enabled: !!invoiceId,
   })
 
+  // Per-invoice, not global — see PaperFormatStore's own comment for why
+  // this isn't a shared preference the way column widths are.
+  const [paperFormat, setPaperFormat] = usePaperFormat(invoice?.id)
+  const { widthMm: pageWidthMm, heightMm: pageHeightMm } = PAPER_FORMATS[paperFormat]
+  const pageHeightPx = pageHeightMm * MM_TO_PX
+
   const { data: order } = useQuery({
     queryKey: ['order', invoice?.order_id],
     queryFn: () => ordersApi.get(invoice!.order_id),
     enabled: !!invoice?.order_id,
   })
 
-  const { data: items = [] } = useQuery({
+  const { data: items = [], refetch: refetchItems } = useQuery({
     queryKey: ['items', invoice?.order_id],
     queryFn: () => itemsApi.getByOrder(invoice!.order_id),
     enabled: !!invoice?.order_id,
   })
+
+  // Adding a row here creates a REAL item on this order — same mutation
+  // ItemsPage's own form uses — rather than a document-only line, so it
+  // shows up consistently everywhere else the order's items are listed
+  // (ItemsPage, OrderDetailPage) too. Deliberately not reusing
+  // OrderDetailPage/ItemsPage's own ItemForm component here: this is a
+  // quick one-line add for someone already looking at the printed
+  // invoice, not the full editing surface, so it only needs enough fields
+  // to create a minimally valid item — Order is implicit (this invoice's
+  // order), and nothing here supports editing an item after the fact
+  // (already covered by the real ItemsPage).
+  const createItem = itemHooks.useCreate()
+  const newItemName = useUppercaseField('')
+  const newItemSize = useUppercaseField('')
+  const [newItemAmount, setNewItemAmount] = useState(1)
+  const [newItemPrice, setNewItemPrice] = useState(0)
+
+  const handleAddItem = () => {
+    if (!invoice || !newItemName.value.trim()) return
+    createItem.mutate(
+      {
+        order_id: invoice.order_id,
+        item_name: newItemName.value.trim(),
+        size: newItemSize.value.trim(),
+        amount: newItemAmount,
+        price: newItemPrice,
+        sub_total: newItemAmount * newItemPrice,
+      },
+      {
+        onSuccess: () => {
+          // itemHooks.useCreate() almost certainly already invalidates
+          // whatever query key ItemsPage's own list uses, and React
+          // Query's default invalidation matches by key PREFIX — so if
+          // that key is the plain ['items'] this codebase's other list
+          // hooks (orderHooks, invoiceHooks) already follow, it would
+          // catch this page's own ['items', order_id] query for free.
+          // Called explicitly anyway rather than assumed: this page's
+          // query key includes the order_id, a shape nothing else in the
+          // codebase happens to share, so there's no way to confirm that
+          // prefix match holds without seeing inside '@/hooks' itself —
+          // an explicit refetch costs nothing extra if it was already
+          // covered, but guarantees the new row actually appears here if
+          // it wasn't.
+          refetchItems()
+          newItemName.setValue('')
+          newItemSize.setValue('')
+          setNewItemAmount(1)
+          setNewItemPrice(0)
+        },
+      }
+    )
+  }
 
   // Rough row-based estimate — see the comment above for why this is a
   // plain calculation rather than a DOM measurement. Overhead covers the
@@ -200,14 +351,44 @@ export function InvoicePrintPage() {
   const rowCount = items.length + groupCount /* gap row per group */ + 4 /* company + total + dp + pelunasan rows */
   const approxRowPx = BASE_FONT_PX + 14 /* cell padding */
   const approxOverheadPx = 620 /* masthead + customer detail + notes + signature/footer, roughly */
-  const likelyMultiPage = approxOverheadPx + rowCount * approxRowPx > PAGE_HEIGHT_PX * 1.05
+  const likelyMultiPage = approxOverheadPx + rowCount * approxRowPx > pageHeightPx * 1.05
 
-  // Same grouping the item table itself builds further down (first
-  // appearance order, one entry per distinct item_name) — kept in sync
-  // deliberately rather than shared as one computed value, since the
-  // table's version also needs each group's actual rows alongside the
-  // name, not just the name list this toolbar picker needs.
-  const groupNames = [...new Set(items.map(i => i.item_name))]
+  // Single source of truth for item grouping — the table further down and
+  // the page-segmentation below both read from this same array, instead of
+  // each recomputing their own (which is how the on-screen break marker
+  // and the actual table used to drift out of sync).
+  const groups: { name: string; rows: typeof items }[] = []
+  items.forEach(item => {
+    const g = groups.find(g => g.name === item.item_name)
+    if (g) g.rows.push(item)
+    else groups.push({ name: item.item_name, rows: [item] })
+  })
+  const groupNames = groups.map(g => g.name)
+
+  // Splits `groups` into page segments at every manual break — this is
+  // KNOWN synchronously from state (the user clicked a toggle), unlike a
+  // natural overflow break, which is why it's safe to act on directly here
+  // rather than needing the measure-after-render approach that caused the
+  // "Maximum update depth exceeded" bug described above.
+  //
+  // Deliberately NOT used to split the item table into separate DOM
+  // elements per page — the table stays one continuous flow, same as
+  // before (see the multi-page policy comment at the top of the file for
+  // why: only the browser's own natural table/row pagination can account
+  // for content this component can't measure, like a natural overflow
+  // break landing partway through a segment). What this DOES drive is the
+  // on-screen break marker at each manual break — instead of a thin
+  // dashed rule, it now reads as a real page edge with an accurate "Page N
+  // → Page N+1" label, using the segment number computed here.
+  const pageSegments: { groups: typeof groups }[] = []
+  const groupPageNumber = new Map<string, number>()
+  groups.forEach((g, i) => {
+    if (i > 0 && manualBreaks.has(g.name)) pageSegments.push({ groups: [g] })
+    else if (pageSegments.length === 0) pageSegments.push({ groups: [g] })
+    else pageSegments[pageSegments.length - 1].groups.push(g)
+    groupPageNumber.set(g.name, pageSegments.length)
+  })
+  if (pageSegments.length === 0) pageSegments.push({ groups: [] })
 
   if (invoiceLoading) return <div className="p-8 text-slate-400">Loading…</div>
   if (!invoice) return <div className="p-8 text-red-400">Invoice not found.</div>
@@ -237,19 +418,90 @@ export function InvoicePrintPage() {
   // of highlight that isn't user-pickable.
   const highlightCellStyle = { background: highlightChoice }
 
+  // What's actually rendered in each fixed-width column right now — the
+  // source auto-fit measures against. Built here (rather than inside the
+  // handlers below) so both the per-column click handler and the
+  // "auto-fit all" toolbar button read from the exact same list; every
+  // string here should have a matching cell somewhere in the table below.
+  // KETERANGAN has no entry — it's the one column with no stored width to
+  // fit in the first place (see ColumnWidthsStore's comment on ColumnKey).
+  const hasDp = invoice.down_payment != null && invoice.down_payment > 0
+  const columnTexts: Record<ColumnKey, string[]> = {
+    no: ['NO.', ...groups.map((_, i) => String(i + 1))],
+    size: ['SIZE', ...items.map(i => i.size || '—')],
+    qty: [
+      'QTY',
+      ...items.map(i => i.amount.toLocaleString('id-ID')),
+      items.reduce((s, i) => s + i.amount, 0).toLocaleString('id-ID'),
+      ...(invoice.type === 'pelunasan' ? [dpPaidLabel.value] : []),
+    ],
+    hargaNet: [
+      'HARGA NET',
+      ...items.map(i => i.price.toLocaleString('id-ID')),
+      'TOTAL',
+      ...(hasDp ? [`D/P ${dpPercent} %`] : []),
+      'PELUNASAN',
+    ],
+    jumlah: [
+      'JUMLAH (Rp)',
+      ...items.map(i => i.sub_total.toLocaleString('id-ID')),
+      invoice.total.toLocaleString('id-ID'),
+      ...(hasDp ? [(invoice.down_payment ?? 0).toLocaleString('id-ID')] : []),
+      invoice.remaining.toLocaleString('id-ID'),
+    ],
+  }
+  const fitWidthFor = (column: ColumnKey) =>
+    columnTexts[column].reduce((max, t) => Math.max(max, measureTextWidth(t, AUTOFIT_FONT)), 0) + AUTOFIT_PADDING
+  const autoFitColumn = (column: ColumnKey) => setColumnWidth(column, fitWidthFor(column))
+  const autoFitAllColumns = () => {
+    const next: Partial<Record<ColumnKey, number>> = {}
+    ;(Object.keys(columnTexts) as ColumnKey[]).forEach(column => {
+      next[column] = fitWidthFor(column)
+    })
+    setColumnWidths(next)
+  }
+
+  // Plain native print — see the multi-page policy comment at the top of
+  // this file. The browser handles table pagination and repeated headers
+  // on its own; the one thing it can't do is bake a real "Page X / Y"
+  // into each sheet (see the running per-page footer's own comment below
+  // for why that's a fair trade).
+  const handlePrint = () => {
+    window.print()
+  }
+
   return (
     <div className="min-h-screen bg-slate-100">
       {/* Toolbar — hidden when printing */}
       <div className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3">
+        {/* Always the invoice list, not navigate(-1) — this page is
+            commonly reached cold (a typed URL, a reopened tab, a
+            bookmark), where there's no useful in-app history to go back
+            to; navigate(-1) in that case either does nothing or leaves
+            the app entirely. Always landing on /invoice is simple and
+            predictable either way, at the cost of not returning to
+            wherever "Print" was actually clicked from (e.g. a specific
+            order) when there IS real history. */}
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => navigate('/invoice')}
           className="btn-secondary flex items-center gap-1.5 text-sm"
         >
           <ArrowLeft size={14} /> Back
         </button>
-        <span className="text-slate-400 text-sm flex-1">
+        <span className="text-slate-400 text-sm flex-1 flex items-center gap-1.5">
           {invoice.id}
-          {likelyMultiPage && ' · long invoice — prints across multiple pages'}
+          {/* There's no way to know the real page count ahead of the
+              browser's own native print layout (see the multi-page policy
+              comment at the top of this file) — this is just the floor we
+              DO know for certain: at least one sheet per manual page-break
+              segment, plus the rough row-based heuristic further up.
+              Natural overflow could still add more than that, which is
+              why it's phrased as "at least". */}
+          {pageSegments.length > 1 || likelyMultiPage ? (
+            <span className="badge bg-slate-100 text-slate-600">
+              at least {pageSegments.length} page{pageSegments.length === 1 ? '' : 's'}
+            </span>
+          ) : null}
         </span>
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-slate-400 mr-0.5">Click a row to color it:</span>
@@ -277,6 +529,22 @@ export function InvoicePrintPage() {
             </button>
           )}
         </div>
+        {/* Per-invoice, persisted via PaperFormatStore — see its own
+            comment for why this is keyed by invoice id rather than shared
+            globally the way column widths are. Drives both the actual
+            @page size for real printing and #invoice's own on-screen
+            dimensions below, so switching it changes what you're looking
+            at immediately, not just what eventually gets printed. */}
+        <select
+          value={paperFormat}
+          onChange={e => setPaperFormat(e.target.value as PaperFormat)}
+          className="field text-sm !w-auto"
+          title="Paper format"
+        >
+          {(Object.keys(PAPER_FORMATS) as PaperFormat[]).map(key => (
+            <option key={key} value={key}>{PAPER_FORMATS[key].label}</option>
+          ))}
+        </select>
         <button
           onClick={() => navigate(`/invoice/${encodeURIComponent(invoice.id)}/kwitansi`)}
           className="btn-secondary flex items-center gap-2"
@@ -284,7 +552,7 @@ export function InvoicePrintPage() {
           <Receipt size={14} /> Kwitansi
         </button>
         <button
-          onClick={() => window.print()}
+          onClick={handlePrint}
           className="btn-primary flex items-center gap-2"
         >
           <Printer size={14} /> Print / Save PDF
@@ -325,9 +593,34 @@ export function InvoicePrintPage() {
         </div>
       )}
 
+      {/* Column widths — each fixed-width column (NO/SIZE/QTY/HARGA NET/
+          JUMLAH) can be auto-fit individually by clicking its right edge
+          in the header (see ColumnAutoFitHandle), or all at once here.
+          "Reset to default" stays alongside it as a separate action: fit
+          sizes to THIS invoice's actual content, which is exactly what you
+          don't want if a later, differently-sized invoice inherits it (the
+          widths are shared across every invoice — see ColumnWidthsStore) —
+          reset is the way back to the fixed starting point. */}
+      <div className="print:hidden bg-white border-b border-slate-200 px-6 py-1.5 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={autoFitAllColumns}
+          className="text-xs text-slate-400 hover:text-slate-600 underline"
+        >
+          Auto-fit all columns
+        </button>
+        <button
+          type="button"
+          onClick={() => resetColumnWidths()}
+          className="text-xs text-slate-400 hover:text-slate-600 underline"
+        >
+          Reset column widths to default
+        </button>
+      </div>
+
       {/* Invoice document */}
       <div className="p-8 print:p-0">
-        <div id="invoice-page-wrap" style={{ width: `${PAGE_WIDTH_MM}mm`, position: 'relative' }} className="mx-auto">
+        <div id="invoice-page-wrap" style={{ width: `${pageWidthMm}mm`, position: 'relative' }} className="mx-auto">
           <div
             id="invoice"
             className="bg-white shadow-lg print:shadow-none"
@@ -340,9 +633,17 @@ export function InvoicePrintPage() {
               // physical A4 page before a single line of content is drawn,
               // which guaranteed a sliver of overflow onto an almost-empty
               // second page on every invoice, however short.
+              //
+              // This padding (and minHeight) is the screen/on-screen-preview
+              // value only — print gets a shorter bottom padding and
+              // minHeight, via the #invoice override inside @media print
+              // near the bottom of this file, to make room for the running
+              // footer's real @page margin box. Left as the full 15mm here
+              // so the on-screen preview isn't misleadingly shorter than
+              // the actual printed page.
               boxSizing: 'border-box',
-              width: `${PAGE_WIDTH_MM}mm`,
-              minHeight: '297mm',
+              width: `${pageWidthMm}mm`,
+              minHeight: `${pageHeightMm}mm`,
               padding: '20mm 20mm 15mm 20mm',
               fontFamily: 'Arial, sans-serif',
               fontSize: `${BASE_FONT_PX}px`,
@@ -426,19 +727,64 @@ export function InvoicePrintPage() {
           </div>
 
           {/* Items table */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0', fontSize: `${BASE_FONT_PX}px` }}>
+          {/* table-layout:'fixed' rather than the default 'auto': with
+              auto layout, an explicit <th> width is only ever a hint —
+              the browser still grows a column to fit its widest cell
+              content, which would make dragging a column narrower mostly
+              not work (the numbers/labels inside would just keep forcing
+              it back open). Fixed layout makes the <th> widths below
+              authoritative, so a resize actually takes effect; any
+              content too wide for its new column just wraps, the same
+              way LAMA PRODUKSI already wraps in the table above. */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0', fontSize: `${BASE_FONT_PX}px`, tableLayout: 'fixed' }}>
             <thead>
               {/* Column dividers use a darker border (#94a3b8) than the
                   rest of the table (#ccc) — against a light highlight
                   fill, the lighter gray had almost no contrast and the
                   vertical lines between columns basically disappeared. */}
               <tr style={highlightCellStyle}>
-                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'center', width: '40px' }}>NO.</th>
+                <th style={{ position: 'relative', border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'center', width: `${columnWidths.no}px`, whiteSpace: 'nowrap' }}>
+                  NO.
+                  <ColumnAutoFitHandle onAutoFit={() => autoFitColumn('no')} />
+                </th>
+                {/* No auto-fit handle here — KETERANGAN is the one column
+                    that's meant to stay flexible and absorb whatever
+                    width the other five don't use (see
+                    ColumnWidthsStore's comment on ColumnKey), so it
+                    intentionally has no stored/explicit width to fit.
+                    Also the one header left free to wrap onto multiple
+                    lines rather than nowrap like the rest — it's a single
+                    word ("KETERANGAN") so wrapping was never the actual
+                    problem here, and this column is exactly the one place
+                    text SHOULD be allowed to wrap (long item names), not
+                    get clipped. */}
                 <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'left' }}>KETERANGAN</th>
-                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'center', width: '60px' }}>SIZE</th>
-                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'center', width: '60px' }}>QTY</th>
-                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'right', width: '90px' }}>HARGA NET</th>
-                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'right', width: '100px' }}>JUMLAH (Rp)</th>
+                <th style={{ position: 'relative', border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'center', width: `${columnWidths.size}px`, whiteSpace: 'nowrap' }}>
+                  SIZE
+                  <ColumnAutoFitHandle onAutoFit={() => autoFitColumn('size')} />
+                </th>
+                <th style={{ position: 'relative', border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'center', width: `${columnWidths.qty}px`, whiteSpace: 'nowrap' }}>
+                  QTY
+                  <ColumnAutoFitHandle onAutoFit={() => autoFitColumn('qty')} />
+                </th>
+                {/* hargaNet/jumlah: DEFAULT_COLUMN_WIDTHS (105/120) is
+                    sized so "HARGA NET"/"JUMLAH (Rp)" fit on one line at
+                    the default width. No overflow-hidden/ellipsis safety
+                    net anymore — that was masking exactly the problem it
+                    was meant to guard against (a column dragged too
+                    narrow silently clipped down to "N…" instead of
+                    showing something was wrong). Auto-fit is what keeps
+                    these columns wide enough for their content now; if a
+                    column somehow still ends up narrower than its text,
+                    that text visibly overflows instead of disappearing. */}
+                <th style={{ position: 'relative', border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'right', width: `${columnWidths.hargaNet}px`, whiteSpace: 'nowrap' }}>
+                  HARGA NET
+                  <ColumnAutoFitHandle onAutoFit={() => autoFitColumn('hargaNet')} />
+                </th>
+                <th style={{ position: 'relative', border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'right', width: `${columnWidths.jumlah}px`, whiteSpace: 'nowrap' }}>
+                  JUMLAH (Rp)
+                  <ColumnAutoFitHandle onAutoFit={() => autoFitColumn('jumlah')} />
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -480,14 +826,18 @@ export function InvoicePrintPage() {
                 has to break it somewhere rather than leave it off the
                 page entirely — this just stops an ordinary-sized group
                 from splitting when it didn't need to. */}
-            {(() => {
-              const groups: { name: string; rows: typeof items }[] = []
-              items.forEach(item => {
-                const group = groups.find(g => g.name === item.item_name)
-                if (group) group.rows.push(item)
-                else groups.push({ name: item.item_name, rows: [item] })
-              })
-              return groups.map((group, groupIdx) => (
+            {groups.map((group, groupIdx) => {
+              // Only a manual break is actually known synchronously from
+              // state — see the pageSegments comment above for why a
+              // natural overflow break can't be predicted here without
+              // the browser's own real print layout, which this
+              // component has no way to inspect ahead of time.
+              const manualBreakHere = manualBreaks.has(group.name) && groupIdx > 0
+              const showBreakMarker = manualBreakHere
+              const endOfPageLabel = groupPageNumber.get(group.name)! - 1
+              const startOfPageLabel = groupPageNumber.get(group.name)
+
+              return (
                 <tbody
                   key={group.name}
                   style={{
@@ -504,7 +854,7 @@ export function InvoicePrintPage() {
                     // "before" the first item would just be a blank first
                     // page, which was never the intent of picking it in
                     // the toolbar.
-                    ...(manualBreaks.has(group.name) && groupIdx > 0
+                    ...(manualBreakHere
                       ? { pageBreakBefore: 'always', breakBefore: 'page' }
                       : {}),
                   }}
@@ -512,13 +862,38 @@ export function InvoicePrintPage() {
                   {/* Screen-only marker so the break is visible before you
                       ever open the print dialog — print:hidden removes it
                       from the actual output, where the real page boundary
-                      speaks for itself. */}
-                  {manualBreaks.has(group.name) && groupIdx > 0 && (
+                      speaks for itself there instead. Deliberately styled
+                      to actually LOOK like a page edge (a paper-colored gap
+                      with shadowed top/bottom edges and real "Page N" /
+                      "Page N+1" labels) rather than a thin dashed rule —
+                      the rule technically marked the same spot but read as
+                      an annotation, not as what will actually happen to
+                      the document. Only shown at a manual break — a
+                      natural overflow break is entirely up to the browser's
+                      own print layout and can't be known ahead of time
+                      (see the multi-page policy comment at the top of this
+                      file). */}
+                  {showBreakMarker && (
                     <tr className="print:hidden">
-                      <td colSpan={6} style={{ padding: '2px 0', borderTop: '2px dashed #1a56db' }}>
-                        <span style={{ fontSize: '10px', color: '#1a56db', fontWeight: 'bold' }}>
-                          — new page starts here —
-                        </span>
+                      <td colSpan={6} style={{ padding: 0 }}>
+                        <div style={{ margin: '10px -20mm', padding: '0 20mm' }}>
+                          {/* Bottom edge of the page that just ended */}
+                          <div style={{ height: '10px', background: 'linear-gradient(#fff, #f8fafc)', boxShadow: '0 2px 4px rgba(15,23,42,0.12)' }} />
+                          <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                            padding: '10px 0', background: '#e2e8f0',
+                          }}>
+                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748b' }}>
+                              END OF PAGE {endOfPageLabel}
+                            </span>
+                            <span style={{ width: '1px', height: '12px', background: '#94a3b8' }} />
+                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#334155' }}>
+                              PAGE {startOfPageLabel} STARTS BELOW
+                            </span>
+                          </div>
+                          {/* Top edge of the page that's about to start */}
+                          <div style={{ height: '10px', background: 'linear-gradient(#f8fafc, #fff)', boxShadow: '0 -2px 4px rgba(15,23,42,0.12)' }} />
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -531,14 +906,14 @@ export function InvoicePrintPage() {
                         className="cursor-pointer print:cursor-default"
                         style={{ background: rowHighlights[key] }}
                       >
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center' }}>
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                           {rowIdx === 0 ? groupIdx + 1 : ''}
                         </td>
                         <td style={{ border: '1px solid #ccc', padding: '6px 8px' }}>{rowIdx === 0 ? item.item_name.toUpperCase() : ''}</td>
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold' }}>{item.size ?? '—'}</td>
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center' }}>{item.amount.toLocaleString('id-ID')}</td>
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right' }}>{item.price.toLocaleString('id-ID')}</td>
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right' }}>{item.sub_total.toLocaleString('id-ID')}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{item.size ?? '—'}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>{item.amount.toLocaleString('id-ID')}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.price.toLocaleString('id-ID')}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.sub_total.toLocaleString('id-ID')}</td>
                       </tr>
                     )
                   })}
@@ -564,8 +939,8 @@ export function InvoicePrintPage() {
                     )
                   })()}
                 </tbody>
-              ))
-            })()}
+              )
+            })}
 
             {/* TOTAL / D.P / PELUNASAN together in their own tbody, same
                 reasoning as the per-item groups above — these three rows
@@ -589,11 +964,11 @@ export function InvoicePrintPage() {
                     leaving it unset, since border-collapse otherwise lets a
                     real border set by either neighboring cell win. */}
                 <td style={{ padding: '6px 8px', borderTop: '1px solid #ccc', borderBottomStyle: 'hidden' }} colSpan={3} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold' }}>
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
                   {items.reduce((s, i) => s + i.amount, 0).toLocaleString('id-ID')}
                 </td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold' }}>TOTAL</td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold' }}>
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>TOTAL</td>
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
                   {invoice.total.toLocaleString('id-ID')}
                 </td>
               </tr>
@@ -619,17 +994,14 @@ export function InvoicePrintPage() {
                       actually received, so only it gets a typable "LUNAS"
                       label here — a fresh D/P invoice hasn't been paid yet,
                       so there's nothing to mark. Sized to just the QTY
-                      column, same as every other cell in this row. An
-                      <input>'s text clips silently against its own box
-                      instead of wrapping or forcing the column wider the
-                      way a plain <td>'s text would, so at the 60px column
-                      width "LUNAS" needs a font a couple sizes under the
-                      document's usual floor to comfortably fit — widening
-                      the column instead was tried, but that redistributes
-                      width across the whole table and nudged the totals
-                      block's height just enough to change which page it
-                      lands on. This is scoped to only the one input, so
-                      it can't affect layout anywhere else. */}
+                      column, same as every other cell in this row. Now
+                      matches PELUNASAN's own size/weight (14px bold) —
+                      previously shrunk to 11px because the QTY column's
+                      fixed 60px width couldn't fit "LUNAS" at full size,
+                      but auto-fit already measures this exact input's text
+                      at that same bold size when sizing the QTY column
+                      (see columnTexts.qty above), so the column itself
+                      grows to fit it instead of the text needing to shrink. */}
                   <td style={{ border: '1px solid #ccc', padding: '6px 8px', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
                     {invoice.type === 'pelunasan' && (
                       <input
@@ -637,14 +1009,14 @@ export function InvoicePrintPage() {
                         value={dpPaidLabel.value}
                         onChange={dpPaidLabel.onChange}
                         onClick={e => e.stopPropagation()}
-                        style={{ border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: '11px', textAlign: 'right', width: '100%', padding: 0 }}
+                        style={{ border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: `${BASE_FONT_PX}px`, fontWeight: 'bold', textAlign: 'right', width: '100%', padding: 0 }}
                       />
                     )}
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
+                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
                     D/P {dpPercent} %
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
+                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
                     {(invoice.down_payment ?? 0).toLocaleString('id-ID')}
                   </td>
                 </tr>
@@ -679,15 +1051,83 @@ export function InvoicePrintPage() {
                     : (invoice.due_date ? `J/T : ${format(new Date(invoice.due_date), 'd MMMM yyyy').toUpperCase()}` : '')}
                 </td>
                 <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
                   PELUNASAN
                 </td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
                   {invoice.remaining.toLocaleString('id-ID')}
                 </td>
               </tr>
             </tbody>
           </table>
+
+          {/* Add-item panel — print:hidden, and deliberately placed
+              directly under the table it adds to rather than up in the
+              toolbar, so it's obvious which table a new row lands in.
+              Only item name is required; size/qty/price default to blank/
+              1/0 the same way a fresh row in ItemsPage's own form would,
+              since a placeholder line is still often useful even before
+              every field is filled in. */}
+          <div className="print:hidden" style={{ marginTop: '8px', display: 'flex', alignItems: 'flex-end', gap: '8px', flexWrap: 'wrap', background: '#f8fafc', borderRadius: '6px', padding: '10px 12px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '10px', color: '#94a3b8', marginBottom: '2px' }}>Item Name</label>
+              <input
+                ref={newItemName.ref}
+                value={newItemName.value}
+                onChange={newItemName.onChange}
+                placeholder="e.g. APRON"
+                className="field"
+                style={{ width: '180px' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '10px', color: '#94a3b8', marginBottom: '2px' }}>Size</label>
+              <input
+                ref={newItemSize.ref}
+                value={newItemSize.value}
+                onChange={newItemSize.onChange}
+                placeholder="M"
+                className="field"
+                style={{ width: '70px' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '10px', color: '#94a3b8', marginBottom: '2px' }}>Qty</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={newItemAmount || ''}
+                onChange={e => {
+                  const digits = e.target.value.replace(/\D/g, '')
+                  setNewItemAmount(digits === '' ? 0 : Math.trunc(Number(digits)))
+                }}
+                className="field"
+                style={{ width: '70px' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '10px', color: '#94a3b8', marginBottom: '2px' }}>Unit Price (Rp)</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={newItemPrice || ''}
+                onChange={e => {
+                  const digits = e.target.value.replace(/\D/g, '')
+                  setNewItemPrice(digits === '' ? 0 : Math.trunc(Number(digits)))
+                }}
+                className="field font-mono"
+                style={{ width: '110px' }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleAddItem}
+              disabled={createItem.isPending || !newItemName.value.trim()}
+              className="btn-primary flex items-center gap-1.5"
+            >
+              <Plus size={14} /> {createItem.isPending ? 'Adding…' : 'Add Row'}
+            </button>
+          </div>
 
           {/* Notes */}
           <div style={{ marginTop: '24px', fontSize: `${BASE_FONT_PX}px`, pageBreakInside: 'avoid' }}>
@@ -768,71 +1208,152 @@ export function InvoicePrintPage() {
             </div>
           </div>
 
-          {/* Running per-page footer — a small "invoice no. + client"
-              strip pinned to the bottom of every physical page, print-only.
-              Chrome (and most print engines) repeat any `position: fixed`
-              element once per printed page automatically — this is the one
-              reliable way to put real, per-page context on an invoice that
-              can now span an unknown number of pages, without needing JS
-              to know the actual page count (which isn't obtainable at all
-              here — Chrome doesn't expose CSS Paged Media running headers/
-              footers or counter(pages) to arbitrary HTML content, only to
-              print engines like Prince/WeasyPrint). No exact "Halaman X
-              dari Y" anymore for the same reason: with the table itself
-              now free to spill across pages, we can no longer know the
-              total page count in advance the way the old 1-or-2-page
-              system could. */}
-          <div
-            className="hidden print:block"
-            style={{
-              position: 'fixed',
-              bottom: '8mm',
-              left: '20mm',
-              right: '20mm',
-              fontSize: `${BASE_FONT_PX}px`,
-              color: '#94a3b8',
-              textAlign: 'right',
-            }}
-          >
-            INVOICE {invoice.id} — {invoice.kepada_yth}
-          </div>
+          {/* The running per-page footer (page number + invoice/client
+              context) used to live here as a `position: fixed` HTML div —
+              see the @page rule's own comment near the bottom of this file
+              for why it moved into real @page margin boxes instead, and
+              what that does and doesn't fix. */}
           </div>
         </div>
       </div>
 
       {/* Print styles */}
       <style>{`
+        /* Auto-fit column handle — a thin, mostly-invisible click target
+           sitting on each resizable header's right border (see
+           ColumnAutoFitHandle). On-screen only (buried in @media print
+           below is where it actually gets hidden for real printing); the
+           ::after tick is what makes it discoverable at all — a plain
+           invisible strip with only a title-attribute tooltip turned out
+           to look exactly like "nothing is there", which is why clicking
+           to resize was hard to find in the first place. The tick sits
+           dead center on the column border so it reads as belonging to
+           that border, and brightens/thickens on hover so hovering near
+           the edge actually confirms something is clickable before you
+           click it. */
+        .column-autofit-handle { position: relative; }
+        .column-autofit-handle::after {
+          content: '';
+          position: absolute;
+          top: 15%;
+          bottom: 15%;
+          left: 50%;
+          width: 2px;
+          background: rgba(148, 163, 184, 0.6);
+          transform: translateX(-50%);
+          border-radius: 1px;
+        }
+        .column-autofit-handle:hover::after {
+          background: #2563eb;
+          width: 3px;
+        }
+
         @media print {
           body { margin: 0; background: white; }
           .print\\:hidden { display: none !important; }
           .print\\:shadow-none { box-shadow: none !important; }
           .print\\:p-0 { padding: 0 !important; }
 
-          /* @page margin was tried twice here (20mm/20mm/15mm/20mm) as the
-             theoretically-correct way to get real per-page insets on every
-             physical page, not just the first/last. Both times it printed
-             completely edge-to-edge instead — not just failing to add a
-             margin, but with #invoice's own padding also stripped out (on
-             the assumption @page would supply it), that left literally
-             nothing creating any inset on any side. Something in this
-             environment's actual PDF/print pipeline isn't honoring @page
+          {/* @page margin was tried twice here before (20mm/20mm/15mm/20mm,
+             all four sides at once) as the theoretically-correct way to
+             get real per-page insets. Both times it printed completely
+             edge-to-edge instead — not just failing to add a margin, but
+             with #invoice's own padding ALSO stripped out at the same time
+             (on the assumption @page would supply it), leaving literally
+             nothing creating any inset anywhere. Something in this
+             environment's actual PDF/print pipeline wasn't honoring @page
              at all — most likely another @page rule elsewhere in the app
              (same-specificity @page rules resolve by whichever the
              pipeline processes last, which may not match plain HTML
              document order the way normal cascade does), or the export
-             path isn't running through a real paginated-print engine in
-             the first place. Back to the one thing that's actually been
-             reliable: a single padding block on #invoice. Left/right stay
-             correct on every page no matter how many there are, because
-             that padding runs the full height of one continuous box —
-             page breaks happening partway down it don't remove it. Top/
-             bottom only apply once, at the very start and very end of the
-             whole document, so page 2 through second-to-last will still
-             start flush at the top and end flush at the bottom — a real
-             gap, but a far smaller one than zero margin everywhere, and
-             the only one of these two problems solvable without @page
-             actually working. */
-          @page { size: A4; margin: 0; }
+             path isn't running through a real paginated-print engine.
+             Neither of those is something this file can rule out from
+             here — @page margin boxes (counter(page)/counter(pages), the
+             @bottom-left/@bottom-right rules below) are now genuinely
+             supported by Chrome and Chromium-based print pipelines
+             (shipped Chrome 131, Nov 2024) where they weren't when the
+             comment above was first written, which is the only reason
+             this is being tried a third time — but if this environment's
+             own @page problem was the real cause of the first two
+             failures rather than missing browser support, it will still
+             bite this attempt too. TEST AN ACTUAL PRINT/EXPORT of a
+             multi-page invoice before trusting this. If it reproduces the
+             old edge-to-edge failure, the fix is to revert just this
+             block: change 'margin: 0 0 ${FOOTER_MARGIN_MM}mm 0' back to
+             'margin: 0', delete the two margin-box rules below, delete
+             the #invoice print override that shortens its bottom
+             padding/minHeight, and restore the old position:fixed
+             "INVOICE {id} — {client}" div this replaced (see git history).
+             Kept deliberately smaller than the earlier attempts either
+             way: only the BOTTOM side moves into @page margin here, and
+             only by ${FOOTER_MARGIN_MM}mm carved out of #invoice's
+             existing 15mm bottom padding (see the #invoice override right
+             below) rather than added on top of it — top/left/right stay
+             exactly as they were, still supplied entirely by #invoice's
+             own padding, so even a repeat of the old failure can only
+             affect the bottom edge, not strip every side at once. */}
+          @page {
+            size: ${pageWidthMm}mm ${pageHeightMm}mm;
+            margin: 0 0 ${FOOTER_MARGIN_MM}mm 0;
+            /* Real total-page-count support — counter(pages) only works
+               inside an @page margin-box context like this, never in
+               ordinary document content (a plain HTML element, even
+               position:fixed, can't read it), which is why this replaces
+               the old JS-side "we can't know Y" footer instead of just
+               adding a number into it. */
+            @bottom-left {
+              content: "Page " counter(page) " of " counter(pages);
+              font-family: Arial, sans-serif;
+              font-size: 10px;
+              color: #94a3b8;
+              /* Left/vertical padding so this sits inset from the physical
+                 page edges instead of glued right up against them (which
+                 is how it printed before — see the screenshot this was
+                 fixed from). 20mm left matches #invoice's own left
+                 padding, so the footer lines up with the main content's
+                 own edge rather than an arbitrary different inset;
+                 vertical-align centers it in the (now taller,
+                 ${FOOTER_MARGIN_MM}mm) margin band rather than sitting
+                 flush at its bottom, which is this band's own physical
+                 bottom edge. */
+              padding: 0 0 0 20mm;
+              vertical-align: middle;
+            }
+            /* Same invoice-no./client context the old position:fixed
+               footer showed, now on the same true page-margin band as the
+               page count instead of floating inside the content area —
+               keeps both halves of the footer pinned to the same line on
+               every page no matter how #invoice's own content reflows. */
+            @bottom-right {
+              content: "INVOICE ${escapeCssString(invoice.id)} — ${escapeCssString(invoice.kepada_yth)}";
+              font-family: Arial, sans-serif;
+              font-size: 10px;
+              color: #94a3b8;
+              /* Mirrors @bottom-left's own comment above — 20mm right
+                 padding (matching #invoice's right padding) and vertical
+                 centering, so this half isn't glued to the page's right/
+                 bottom edges either, and doesn't risk clipping into a
+                 printer's unprintable edge margin the way the un-inset
+                 version could. */
+              padding: 0 20mm 0 0;
+              vertical-align: middle;
+            }
+          }
+
+          /* Print-only shortening of #invoice's own bottom inset to match
+             the @page margin added above — ${FOOTER_MARGIN_MM}mm of the
+             original 15mm bottom padding now lives in the true page
+             margin (for the footer above to sit in) instead of inside
+             #invoice's own box, and minHeight drops by the same amount so
+             the content area's total height is unchanged and nothing that
+             used to fit on one page suddenly doesn't. !important because
+             this needs to beat #invoice's own inline style, which
+             ordinary specificity can't do. Screen/on-screen preview is
+             untouched — this rule only exists inside @media print. */
+          #invoice {
+            padding-bottom: ${15 - FOOTER_MARGIN_MM}mm !important;
+            min-height: ${pageHeightMm - FOOTER_MARGIN_MM}mm !important;
+          }
 
           /* Without this, browsers silently drop background colors when
              printing/exporting to PDF unless the person has manually
