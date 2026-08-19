@@ -22,7 +22,11 @@ export const usersApi = {
   list: () =>
     authHttp.get<{ users: AdminUser[] }>('/users').then(r => r.data),
 
-  create: (payload: { email: string; name: string; password: string; role: 'admin' | 'staff' }) =>
+  // No password field — the auth service generates a locked password
+  // itself and emails the new user a one-time "set your password" link
+  // (see CreateUser/AcceptInvite in the auth service). Nothing for an
+  // admin to type or relay out of band anymore.
+  create: (payload: { email: string; name: string; role: 'admin' | 'staff' }) =>
     authHttp.post<{ user: AdminUser }>('/users', payload).then(r => r.data),
 
   deactivate: (id: number) =>

@@ -20,6 +20,7 @@ import { ClientDetailPage } from '@/pages/client/ClientDetailPage'
 import { ClientItemDetailPage } from '@/pages/client/ClientItemDetailPage'
 import { YearlyReportPage } from '@/pages/reports/YearlyReportPage'
 import { LoginPage } from '@/pages/auth/LoginPage'
+import { SetPasswordPage } from '@/pages/auth/SetPasswordPage'
 import { ChangePasswordPage } from '@/pages/auth/ChangePasswordPage'
 import { UsersPage } from '@/pages/users/UsersPage'
 import { AuthProvider } from '@/contexts/AuthContext'
@@ -69,6 +70,12 @@ export default function App() {
       <>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+
+          {/* Where an invited user's emailed link lands. Public for the
+              same reason /login is: no session exists yet at this
+              point — wrapping it in ProtectedRoute would redirect it
+              straight to /login before the form ever renders. */}
+          <Route path="/set-password" element={<SetPasswordPage />} />
 
           {/* Reached from MustChangePasswordRoute below (or directly, by
               a user who bookmarks it). Deliberately only wrapped in

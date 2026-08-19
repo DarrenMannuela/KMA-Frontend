@@ -7,6 +7,7 @@ interface AuthContextValue {
   user: AuthUser | null
   status: 'loading' | 'authenticated' | 'unauthenticated'
   login: (email: string, password: string) => Promise<void>
+  acceptInvite: (token: string, newPassword: string) => Promise<void>
   logout: () => Promise<void>
 }
 
@@ -46,6 +47,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('authenticated')
   }, [])
 
+  // Same shape as login — the backend hands back a real session on a
+  // successful invite acceptance (see AcceptInvite's comment in
+  // user_handler.go), so this applies to local state exactly the way a
+  // normal login does, just via a different backend call.
+  const acceptInvite = useCallback(async (token: string, newPassword: string) => {
+    const { user } = await authApi.acceptInvite(token, newPassword)
+    setUser(user)
+    setStatus('authenticated')
+  }, [])
+
   const logout = useCallback(async () => {
     try {
       await authApi.logout()
@@ -58,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, status, login, logout }}>
+    <AuthContext.Provider value={{ user, status, login, acceptInvite, logout }}>
       {children}
     </AuthContext.Provider>
   )

@@ -140,7 +140,6 @@ export function UsersPage() {
 function AddUserForm({ onCreated }: { onCreated: (u: AdminUser) => void }) {
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
-  const [password, setPassword] = useState('')
   const [role, setRole] = useState<'admin' | 'staff'>('staff')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -150,12 +149,11 @@ function AddUserForm({ onCreated }: { onCreated: (u: AdminUser) => void }) {
     setError(null)
     setSubmitting(true)
     try {
-      const { user } = await usersApi.create({ email, name, password, role })
-      toast.success(`${user.name} added`)
+      const { user } = await usersApi.create({ email, name, role })
+      toast.success(`Invite sent to ${user.email}`)
       onCreated(user)
       setEmail('')
       setName('')
-      setPassword('')
       setRole('staff')
     } catch (err) {
       setError(err instanceof UsersApiError ? err.message : 'Could not create user')
@@ -182,15 +180,7 @@ function AddUserForm({ onCreated }: { onCreated: (u: AdminUser) => void }) {
           placeholder="name@company.com"
         />
       </div>
-      <div>
-        <label className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Temporary password</label>
-        <input
-          required type="text" value={password} onChange={e => setPassword(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300"
-          placeholder="Share with them out of band"
-        />
-      </div>
-      <div>
+      <div className="col-span-2">
         <label className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Role</label>
         <select
           value={role} onChange={e => setRole(e.target.value as 'admin' | 'staff')}
@@ -201,6 +191,16 @@ function AddUserForm({ onCreated }: { onCreated: (u: AdminUser) => void }) {
         </select>
       </div>
 
+      {/* No password field anymore — the backend generates a locked,
+          never-shown password and emails the new hire a one-time
+          "set your password" link instead (see CreateUser/AcceptInvite
+          on the auth service). Nothing usable to type in here on
+          purpose, so there's nothing left for an admin to accidentally
+          mishandle by copy-pasting it somewhere insecure. */}
+      <p className="col-span-2 text-xs text-slate-400 -mt-2">
+        They'll get an email with a link to set their own password. The link expires after a couple of days.
+      </p>
+
       {error && <p className="col-span-2 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
       <button
@@ -209,7 +209,7 @@ function AddUserForm({ onCreated }: { onCreated: (u: AdminUser) => void }) {
         className="col-span-2 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-navy-900 text-white text-sm font-semibold hover:bg-navy-800 transition-colors disabled:opacity-60"
       >
         {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-        {submitting ? 'Adding…' : 'Add user'}
+        {submitting ? 'Sending invite…' : 'Add user'}
       </button>
     </form>
   )

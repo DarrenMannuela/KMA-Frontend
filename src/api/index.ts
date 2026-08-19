@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { handleSessionExpired } from '@/api/authApi'
 import type {
   Order, Item, Invoice, Supplier, FinanceHeader, ProductionItem, OperationItem,
   Delivery, DeliveryItem, Client, ClientContact, ClientItem, ClientItemPrice,
@@ -45,10 +46,20 @@ const http = axios.create({
 
 http.interceptors.response.use(
   (r) => r,
-  (e) => Promise.reject(new ApiError(
-    e.response?.data?.error ?? e.response?.data?.message ?? e.message ?? 'Error',
-    e.response?.status
-  ))
+  (e) => {
+    // A 401 here means the main backend's own session check (which
+    // proxies to the auth service's Validate — see internal_handler.go)
+    // rejected the request, same underlying cause as a 401 straight from
+    // authHttp. Routed through the SAME handleSessionExpired rather than
+    // a second copy of the redirect logic, so the two API clients can't
+    // drift into disagreeing about when a session counts as dead or
+    // where "logged out" sends someone.
+    if (e.response?.status === 401) handleSessionExpired(e.config?.url)
+    return Promise.reject(new ApiError(
+      e.response?.data?.error ?? e.response?.data?.message ?? e.message ?? 'Error',
+      e.response?.status
+    ))
+  }
 )
 
 // ── Generic CRUD factory ──────────────────────────────────────────────────────

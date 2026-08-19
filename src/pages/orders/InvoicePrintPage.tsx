@@ -836,6 +836,19 @@ export function InvoicePrintPage() {
               const showBreakMarker = manualBreakHere
               const endOfPageLabel = groupPageNumber.get(group.name)! - 1
               const startOfPageLabel = groupPageNumber.get(group.name)
+              // Whether THIS group is the last one on its page — i.e. the
+              // NEXT group carries a manual break, so this page may end
+              // with blank space below it rather than running naturally
+              // into more content. Needed so a "continued on next page"
+              // note can be printed at the bottom of the page that's
+              // ending, not just a "continued from previous page" note at
+              // the top of the one starting — a client reading only the
+              // finished PDF has no way to tell "this page ended on
+              // purpose, more follows" from "this is the last page"
+              // without something printed on the page itself; the
+              // screen-only marker above never reaches them.
+              const nextGroup = groups[groupIdx + 1]
+              const endsPageHere = !!nextGroup && manualBreaks.has(nextGroup.name)
 
               return (
                 <tbody
@@ -897,6 +910,28 @@ export function InvoicePrintPage() {
                       </td>
                     </tr>
                   )}
+                  {/* The client-facing counterpart to the admin marker
+                      above — hidden on screen (redundant there, since the
+                      big colored marker already says the same thing to
+                      whoever set the break) and shown ONLY in print via
+                      the .continuation-note override in the print
+                      stylesheet near the bottom of this file. Deliberately
+                      doesn't reuse "PAGE {startOfPageLabel}" wording: that
+                      number comes from pageSegments, which only counts
+                      manual breaks and can silently fall behind the real
+                      printed page number the moment natural overflow adds
+                      an unplanned page earlier in the document — printing
+                      a wrong page number would be worse than printing
+                      none. Plain "continued from previous page" makes the
+                      same promise to the client without claiming a count
+                      this component can't actually guarantee. */}
+                  {manualBreakHere && (
+                    <tr className="continuation-note">
+                      <td colSpan={6} style={{ padding: '0 8px 10px', textAlign: 'left', fontSize: '10px', fontStyle: 'italic', color: '#64748b', border: 'none' }}>
+                        (continued from previous page)
+                      </td>
+                    </tr>
+                  )}
                   {group.rows.map((item, rowIdx) => {
                     const key = `item-${item.id}`
                     return (
@@ -938,6 +973,24 @@ export function InvoicePrintPage() {
                       </tr>
                     )
                   })()}
+                  {/* Prints at the bottom of the page that's about to end —
+                      the other half of the "continued from previous page"
+                      note above. Without this, any blank space below the
+                      last item on this page (which can be most of the
+                      sheet, if the break was placed right after a short
+                      group) looks like the invoice just stopped rather
+                      than continuing, which is exactly the confusion this
+                      was asked to fix. Hidden on screen for the same
+                      reason as its counterpart above — the admin marker
+                      already covers this for whoever's placing the break;
+                      this copy is only for the printed page itself. */}
+                  {endsPageHere && (
+                    <tr className="continuation-note">
+                      <td colSpan={6} style={{ padding: '10px 8px 0', textAlign: 'right', fontSize: '10px', fontStyle: 'italic', color: '#64748b', border: 'none' }}>
+                        (continued on next page)
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               )
             })}
@@ -1248,11 +1301,24 @@ export function InvoicePrintPage() {
           width: 3px;
         }
 
+        /* Off by default — these are the print-only "(continued on next
+           page)" / "(continued from previous page)" rows, meant purely
+           for whoever ends up holding the printed/PDF pages (see the two
+           .continuation-note rows in the item table above). They'd be
+           redundant clutter on screen, where the big colored admin marker
+           already says the same thing to whoever's placing the break;
+           this plain-text copy only needs to exist for print. Turned back
+           on inside @media print below, the same on/off-then-flip pattern
+           already used for .print\\:hidden but inverted, since this is
+           print-only rather than screen-only. */
+        .continuation-note { display: none; }
+
         @media print {
           body { margin: 0; background: white; }
           .print\\:hidden { display: none !important; }
           .print\\:shadow-none { box-shadow: none !important; }
           .print\\:p-0 { padding: 0 !important; }
+          .continuation-note { display: table-row !important; }
 
           {/* @page margin was tried twice here before (20mm/20mm/15mm/20mm,
              all four sides at once) as the theoretically-correct way to

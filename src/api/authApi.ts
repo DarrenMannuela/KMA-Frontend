@@ -57,12 +57,43 @@ authHttp.interceptors.request.use((config) => {
   return config
 })
 
+// Fires on any 401 from the auth service — the session either expired
+// (hit AUTH_SESSION_ABSOLUTE_TTL_HOURS or went idle past
+// AUTH_SESSION_IDLE_TTL_HOURS) or was never valid to begin with. Without
+// this, a tab left open past that point just starts silently failing
+// every subsequent request — whatever page it's on either shows stale
+// data forever or throws an unhandled AuthApiError nobody sees, since
+// nothing was previously watching for this. A hard `window.location`
+// redirect (not react-router's navigate) is deliberate: this runs inside
+// an axios interceptor, outside any component, so there's no router
+// context to call navigate from — and a full reload is actually the
+// right behavior here anyway, since it clears out any in-memory
+// React Query cache / component state left over from the dead session
+// instead of leaving it around for a new login to potentially inherit.
+//
+// Guarded two ways so this can't loop or misfire:
+//   - requestUrl containing '/login': a 401 THERE is just "wrong
+//     password" on an actual login attempt — an expected, inline-
+//     handled failure (see LoginPage), not a session that expired.
+//   - already on /login: nothing to redirect away from, and every
+//     failed-login attempt would otherwise bounce through this same
+//     interceptor and reload the login page out from under whoever's
+//     mid-typing their password.
+export function handleSessionExpired(requestUrl?: string) {
+  if (requestUrl?.includes('/login')) return
+  if (window.location.pathname.startsWith('/login')) return
+  window.location.href = '/login'
+}
+
 authHttp.interceptors.response.use(
   (r) => r,
-  (e) => Promise.reject(new AuthApiError(
-    e.response?.data?.error ?? e.response?.data?.message ?? e.message ?? 'Error',
-    e.response?.status
-  ))
+  (e) => {
+    if (e.response?.status === 401) handleSessionExpired(e.config?.url)
+    return Promise.reject(new AuthApiError(
+      e.response?.data?.error ?? e.response?.data?.message ?? e.message ?? 'Error',
+      e.response?.status
+    ))
+  }
 )
 
 // The CSRF cookie is deliberately NOT HttpOnly (see the auth service's
@@ -85,6 +116,18 @@ export const authApi = {
 
   logoutAll: () =>
     authHttp.post<{ ok: true }>('/logout-all').then(r => r.data),
+
+  // Redeems a one-time invite token (from the "…/set-password?token=…"
+  // link CreateUser emails) and sets the account's first real password.
+  // Unlike changePassword, the backend logs the caller straight into a
+  // new session on success (see AcceptInvite's comment in
+  // user_handler.go for why) — so this response, like login's, carries
+  // a user the caller should apply to auth state immediately.
+  acceptInvite: (token: string, newPassword: string) =>
+    authHttp.post<{ user: AuthUser }>('/accept-invite', {
+      token,
+      new_password: newPassword,
+    }).then(r => r.data),
 
   changePassword: (currentPassword: string, newPassword: string) =>
     authHttp.post<{ ok: true; message: string }>('/change-password', {
