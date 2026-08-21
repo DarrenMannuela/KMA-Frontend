@@ -36,6 +36,11 @@ export function YearlyReportPage() {
   const { data: productions = [] } = productionHooks.useList()
   const { data: operations = [] }  = operationHooks.useList()
 
+  // Used to highlight "now" in the monthly table — only meaningful when
+  // looking at the current year; a past/future year has no "current" row.
+  const now = new Date()
+  const currentMonth = year === now.getFullYear() ? now.getMonth() : null
+
   // One pass building all 12 months' worth of numbers for the selected
   // year — everything below (charts, stat cards, the table) reads from
   // this instead of re-filtering the raw lists per section.
@@ -119,26 +124,42 @@ export function YearlyReportPage() {
       </div>
 
       {/* ── Year summary ──────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-        <StatCard label="Orders"          value={yearTotals.orderCount}   icon={ShoppingBag} sub={`Placed in ${year}`} />
-        <StatCard label="Deliveries"      value={deliveriesThisYear}      icon={Truck}       sub={`Sent in ${year}`} />
-        <StatCard label="Invoiced (Paid)" value={formatRp(yearTotals.invoicedPaid)}   icon={Receipt} sub="Collected this year" />
-        <StatCard label="Invoiced (Unpaid)" value={formatRp(yearTotals.invoicedUnpaid)} icon={Receipt} sub="Still outstanding" />
-        <StatCard label="Production + Ops" value={formatRp(yearTotals.productionCost + yearTotals.operationsCost)} icon={Factory} sub="Total cost this year" />
-        <StatCard
-          label={netProfitLoss >= 0 ? 'Net Profit' : 'Net Loss'}
-          value={formatRp(Math.abs(netProfitLoss))}
-          icon={TrendingUp}
-          sub={`Invoiced minus cost, ${year}`}
-          accent
-        />
+      {/* Split into two labeled groups instead of one flat 6-up strip —
+          Activity (what happened) reads separately from Money (what it's
+          worth), so the row doesn't blur into an undifferentiated wall
+          of numbers. Net Profit/Loss stays visually anchored to the Money
+          group since it's derived from the three cards beside it. */}
+      <div className="space-y-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Activity</p>
+          <div className="grid grid-cols-2 sm:grid-cols-2 gap-3">
+            <StatCard label="Orders"     value={yearTotals.orderCount}  icon={ShoppingBag} sub={`Placed in ${year}`} />
+            <StatCard label="Deliveries" value={deliveriesThisYear}     icon={Truck}       sub={`Sent in ${year}`} />
+          </div>
+        </div>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Money</p>
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+            <StatCard label="Invoiced (Paid)"   value={formatRp(yearTotals.invoicedPaid)}   icon={Receipt} sub="Collected this year" />
+            <StatCard label="Invoiced (Unpaid)" value={formatRp(yearTotals.invoicedUnpaid)} icon={Receipt} sub="Still outstanding" />
+            <StatCard label="Production + Ops"  value={formatRp(yearTotals.productionCost + yearTotals.operationsCost)} icon={Factory} sub="Total cost this year" />
+            <StatCard
+              label={netProfitLoss >= 0 ? 'Net Profit' : 'Net Loss'}
+              value={formatRp(Math.abs(netProfitLoss))}
+              icon={TrendingUp}
+              sub={`Invoiced minus cost, ${year}`}
+              accent
+            />
+          </div>
+        </div>
       </div>
 
       {/* ── Profit / Loss by month ────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5">
         <div className="flex items-center gap-2 mb-4">
           <TrendingUp className="w-4 h-4 text-navy-400" />
-          <h3 className="font-semibold text-navy-900 text-sm">Profit / Loss by Month — Invoiced minus Production + Operations Cost</h3>
+          <h3 className="font-semibold text-navy-900 text-sm">Profit / Loss by Month</h3>
+          <span className="text-xs text-slate-400 font-normal">— Invoiced minus Production + Operations Cost</span>
         </div>
         <DivergingBarChart
           data={profitLossBarData}
@@ -155,30 +176,48 @@ export function YearlyReportPage() {
         <div className="overflow-x-auto">
           <table className="kma-table">
             <thead>
+              {/* Grouped header row — ties Paid/Unpaid under "Invoiced" and
+                  Production/Operations/Total under "Cost" so the flat list
+                  of 8 columns reads as 3 clusters instead of 8 peers. */}
+              <tr className="text-[10px] uppercase tracking-wide text-slate-400">
+                <th></th>
+                <th></th>
+                <th colSpan={2} className="text-center border-l border-slate-100">Invoiced</th>
+                <th colSpan={3} className="text-center border-l border-slate-100">Cost</th>
+                <th className="border-l border-slate-100"></th>
+              </tr>
               <tr>
                 <th>Month</th>
                 <th>Orders</th>
-                <th>Invoiced (Paid)</th>
-                <th>Invoiced (Unpaid)</th>
-                <th>Production Cost</th>
-                <th>Operations Cost</th>
-                <th>Total Cost</th>
-                <th>Net Profit/Loss</th>
+                <th className="border-l border-slate-100">Paid</th>
+                <th>Unpaid</th>
+                <th className="border-l border-slate-100">Production</th>
+                <th>Operations</th>
+                <th>Total</th>
+                <th className="border-l border-slate-100">Net Profit/Loss</th>
               </tr>
             </thead>
             <tbody>
               {monthRows.map(r => {
                 const net = (r.invoicedPaid + r.invoicedUnpaid) - (r.productionCost + r.operationsCost)
+                const isCurrent = r.month === currentMonth
                 return (
-                  <tr key={r.month}>
-                    <td className="font-medium text-navy-900">{r.label}</td>
+                  <tr key={r.month} className={isCurrent ? 'bg-gold-50/40' : undefined}>
+                    <td className="font-medium text-navy-900">
+                      {r.label}
+                      {isCurrent && (
+                        <span className="ml-1.5 text-[9px] font-semibold uppercase tracking-wide text-gold-600 align-middle">
+                          Current
+                        </span>
+                      )}
+                    </td>
                     <td>{r.orderCount}</td>
-                    <td className="font-mono text-green-700">{formatRp(r.invoicedPaid)}</td>
+                    <td className="font-mono text-green-700 border-l border-slate-100">{formatRp(r.invoicedPaid)}</td>
                     <td className="font-mono text-red-600">{formatRp(r.invoicedUnpaid)}</td>
-                    <td className="font-mono">{formatRp(r.productionCost)}</td>
+                    <td className="font-mono border-l border-slate-100">{formatRp(r.productionCost)}</td>
                     <td className="font-mono">{formatRp(r.operationsCost)}</td>
                     <td className="font-mono font-semibold">{formatRp(r.productionCost + r.operationsCost)}</td>
-                    <td className={`font-mono font-semibold ${net >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                    <td className={`font-mono font-semibold border-l border-slate-100 ${net >= 0 ? 'text-green-700' : 'text-red-600'}`}>
                       {net >= 0 ? '+' : '-'}{formatRp(Math.abs(net))}
                     </td>
                   </tr>
@@ -189,12 +228,12 @@ export function YearlyReportPage() {
               <tr className="bg-navy-900 text-white">
                 <td className="font-semibold">Total</td>
                 <td className="font-semibold">{yearTotals.orderCount}</td>
-                <td className="font-mono font-bold">{formatRp(yearTotals.invoicedPaid)}</td>
+                <td className="font-mono font-bold border-l border-navy-800">{formatRp(yearTotals.invoicedPaid)}</td>
                 <td className="font-mono font-bold">{formatRp(yearTotals.invoicedUnpaid)}</td>
-                <td className="font-mono font-bold">{formatRp(yearTotals.productionCost)}</td>
+                <td className="font-mono font-bold border-l border-navy-800">{formatRp(yearTotals.productionCost)}</td>
                 <td className="font-mono font-bold">{formatRp(yearTotals.operationsCost)}</td>
                 <td className="font-mono font-bold">{formatRp(yearTotals.productionCost + yearTotals.operationsCost)}</td>
-                <td className={`font-mono font-bold ${netProfitLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                <td className={`font-mono font-bold border-l border-navy-800 ${netProfitLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {netProfitLoss >= 0 ? '+' : '-'}{formatRp(Math.abs(netProfitLoss))}
                 </td>
               </tr>

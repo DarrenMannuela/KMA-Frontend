@@ -64,46 +64,54 @@ http.interceptors.response.use(
 
 // ── Generic CRUD factory ──────────────────────────────────────────────────────
 // Uses PATCH for updates (matching the Go handlers and OpenAPI spec).
-// Some routes are still stubs in main.go — see STUB comments below.
 function crud<T, C, U>(base: string) {
   return {
     list:   ()                    => http.get<T[]>(base).then(r => r.data),
     get:    (id: string | number) => http.get<T>(`${base}/${encodeURIComponent(id)}`).then(r => r.data),
     create: (body: C)             => http.post<T>(base, body).then(r => r.data),
-    // PATCH — matches supplier handler and OpenAPI spec
+    // PATCH — matches the Go handlers and OpenAPI spec
     update: (id: string | number, body: U) => http.patch<T>(`${base}/${encodeURIComponent(id)}`, body).then(r => r.data),
     delete: (id: string | number) => http.delete(`${base}/${encodeURIComponent(id)}`).then(r => r.data),
   }
 }
 
-// ── Route mapping (exact paths from main.go + kma.yaml) ──────────────────────
+// ── Route mapping (verified against main.go) ─────────────────────────────────
 //
-//  LIVE (wired to real handlers):
+// CORRECTION: this comment previously listed /order, /items, /delivery as
+// STUBs "not wired to DB yet". That was stale/incorrect — cross-checked
+// against main.go's actual route table, all three (along with /item's
+// GET/POST/PATCH/DELETE, /invoice, /supplier, /finance-header,
+// /production-item, /operation-item, and the whole /client* subtree) are
+// fully wired to real, DB-backed handlers. Don't trust this block over
+// main.go itself; update it here if the routing ever changes rather than
+// letting it drift again.
+//
+//  LIVE (wired to real handlers in main.go):
+//    /order, /order/:id
+//    /item, /item/:id, /item/by-order        (GET /item/:id added — see
+//      ItemHandler.go's GetItemByID; every other entity already had a
+//      single-record GET, this was the one gap)
+//    /invoice, /invoice/:id
+//    /delivery, /delivery/:id
+//    /delivery-item, /delivery-item/:id
 //    /supplier, /supplier/:id
 //    /finance-header, /finance-header/:id  (shared parent for Production/Operation Kas Bons —
-//      no longer filterable by type; a header can have both production and
+//      not filterable by type; a header can have both production and
 //      operation items attached, so listing is just "give me all headers")
-//    /production-item, /production-item/:id  (now carries its own supplier_id)
+//    /production-item, /production-item/:id  (carries its own supplier_id)
 //    /operation-item, /operation-item/:id
-//
-//  STUB (returns placeholder JSON — not wired to DB yet):
-//    /order, /order/:id
-//    /items, /items/:id
-//    /order-recap, /order-recap/:id
-//    /delivery, /delivery/:id
-//    /delivery-order, /delivery-order/:id
-//    /surat-jalan, /surat-jalan/:id
-//
-//  NOT YET IN main.go (will need to be added as routes are implemented):
-//    /:id variants for order, items, surat-jalan
-//
-//  CLIENTS SUBSECTION (verified against main.go):
 //    /client, /client/:id
 //    /client-contact, /client-contact/:id, /client-contact/by-client?client_id=
 //    /client-item, /client-item/:id, /client-item/by-client?client_id=
 //    /client-item/:id/photo  (POST multipart "photo", DELETE)
 //    /client-item-price, /client-item-price/:id,
 //      /client-item-price/by-item?client_item_id=, /client-item-price/grouped
+//
+//  NOT IN main.go AT ALL (genuinely unimplemented — no route, no handler):
+//    /order-recap, /order-recap/:id
+//    /delivery-order, /delivery-order/:id
+//    /surat-jalan, /surat-jalan/:id
+//  Don't call these until they're actually added to main.go + a handler.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const ordersApi        = crud<Order,         CreateOrderRequest,        UpdateOrderRequest>('/order')

@@ -37,7 +37,14 @@ function suggestSJDocuments(order: Order | undefined, orderInvoices: Invoice[]):
   if (!order) return []
   const docs: { item_name: string; amount: number }[] = []
   orderInvoices.forEach(inv => {
-    const suffix = inv.remaining === 0 ? ' (PELUNASAN)' : inv.down_payment ? ' (DP)' : ''
+    // Same "0% DP = full invoice, not a partial one" convention as
+    // OrderDetailPage/InvoiceListPage/InvoicePrintPage/KwitansiPrintPage —
+    // a dp-type invoice with nothing actually down reads as Pelunasan here
+    // too. (Previously checked `inv.remaining === 0`, which is never true:
+    // `remaining` is the amount THIS invoice bills for, not what's left
+    // after it — so Pelunasan invoices were printing with no suffix at all.)
+    const isFullInvoice = inv.type === 'dp' && (inv.down_payment ?? 0) === 0
+    const suffix = inv.type === 'pelunasan' || isFullInvoice ? ' (PELUNASAN)' : ' (DP)'
     docs.push({ item_name: `ASLI KWITANSI NO. ${inv.id}`, amount: 1 })
     docs.push({ item_name: `ASLI INVOICE NO. ${inv.id}${suffix}`, amount: 1 })
   })
