@@ -3,19 +3,9 @@ import { ArrowLeft, Factory } from 'lucide-react'
 import { productionHooks, supplierHooks } from '@/hooks'
 import { Spinner } from '@/components/ui'
 import { MonthNavigator } from '@/components/ui/MonthNavigator'
-import { ProductionSpreadsheet } from './ProductionsSpreadsheet'
+import { ProductionSpreadsheet } from './ProductionSpreadsheet'
 import { isInMonth } from '@/utils/MonthUtils'
-import type { SupplierCategory } from '@/types'
-
-// Duplicated in ProductionDashboard.tsx / ProductionsSpreadsheet.tsx —
-// worth pulling into a shared util if a fourth spot needs it.
-const CATEGORY_LABELS: Record<SupplierCategory, string> = {
-  sablon: 'Sablon',
-  embroidery: 'Embroidery',
-  merchandise_supplier: 'Merchandise',
-  uniform_supplier: 'Uniform',
-  general_supplier: 'General',
-}
+import { CATEGORY_LABELS } from '@/constants/supplierCategories'
 
 interface ProductionSheetViewProps {
   onBack: () => void

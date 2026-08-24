@@ -1,38 +1,16 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { Factory, Plus, ArrowRight, RotateCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { productionHooks, supplierHooks, useFinanceHeaders } from '@/hooks'
+import { useKasBonIdSuggestion } from '@/hooks/useKasBonIdSuggestion'
 import { formatRp, FormField, Spinner, UppercaseField } from '@/components/ui'
 import { MonthNavigator } from '@/components/ui/MonthNavigator'
 import { SpendBars } from '@/components/ui/SpendBars'
 import { isInMonth, todayISODate } from '@/utils/MonthUtils'
 import { SI_UNITS } from '@/utils/Units'
 import { formatThousands, stripCommas } from '@/utils/NumberFormat'
-import type { CreateProductionRowRequest, SupplierCategory } from '@/types'
-
-// SupplierCategory values are snake_case wire values (e.g.
-// "merchandise_supplier") — this turns them into the short badge text shown
-// next to a supplier's name on the spend bars.
-const CATEGORY_LABELS: Record<SupplierCategory, string> = {
-  sablon: 'Sablon',
-  embroidery: 'Embroidery',
-  merchandise_supplier: 'Merchandise',
-  uniform_supplier: 'Uniform',
-  general_supplier: 'General',
-}
-
-// Fixed per-category color for the small dot next to each supplier's name
-// on the spend bars — deliberately not applied to the bars themselves (see
-// the comment in SpendBars.tsx for why). Picked for reasonable contrast on
-// the dark navy-900 card and to vary in both hue and lightness, not hue
-// alone, so they stay distinguishable for colorblind readers too.
-const CATEGORY_COLORS: Record<SupplierCategory, string> = {
-  sablon: '#fbbf24',               // amber
-  embroidery: '#2dd4bf',           // teal
-  merchandise_supplier: '#a78bfa', // violet
-  uniform_supplier: '#fb7185',     // rose
-  general_supplier: '#94a3b8',     // slate (neutral "other" bucket)
-}
+import { CATEGORY_LABELS, CATEGORY_COLORS } from '@/constants/supplierCategories'
+import type { CreateProductionRowRequest } from '@/types'
 
 interface ProductionDashboardProps {
   /** Undefined = "just open the sheet"; a number = "open the sheet pre-filtered to this supplier". */
@@ -40,23 +18,6 @@ interface ProductionDashboardProps {
   /** Last supplier selected from the bars, if any — kept in the parent page
    *  so the highlight survives a round trip to the spreadsheet and back. */
   selectedSupplierId?: number
-}
-
-// Kas Bon IDs follow "NN/KB/YY" (e.g. "01/KB/26") — same convention and
-// per-year restart as suggestNextOrderId/suggestNextDeliveryId elsewhere.
-// Takes the raw FinanceHeader list (not productionHooks' flattened rows)
-// so the suggestion accounts for every Kas Bon in use, including ones with
-// only Operations items on them so far — see the comment on
-// useFinanceHeaders in hooks/index.ts.
-function suggestNextKasBonId(headers: { id: string }[]): string {
-  const yy = new Date().getFullYear().toString().slice(-2)
-  const pattern = new RegExp(`^(\\d+)\\/KB\\/${yy}$`)
-  const usedNumbers = headers
-    .map(h => h.id.match(pattern))
-    .filter((m): m is RegExpMatchArray => !!m)
-    .map(m => parseInt(m[1], 10))
-  const next = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1
-  return `${String(next).padStart(2, '0')}/KB/${yy}`
 }
 
 // Price/Qty are kept as raw strings while the form is open so a controlled
@@ -78,11 +39,6 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() })
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [quickAdd, setQuickAdd] = useState(emptyQuickAdd())
-  // Only auto-fill/auto-refresh the Kas Bon ID while the user hasn't typed
-  // their own value into that field — once they touch it, we back off
-  // completely so we never clobber a manually-entered ID. Same convention
-  // as OrdersPage's idTouched.
-  const [idTouched, setIdTouched] = useState(false)
   // Tracks which required fields were empty on the last submit attempt, so
   // the fields themselves can flag red instead of the click just doing
   // nothing with no explanation.
@@ -93,21 +49,13 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
     [allData, cursor]
   )
 
-  // Fill in the suggested next Kas Bon ID whenever the field is empty and
-  // the user hasn't typed their own — covers first opening Quick Add
-  // before `headers` has loaded (refills once it does) and clicking "New
-  // Kas Bon" (which clears header_id and re-triggers this).
-  useEffect(() => {
-    if (!idTouched && !quickAdd.header_id) {
-      setQuickAdd(p => ({ ...p, header_id: suggestNextKasBonId(headers) }))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [headers, quickAdd.header_id, idTouched])
-
-  const resetIdSuggestion = () => {
-    setIdTouched(false)
-    setQuickAdd(p => ({ ...p, header_id: suggestNextKasBonId(headers) }))
-  }
+  // Same convention as OrdersPage's idTouched. Shared with
+  // OperationsDashboard via useKasBonIdSuggestion.
+  const { idTouched, setIdTouched, reset: resetIdSuggestion } = useKasBonIdSuggestion(
+    headers,
+    quickAdd.header_id,
+    header_id => setQuickAdd(p => ({ ...p, header_id }))
+  )
 
   const supplierTotals = useMemo(() => {
     const totals: Record<number, number> = {}

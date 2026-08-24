@@ -38,12 +38,17 @@ interface SpreadsheetViewProps<T> {
   keyColumn?: keyof T
   /** The column whose edit triggers creation of a blank row. Defaults to keyColumn. */
   triggerColumn?: keyof T
-  /** Called once the trigger column of a blank row is filled in — creates the row server-side.
-   *  Normally returns void: the row is discarded immediately (optimistic). If the create needs
-   *  a confirmation step first (e.g. a modal), return a Promise<boolean> instead — resolving
-   *  `false` restores the row's typed data rather than discarding it (`true`/no explicit false
-   *  behaves the same as void). */
+  /** Called once every column in requiredColumns is filled in on a blank row — creates the row
+   *  server-side. Normally returns void: the row is discarded immediately (optimistic). If the
+   *  create needs a confirmation step first (e.g. a modal), return a Promise<boolean> instead —
+   *  resolving `false` restores the row's typed data rather than discarding it (`true`/no
+   *  explicit false behaves the same as void). */
   onCreateRow?: (row: Partial<T>) => void | Promise<boolean>
+  /** Columns that must ALL be non-empty before a blank row is submitted via onCreateRow.
+   *  Defaults to [triggerColumn ?? keyColumn], preserving the original single-field behavior.
+   *  Set this to e.g. [triggerColumn, 'price'] to keep a row staged in the "New entries" buffer
+   *  until every required field is filled, instead of submitting the instant the first one is. */
+  requiredColumns?: (keyof T)[]
   /** If provided, the keyColumn is auto-assigned from this at the moment a blank row is committed, instead of being typed by hand. */
   getNextId?: () => string
   /** Blank rows kept ready to type into. Defaults to 1 — the buffer tops back up to this after each row graduates into real data; use the "+ Add another row" button for more at once. */
@@ -76,6 +81,7 @@ export function SpreadsheetView<T extends { id: string | number }>({
   keyColumn = 'id' as keyof T,
   triggerColumn,
   onCreateRow,
+  requiredColumns,
   getNextId,
   minBlankRows = 1,
   emptyRowTemplate,
@@ -84,6 +90,7 @@ export function SpreadsheetView<T extends { id: string | number }>({
   renderGroupHeader,
 }: SpreadsheetViewProps<T>) {
   const trigger = triggerColumn ?? keyColumn
+  const required = requiredColumns ?? [trigger]
   const makeBlankRows = useCallback((n: number) => (
     Array.from({ length: n }, () => ({
       __key: newBlankKey(),
@@ -107,7 +114,11 @@ export function SpreadsheetView<T extends { id: string | number }>({
     setBlankRows(prev => {
       const next = prev.map(r => (r.__key === rowKey ? { ...r, [field]: value } : r))
       const row = next.find(r => r.__key === rowKey)
-      if (row && field === trigger && value !== '' && value != null) {
+      const isFilled = (col: keyof T) => row![col as string] !== '' && row![col as string] != null
+      // Only submit once every required column has a value — not just the trigger column —
+      // so a row stays staged in "New entries" until it's actually complete instead of
+      // graduating into the main table half-filled (e.g. Price still at its Rp 0 default).
+      if (row && required.every(isFilled)) {
         const { __key, ...payload } = row
         if (getNextId) (payload as any)[keyColumn as string] = getNextId()
         const result = onCreateRow?.(payload as Partial<T>)

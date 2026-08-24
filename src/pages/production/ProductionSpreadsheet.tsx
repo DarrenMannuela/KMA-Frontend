@@ -4,29 +4,8 @@ import { formatRp } from '@/components/ui'
 import { productionHooks, supplierHooks } from '@/hooks'
 import { todayISODate, formatDateShort } from '@/utils/MonthUtils'
 import { SI_UNITS } from '@/utils/Units'
-import type { ProductionRow, CreateProductionRowRequest, SupplierCategory } from '@/types'
-
-// SupplierCategory wire values are snake_case — this is the short display
-// label shown next to a supplier's name (dropdown options, group headers,
-// the Supplier column). Also duplicated in ProductionDashboard.tsx; worth
-// pulling into a shared util if a third spot ever needs it.
-const CATEGORY_LABELS: Record<SupplierCategory, string> = {
-  sablon: 'Sablon',
-  embroidery: 'Embroidery',
-  merchandise_supplier: 'Merchandise',
-  uniform_supplier: 'Uniform',
-  general_supplier: 'General',
-}
-
-// Same fixed palette as ProductionDashboard.tsx's spend bars — kept
-// consistent so a category reads as the same color everywhere it shows up.
-const CATEGORY_COLORS: Record<SupplierCategory, string> = {
-  sablon: '#fbbf24',
-  embroidery: '#2dd4bf',
-  merchandise_supplier: '#a78bfa',
-  uniform_supplier: '#fb7185',
-  general_supplier: '#94a3b8',
-}
+import { CATEGORY_LABELS, CATEGORY_COLORS } from '@/constants/supplierCategories'
+import type { ProductionRow, CreateProductionRowRequest } from '@/types'
 
 interface ProductionSpreadsheetProps {
   /** Already filtered by the parent page (e.g. by month, and optionally by supplier). */

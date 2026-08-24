@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ProductionDashboard } from './ProductionDashboard'
-import { ProductionSheetView } from './ProductionSheetView'
+import { ProductionSheetView } from './ProductionsSheetView'
 
 type View = { mode: 'dashboard' } | { mode: 'sheet'; supplierId?: number }
 

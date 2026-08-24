@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { OperationsDashboard } from './OperationsDashboard'
-import { OperationsSheetView } from './OperationSheetView'
+import { OperationsSheetView } from './OperationsSheetView'
 
 type View = { mode: 'dashboard' } | { mode: 'sheet'; category?: string }
 

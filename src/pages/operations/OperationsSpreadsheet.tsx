@@ -63,7 +63,12 @@ export function OperationsSpreadsheet({ data }: OperationsSpreadsheetProps) {
       )}
       calculateSubtotal={row => row.price}
       emptyRowTemplate={() => ({ header_id: '', description: '', category: '', item_description: '', price: 0, date: todayISODate() })}
-      onCreateRow={(row) => create.mutate(row as CreateOperationRowRequest)}
+      // Mirrors Quick Add: a Kas Bon's header-level `description` (its
+      // receipt memo) defaults to Category when nothing more specific was
+      // typed, so a Kas Bon created directly in the spreadsheet ends up
+      // with the same memo a Quick-Add-created one would — instead of a
+      // blank memo just because this row didn't go through Quick Add.
+      onCreateRow={(row) => create.mutate({ ...row, description: row.description || row.category } as CreateOperationRowRequest)}
       onUpdateRow={(id, body) => update.mutate({ id: Number(id), body })}
       onDeleteRow={(id) => del.mutate(Number(id))}
       columns={columns}

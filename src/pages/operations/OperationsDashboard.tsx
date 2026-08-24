@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Wrench, Plus, ArrowRight, RotateCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { operationHooks, useFinanceHeaders } from '@/hooks'
+import { useKasBonIdSuggestion } from '@/hooks/useKasBonIdSuggestion'
 import { formatRp, FormField, Spinner, UppercaseField } from '@/components/ui'
 import { MonthNavigator } from '@/components/ui/MonthNavigator'
 import { SpendBars } from '@/components/ui/SpendBars'
@@ -15,23 +16,6 @@ interface OperationsDashboardProps {
   /** Last category selected from the bars, if any — kept in the parent page
    *  so the highlight survives a round trip to the spreadsheet and back. */
   selectedCategory?: string
-}
-
-// Kas Bon IDs follow "NN/KB/YY" (e.g. "01/KB/26") — same convention as
-// ProductionDashboard's suggestNextKasBonId (and suggestNextOrderId /
-// suggestNextDeliveryId elsewhere). Takes the raw FinanceHeader list, not
-// operationHooks' flattened rows, so the suggestion accounts for every Kas
-// Bon in use — including ones with only Production items on them so far —
-// see the comment on useFinanceHeaders in hooks/index.ts.
-function suggestNextKasBonId(headers: { id: string }[]): string {
-  const yy = new Date().getFullYear().toString().slice(-2)
-  const pattern = new RegExp(`^(\\d+)\\/KB\\/${yy}$`)
-  const usedNumbers = headers
-    .map(h => h.id.match(pattern))
-    .filter((m): m is RegExpMatchArray => !!m)
-    .map(m => parseInt(m[1], 10))
-  const next = usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1
-  return `${String(next).padStart(2, '0')}/KB/${yy}`
 }
 
 // price kept as a raw string while typing — see comment in ProductionDashboard
@@ -52,10 +36,6 @@ export function OperationsDashboard({ onOpenSheet, selectedCategory }: Operation
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() })
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [quickAdd, setQuickAdd] = useState(emptyQuickAdd())
-  // Only auto-fill/auto-refresh the Kas Bon ID while the user hasn't typed
-  // their own value into that field — same convention as
-  // ProductionDashboard/OrdersPage's idTouched.
-  const [idTouched, setIdTouched] = useState(false)
   // Which required fields were empty on the last submit attempt — flags
   // the fields themselves instead of the click silently doing nothing.
   const [missing, setMissing] = useState<Set<'header_id' | 'category'>>(new Set())
@@ -66,20 +46,13 @@ export function OperationsDashboard({ onOpenSheet, selectedCategory }: Operation
   )
   const monthTotal = monthData.reduce((s, o) => s + o.price, 0)
 
-  // Fill in the suggested next Kas Bon ID whenever the field is empty and
-  // the user hasn't typed their own — see the matching effect in
-  // ProductionDashboard.tsx for the full rationale.
-  useEffect(() => {
-    if (!idTouched && !quickAdd.header_id) {
-      setQuickAdd(p => ({ ...p, header_id: suggestNextKasBonId(headers) }))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [headers, quickAdd.header_id, idTouched])
-
-  const resetIdSuggestion = () => {
-    setIdTouched(false)
-    setQuickAdd(p => ({ ...p, header_id: suggestNextKasBonId(headers) }))
-  }
+  // Same convention as ProductionDashboard/OrdersPage's idTouched. Shared
+  // with ProductionDashboard via useKasBonIdSuggestion.
+  const { idTouched, setIdTouched, reset: resetIdSuggestion } = useKasBonIdSuggestion(
+    headers,
+    quickAdd.header_id,
+    header_id => setQuickAdd(p => ({ ...p, header_id }))
+  )
 
   // Spend grouped by Category — the closest Operations analog to
   // Production's "spend by supplier" bars. Kas Bon ID is just an arbitrary
