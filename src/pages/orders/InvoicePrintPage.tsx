@@ -447,7 +447,10 @@ export function InvoicePrintPage() {
       ...items.map(i => i.sub_total.toLocaleString('id-ID')),
       invoice.total.toLocaleString('id-ID'),
       ...(hasDp ? [(invoice.down_payment ?? 0).toLocaleString('id-ID')] : []),
-      invoice.remaining.toLocaleString('id-ID'),
+      // Matches the PELUNASAN cell's actual rendered value below — must
+      // stay in sync or a discounted invoice could auto-fit the JUMLAH
+      // column to a number narrower than what's really printed in it.
+      (invoice.ar_receivable ?? invoice.remaining).toLocaleString('id-ID'),
     ],
   }
   const fitWidthFor = (column: ColumnKey) =>
@@ -1108,7 +1111,14 @@ export function InvoicePrintPage() {
                   PELUNASAN
                 </td>
                 <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
-                  {invoice.remaining.toLocaleString('id-ID')}
+                  {/* ar_receivable is `remaining` with any discount
+                      already subtracted (see GenerateInvoiceForm) —
+                      printing `remaining` here would show the client a
+                      bigger PELUNASAN figure than they actually owe
+                      whenever a discount was applied on this invoice.
+                      Falls back to `remaining` for older invoices saved
+                      before ar_receivable existed. */}
+                  {(invoice.ar_receivable ?? invoice.remaining).toLocaleString('id-ID')}
                 </td>
               </tr>
             </tbody>
@@ -1320,7 +1330,7 @@ export function InvoicePrintPage() {
           .print\\:p-0 { padding: 0 !important; }
           .continuation-note { display: table-row !important; }
 
-          {/* @page margin was tried twice here before (20mm/20mm/15mm/20mm,
+          /* @page margin was tried twice here before (20mm/20mm/15mm/20mm,
              all four sides at once) as the theoretically-correct way to
              get real per-page insets. Both times it printed completely
              edge-to-edge instead — not just failing to add a margin, but
@@ -1357,7 +1367,7 @@ export function InvoicePrintPage() {
              below) rather than added on top of it — top/left/right stay
              exactly as they were, still supplied entirely by #invoice's
              own padding, so even a repeat of the old failure can only
-             affect the bottom edge, not strip every side at once. */}
+             affect the bottom edge, not strip every side at once. */
           @page {
             size: ${pageWidthMm}mm ${pageHeightMm}mm;
             margin: 0 0 ${FOOTER_MARGIN_MM}mm 0;

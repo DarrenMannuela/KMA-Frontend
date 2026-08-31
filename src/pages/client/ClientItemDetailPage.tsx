@@ -127,7 +127,12 @@ function ItemPriceHikeCalculator({ item, prices }: { item: ClientItem; prices: C
   const [year, setYear] = useState(new Date().getFullYear())
   const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().slice(0, 10))
 
-  const last = [...prices].sort((a, b) => b.year - a.year)[0]
+  // Sorted by year first, then by effective_date within a year — a price
+  // can be revised mid-year, and year alone can't tell two same-year
+  // entries apart, so without this tie-break "last" could land on
+  // whichever one the API happened to return first rather than the one
+  // that's actually most recent.
+  const last = [...prices].sort((a, b) => b.year - a.year || (b.effective_date ?? '').localeCompare(a.effective_date ?? ''))[0]
 
   useEffect(() => {
     const pctNum = Number(pct)

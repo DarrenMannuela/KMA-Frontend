@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { X, Printer } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatRp } from '@/components/ui'
@@ -24,7 +24,11 @@ export function ClientPriceListPrint({ client, items, pricesByItem, onClose }: C
   const allRows = useMemo(() => {
     return items
       .map((item): Row => {
-        const history = [...(pricesByItem[item.id] ?? [])].sort((a, b) => a.year - b.year)
+        // Tie-break same-year entries by effective_date (see the matching
+        // comment in ClientItemDetailPage.tsx) — otherwise a mid-year price
+        // revision can get printed as "Previous" with the older price
+        // shown as "Current", inverted from reality.
+        const history = [...(pricesByItem[item.id] ?? [])].sort((a, b) => a.year - b.year || (a.effective_date ?? '').localeCompare(b.effective_date ?? ''))
         return { item, latest: history[history.length - 1], previous: history[history.length - 2] }
       })
       .filter((r): r is { item: ClientItem; latest: ClientItemPrice; previous: ClientItemPrice | undefined } => !!r.latest)
@@ -36,14 +40,33 @@ export function ClientPriceListPrint({ client, items, pricesByItem, onClose }: C
   // this narrows the handout to just what's relevant for them right now.
   // Starts with everything checked (matches the old "always full
   // catalogue" behavior); uncheck down to just what's being quoted.
+  //
+  // Re-synced whenever `allRows` changes rather than seeded once at mount:
+  // the parent (ClientDetailPage) fetches item prices via a separate,
+  // independent query, so this dialog can mount with `allRows` still
+  // empty and only get its real rows a moment later. A one-time lazy
+  // `useState` initializer would have locked `selected` in at empty in
+  // that case, permanently breaking "starts with everything checked" —
+  // this effect keeps auto-selecting new rows as they arrive, right up
+  // until the user manually touches a checkbox themselves.
   const [selected, setSelected] = useState<Set<number>>(() => new Set(allRows.map(r => r.item.id)))
-  const toggle = (itemId: number) => setSelected(prev => {
-    const next = new Set(prev)
-    if (next.has(itemId)) next.delete(itemId); else next.add(itemId)
-    return next
-  })
+  const [touched, setTouched] = useState(false)
+  useEffect(() => {
+    if (!touched) setSelected(new Set(allRows.map(r => r.item.id)))
+  }, [allRows, touched])
+  const toggle = (itemId: number) => {
+    setTouched(true)
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(itemId)) next.delete(itemId); else next.add(itemId)
+      return next
+    })
+  }
   const allChecked = selected.size === allRows.length && allRows.length > 0
-  const toggleAll = () => setSelected(allChecked ? new Set() : new Set(allRows.map(r => r.item.id)))
+  const toggleAll = () => {
+    setTouched(true)
+    setSelected(allChecked ? new Set() : new Set(allRows.map(r => r.item.id)))
+  }
 
   const rows = allRows.filter(r => selected.has(r.item.id))
   const today = format(new Date(), 'd MMMM yyyy')

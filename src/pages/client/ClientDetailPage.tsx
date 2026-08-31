@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Building2, Users, Package, Printer, Image as ImageIcon } from 'lucide-react'
 import { CrudPage } from '@/components/ui/CrudPage'
-import { FormField, Spinner } from '@/components/ui'
+import { FormField, Spinner, UppercaseField } from '@/components/ui'
 import { clientHooks, clientContactHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
 import { formatThousands, stripCommas } from '@/utils/NumberFormat'
 import { ClientPriceListPrint } from './ClientPriceListPrint'
@@ -39,12 +39,12 @@ function ClientContactForm({ clientId, editing, onClose }: { clientId: number; e
   return (
     <div className="space-y-4">
       <FormField label="Name" required>
-        <input className="field" placeholder="e.g. Budi Santoso" value={form.name}
-          onChange={e => setForm(p => ({ ...p, name: e.target.value.toUpperCase() }))} />
+        <UppercaseField className="field" placeholder="e.g. Budi Santoso" value={form.name}
+          onChange={v => setForm(p => ({ ...p, name: v }))} />
       </FormField>
       <FormField label="Role">
-        <input className="field" placeholder="e.g. Purchasing Manager" value={form.role ?? ''}
-          onChange={e => setForm(p => ({ ...p, role: e.target.value.toUpperCase() || null }))} />
+        <UppercaseField className="field" placeholder="e.g. Purchasing Manager" value={form.role ?? ''}
+          onChange={v => setForm(p => ({ ...p, role: v || null }))} />
       </FormField>
       <div className="grid grid-cols-2 gap-3">
         <FormField label="Phone">
@@ -57,12 +57,12 @@ function ClientContactForm({ clientId, editing, onClose }: { clientId: number; e
         </FormField>
       </div>
       <FormField label="Location Label">
-        <input className="field" placeholder="e.g. Head Office, Gudang Cikarang" value={form.location_label ?? ''}
-          onChange={e => setForm(p => ({ ...p, location_label: e.target.value.toUpperCase() || null }))} />
+        <UppercaseField className="field" placeholder="e.g. Head Office, Gudang Cikarang" value={form.location_label ?? ''}
+          onChange={v => setForm(p => ({ ...p, location_label: v || null }))} />
       </FormField>
       <FormField label="Address">
-        <textarea className="field resize-none" rows={2} value={form.address ?? ''}
-          onChange={e => setForm(p => ({ ...p, address: e.target.value.toUpperCase() || null }))} />
+        <UppercaseField as="textarea" className="field resize-none" rows={2} value={form.address ?? ''}
+          onChange={v => setForm(p => ({ ...p, address: v || null }))} />
       </FormField>
       <label className="flex items-center gap-2 text-sm text-slate-600">
         <input type="checkbox" checked={form.is_primary}
@@ -153,16 +153,16 @@ function ClientItemForm({ clientId, editing, onClose }: { clientId: number; edit
   return (
     <div className="space-y-4">
       <FormField label="Item Name" required>
-        <input className="field" placeholder="e.g. Kemeja Batik Lengan Panjang" value={form.item_name}
-          onChange={e => setForm(p => ({ ...p, item_name: e.target.value.toUpperCase() }))} />
+        <UppercaseField className="field" placeholder="e.g. Kemeja Batik Lengan Panjang" value={form.item_name}
+          onChange={v => setForm(p => ({ ...p, item_name: v }))} />
       </FormField>
       <FormField label="Size">
-        <input className="field" placeholder="e.g. XL" value={form.size ?? ''}
-          onChange={e => setForm(p => ({ ...p, size: e.target.value.toUpperCase() || null }))} />
+        <UppercaseField className="field" placeholder="e.g. XL" value={form.size ?? ''}
+          onChange={v => setForm(p => ({ ...p, size: v || null }))} />
       </FormField>
       <FormField label="Notes">
-        <textarea className="field resize-none" rows={2} value={form.notes ?? ''}
-          onChange={e => setForm(p => ({ ...p, notes: e.target.value.toUpperCase() || null }))} />
+        <UppercaseField as="textarea" className="field resize-none" rows={2} value={form.notes ?? ''}
+          onChange={v => setForm(p => ({ ...p, notes: v || null }))} />
       </FormField>
       <p className="text-xs text-slate-400 -mt-2">Product photo can be added after saving, from the item's own page.</p>
 
@@ -334,7 +334,7 @@ export function ClientDetailPage() {
             { header: 'Photo', key: 'id',        render: r => <ClientItemPhotoCell item={r} clientId={clientId} /> },
             { header: 'Item',  key: 'item_name', render: r => (
               <button
-                onClick={() => navigate(`/clients/${clientId}/items/${r.id}`)}
+                onClick={(e) => { e.stopPropagation(); navigate(`/clients/${clientId}/items/${r.id}`) }}
                 className="font-medium text-navy-900 hover:text-navy-600 hover:underline text-left"
               >
                 {r.item_name}

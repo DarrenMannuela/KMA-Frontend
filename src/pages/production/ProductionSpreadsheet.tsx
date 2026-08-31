@@ -1,9 +1,11 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { SpreadsheetView, type ColumnDef } from '@/components/ui/SpreadsheetView'
+import { NewKasBonDateModal } from '@/components/ui/NewKasBonDateModal'
 import { formatRp } from '@/components/ui'
-import { productionHooks, supplierHooks } from '@/hooks'
+import { productionHooks, supplierHooks, useFinanceHeaders } from '@/hooks'
 import { todayISODate, formatDateShort } from '@/utils/MonthUtils'
 import { SI_UNITS } from '@/utils/Units'
+import { suggestNextKasBonId } from '@/utils/KasBonId'
 import { CATEGORY_LABELS, CATEGORY_COLORS } from '@/constants/supplierCategories'
 import type { ProductionRow, CreateProductionRowRequest } from '@/types'
 
@@ -18,6 +20,7 @@ interface ProductionSpreadsheetProps {
 
 export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier = true }: ProductionSpreadsheetProps) {
   const { data: suppliers = [] } = supplierHooks.useList()
+  const { data: headers = [] } = useFinanceHeaders()
   const create = productionHooks.useCreate()
   const update = productionHooks.useUpdate()
   const del = productionHooks.useDelete()
@@ -51,6 +54,22 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
     [data]
   )
 
+  // Full set of Kas Bon IDs that already exist (from headers, not just this
+  // filtered `data` slice — `data` may be scoped to one month/supplier and
+  // would otherwise mislabel an ID from a different month as "new").
+  const existingHeaderIds = useMemo(
+    () => new Set(headers.map(h => h.id)),
+    [headers]
+  )
+
+  // Holds a row that's ready to submit except for its date, plus the
+  // resolver SpreadsheetView is awaiting — set only when the typed
+  // header_id doesn't match any existing Kas Bon.
+  const [pendingNewKasBon, setPendingNewKasBon] = useState<{
+    payload: CreateProductionRowRequest
+    resolve: (keepGoing: boolean) => void
+  } | null>(null)
+
   // When a supplier filter is active there's nothing left to group by
   // supplier — group by Kas Bon ID instead so items from the same header
   // sit together. Supplier drops out of the per-row columns in that mode
@@ -70,6 +89,39 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
   // via emptyRowTemplate; there's currently no inline way to set a
   // different date at creation time.
   const groupedByHeader = !groupBySupplier
+
+  // Intercepts creation: a brand-new Kas Bon ID has no date column of its
+  // own to capture a date from, so pause here and ask via the modal instead
+  // of silently taking emptyRowTemplate's today-default. Adding another
+  // material line to an *existing* Kas Bon skips straight to create.mutate.
+  const handleCreateRow = (row: Partial<ProductionRow>) => {
+    const payload = row as CreateProductionRowRequest
+    const isNewKasBon = !!payload.header_id && !existingHeaderIds.has(payload.header_id)
+
+    if (!isNewKasBon) {
+      create.mutate(payload)
+      return
+    }
+
+    return new Promise<boolean>(resolve => {
+      setPendingNewKasBon({ payload, resolve })
+    })
+  }
+
+  const confirmNewKasBon = (date: string) => {
+    if (!pendingNewKasBon) return
+    create.mutate({ ...pendingNewKasBon.payload, date })
+    pendingNewKasBon.resolve(true)
+    setPendingNewKasBon(null)
+  }
+
+  // Resolving `false` tells SpreadsheetView to restore the typed row into
+  // the "New entries" buffer rather than discarding it.
+  const cancelNewKasBon = () => {
+    if (!pendingNewKasBon) return
+    pendingNewKasBon.resolve(false)
+    setPendingNewKasBon(null)
+  }
 
   const col = {
     header_id: {
@@ -114,6 +166,13 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
       format: (val: number) => <span className="currency font-mono">{formatRp(Number(val))}</span>,
     } as ColumnDef<ProductionRow>,
     total: {
+      // key stays 'price', not a synthetic 'total' — ColumnDef['key'] is
+      // typed as `keyof ProductionRow`, and 'total' isn't a real field
+      // (it's the derived price * amount), so TS rejects anything else
+      // here. The two columns render distinctly via their own `format`,
+      // so this is safe as long as SpreadsheetView doesn't rely on `key`
+      // being unique per column (e.g. for React list keys) — worth
+      // confirming against SpreadsheetView's implementation if so.
       key: 'price', header: 'Total', type: 'number', editable: false,
       format: (_val: number, row: ProductionRow) => (
         <span className="currency font-mono font-semibold">{formatRp(row.price * row.amount)}</span>
@@ -128,6 +187,7 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
     : [col.header_id, col.description, col.material_name, col.supplier_id, col.amount, col.si_unit, col.price, col.total]
 
   return (
+    <>
     <SpreadsheetView<ProductionRow>
       data={data}
       maxHeight="78vh"
@@ -174,7 +234,12 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
       keyColumn="id"
       triggerColumn="material_name"
       emptyRowTemplate={() => ({
-        header_id: '',
+        // Same suggestion Quick Add uses (useKasBonIdSuggestion ->
+        // suggestNextKasBonId) — a fresh row starts pre-filled with the
+        // next Kas Bon number instead of blank, but it's still just a
+        // regular editable field, so typing over it works exactly like
+        // overriding Quick Add's suggestion.
+        header_id: suggestNextKasBonId(headers),
         description: '',
         supplier_id: defaultSupplierId ?? suppliers[0]?.id ?? 0,
         material_name: '',
@@ -183,10 +248,19 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
         amount: 1,
         date: todayISODate(),
       })}
-      onCreateRow={(row) => create.mutate(row as CreateProductionRowRequest)}
+      onCreateRow={handleCreateRow}
       onUpdateRow={(id, body) => update.mutate({ id: Number(id), body })}
       onDeleteRow={(id) => del.mutate(Number(id))}
       columns={columns}
     />
+    {pendingNewKasBon && (
+      <NewKasBonDateModal
+        headerId={pendingNewKasBon.payload.header_id}
+        defaultDate={pendingNewKasBon.payload.date || todayISODate()}
+        onConfirm={confirmNewKasBon}
+        onCancel={cancelNewKasBon}
+      />
+    )}
+    </>
   )
 }

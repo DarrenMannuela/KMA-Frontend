@@ -86,4 +86,4 @@ export function ClientsPage() {
       deleteMessage={r => `Delete client "${r.client_name}"? This also removes their contacts and catalogue.`}
     />
   )
-}3
+}

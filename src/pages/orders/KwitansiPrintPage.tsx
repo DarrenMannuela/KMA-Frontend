@@ -44,8 +44,18 @@ export function KwitansiPrintPage() {
   // OrderDetailPage/InvoiceListPage/InvoicePrintPage — so a dp-type
   // invoice with nothing actually down is treated as a full/Pelunasan
   // payment here too: a receipt for "D/P — Rp 0" would be meaningless.
+  //
+  // For the Pelunasan/full-payment case, this reads ar_receivable (the
+  // discount-already-applied figure GenerateInvoiceForm computes and
+  // saves), not the plain `remaining` field — `remaining` is total minus
+  // down_payment BEFORE any discount, so using it here would print a
+  // receipt asking for more than the client actually owes whenever a
+  // discount was applied. Falls back to `remaining` only for older
+  // invoices saved before ar_receivable existed.
   const isFullInvoice = invoice.type === 'dp' && (invoice.down_payment ?? 0) === 0
-  const amount = invoice.type === 'dp' && !isFullInvoice ? (invoice.down_payment ?? 0) : invoice.remaining
+  const amount = invoice.type === 'dp' && !isFullInvoice
+    ? (invoice.down_payment ?? 0)
+    : (invoice.ar_receivable ?? invoice.remaining)
   const purposeLabel = invoice.type === 'dp' && !isFullInvoice ? 'DOWN PAYMENT (D/P)' : 'PELUNASAN'
 
   return (

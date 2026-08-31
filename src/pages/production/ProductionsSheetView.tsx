@@ -28,7 +28,12 @@ export function ProductionSheetView({ onBack, initialSupplierId }: ProductionShe
     () => allData.filter(row => isInMonth(row.date, cursor.year, cursor.month)),
     [allData, cursor]
   )
-  const visibleData = supplierFilter ? monthData.filter(r => r.supplier_id === supplierFilter) : monthData
+  // Use `!== undefined` rather than truthiness — supplier_id 0 ("Unassigned")
+  // is a valid, clickable bar on the dashboard, and plain truthiness would
+  // silently treat that filter as "no filter" since 0 is falsy.
+  const visibleData = supplierFilter !== undefined
+    ? monthData.filter(r => r.supplier_id === supplierFilter)
+    : monthData
   const filteredSupplier = suppliers.find(s => s.id === supplierFilter)
   const supplierName = filteredSupplier?.supplier_name
   const supplierCategory = filteredSupplier ? CATEGORY_LABELS[filteredSupplier.supplier_category] : undefined
@@ -62,7 +67,7 @@ export function ProductionSheetView({ onBack, initialSupplierId }: ProductionShe
         <MonthNavigator year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
       </div>
 
-      {supplierFilter && (
+      {supplierFilter !== undefined && (
         <button onClick={() => setSupplierFilter(undefined)} className="text-xs text-navy-600 hover:underline">
           clear supplier filter
         </button>
@@ -71,7 +76,7 @@ export function ProductionSheetView({ onBack, initialSupplierId }: ProductionShe
       <ProductionSpreadsheet
         data={visibleData}
         defaultSupplierId={supplierFilter}
-        groupBySupplier={!supplierFilter}
+        groupBySupplier={supplierFilter === undefined}
       />
     </div>
   )

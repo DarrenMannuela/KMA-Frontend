@@ -182,7 +182,8 @@ export function SpreadsheetView<T extends { id: string | number }>({
       if (typeof groupByKey === 'function') {
         groupName = groupByKey(row)
       } else if (groupByKey) {
-        groupName = String(row[groupByKey] || 'Uncategorized')
+        const raw = row[groupByKey]
+        groupName = raw === null || raw === undefined || raw === '' ? 'Uncategorized' : String(raw)
       }
 
       if (!groups[groupName]) groups[groupName] = { rows: [], subtotal: 0 }

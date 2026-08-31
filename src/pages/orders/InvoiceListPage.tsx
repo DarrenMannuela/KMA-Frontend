@@ -89,8 +89,15 @@ export function InvoiceListPage() {
             // Same fix: a full invoice's "amount due" is the whole
             // remaining balance, not down_payment (which is 0 for these —
             // that's what makes it "full" rather than partial).
+            //
+            // Reads ar_receivable rather than the plain `remaining` field
+            // for that balance — `remaining` is total minus down_payment
+            // BEFORE any discount, so a discounted invoice would otherwise
+            // show a bigger "amount due" here than the client actually
+            // owes. Falls back to `remaining` for older invoices saved
+            // before ar_receivable existed.
             const isFullInvoice = r.type === 'dp' && (r.down_payment ?? 0) === 0
-            const due = r.type === 'dp' && !isFullInvoice ? (r.down_payment ?? 0) : r.remaining
+            const due = r.type === 'dp' && !isFullInvoice ? (r.down_payment ?? 0) : (r.ar_receivable ?? r.remaining)
             return (
               <div>
                 <span className="font-mono">{formatRp(due)}</span>
