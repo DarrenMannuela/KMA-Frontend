@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Wrench, Plus, ArrowRight, RotateCcw } from 'lucide-react'
+import { Wrench, Plus, ArrowRight, RotateCcw, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { operationHooks, useFinanceHeaders } from '@/hooks'
 import { useKasBonIdSuggestion } from '@/hooks/useKasBonIdSuggestion'
@@ -8,6 +8,7 @@ import { MonthNavigator } from '@/components/ui/MonthNavigator'
 import { SpendBars } from '@/components/ui/SpendBars'
 import { isInMonth, todayISODate } from '@/utils/MonthUtils'
 import { formatThousands, stripCommas } from '@/utils/NumberFormat'
+import { ApiError } from '@/api'
 import type { CreateOperationRowRequest } from '@/types'
 
 interface OperationsDashboardProps {
@@ -28,8 +29,8 @@ interface OperationsDashboardProps {
 const emptyQuickAdd = () => ({ header_id: '', category: '', item: '', price: '', date: todayISODate() })
 
 export function OperationsDashboard({ onOpenSheet, selectedCategory }: OperationsDashboardProps) {
-  const { data: allData = [], isLoading } = operationHooks.useList()
-  const { data: headers = [] } = useFinanceHeaders()
+  const { data: allData = [], isLoading, isError, refetch } = operationHooks.useList()
+  const { data: headers = [], refetch: refetchHeaders } = useFinanceHeaders()
   const create = operationHooks.useCreate()
 
   const now = new Date()
@@ -47,11 +48,14 @@ export function OperationsDashboard({ onOpenSheet, selectedCategory }: Operation
   const monthTotal = monthData.reduce((s, o) => s + o.price, 0)
 
   // Same convention as ProductionDashboard/OrdersPage's idTouched. Shared
-  // with ProductionDashboard via useKasBonIdSuggestion.
+  // with ProductionDashboard via useKasBonIdSuggestion. refetchHeaders lets
+  // resetIdSuggestion (wired to the 409 handler below) recompute off a
+  // fresh header list rather than this render's possibly-stale one.
   const { idTouched, setIdTouched, reset: resetIdSuggestion } = useKasBonIdSuggestion(
     headers,
     quickAdd.header_id,
-    header_id => setQuickAdd(p => ({ ...p, header_id }))
+    header_id => setQuickAdd(p => ({ ...p, header_id })),
+    refetchHeaders
   )
 
   // Spend grouped by Category — the closest Operations analog to
@@ -102,6 +106,14 @@ export function OperationsDashboard({ onOpenSheet, selectedCategory }: Operation
         // Kas Bon" to start a different header instead.
         setQuickAdd(p => ({ ...p, item: '', price: '' }))
       },
+      // Same race OrdersPage/GenerateInvoiceForm/ProductionDashboard guard
+      // against — see ProductionDashboard.tsx's identical handler.
+      onError: (e: Error) => {
+        if (e instanceof ApiError && e.status === 409) {
+          toast.error('That Kas Bon ID was just taken by someone else — grabbing you a new one.')
+          resetIdSuggestion()
+        }
+      },
     })
   }
 
@@ -109,6 +121,17 @@ export function OperationsDashboard({ onOpenSheet, selectedCategory }: Operation
 
   if (isLoading) {
     return <Spinner />
+  }
+  // Same distinction ProductionDashboard makes — a failed fetch previously
+  // looked identical to "no operations spend yet."
+  if (isError) {
+    return (
+      <div className="p-8 text-center">
+        <AlertTriangle className="w-8 h-8 text-red-300 mx-auto mb-3" />
+        <p className="text-red-400 mb-3">Couldn't load operations data — check your connection and try again.</p>
+        <button onClick={() => refetch()} className="btn-secondary">Retry</button>
+      </div>
+    )
   }
 
   return (
@@ -219,7 +242,15 @@ export function OperationsDashboard({ onOpenSheet, selectedCategory }: Operation
           <SpendBars
             items={categoryTotals}
             selectedId={selectedCategory ?? null}
-            onSelect={(id) => onOpenSheet(id != null ? String(id) : undefined)}
+            // Same fix as ProductionDashboard's SpendBars — SpendBars calls
+            // onSelect(null) when you click an already-selected bar (its
+            // built-in "deselect"), which used to fall through to
+            // onOpenSheet(undefined) and navigate to the spreadsheet with
+            // NO filter instead of just turning the highlight off. Every
+            // click here means "open this category's entries," so the
+            // null/deselect case is ignored — clicking a highlighted bar
+            // again just re-opens the same filtered view.
+            onSelect={(id) => { if (id != null) onOpenSheet(String(id)) }}
             emptyLabel="No operations spend recorded for this month"
           />
         </div>

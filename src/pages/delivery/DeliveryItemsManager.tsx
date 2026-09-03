@@ -45,7 +45,7 @@ interface DeliveryItemsManagerProps {
 
 export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) {
   const { data: deliveries = [] } = deliveryHooks.useList()
-  const { data: allItems = [], isLoading } = deliveryItemHooks.useList()
+  const { data: allItems = [], isLoading, isError, refetch } = deliveryItemHooks.useList()
   const create = deliveryItemHooks.useCreate()
 
   const [open, setOpen] = useState(false)
@@ -232,6 +232,16 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
 
       {isLoading ? (
         <div className="p-8 text-slate-400 text-sm">Loading…</div>
+      ) : isError ? (
+        // Same distinction made elsewhere (OrderDetailPage, DeliveryPrintPage,
+        // DeliveryPage, KwitansiPrintPage/InvoicePrintPage): a failed fetch
+        // shouldn't look like "there's just nothing here" — that sent people
+        // re-checking a delivery that was actually fine instead of retrying
+        // the request that failed.
+        <div className="card p-10 text-center text-sm">
+          <p className="text-red-400 mb-3">Couldn't load {isDO ? 'items' : 'documents'} — check your connection and try again.</p>
+          <button onClick={() => refetch()} className="btn-secondary">Retry</button>
+        </div>
       ) : (
         <>
           {items.length === 0 && (

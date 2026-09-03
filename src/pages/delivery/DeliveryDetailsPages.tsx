@@ -9,11 +9,29 @@ export function DeliveryDetailPage() {
   const navigate = useNavigate()
   const deliveryId = decodeURIComponent(id ?? '')
 
-  const { data: delivery, isLoading: deliveryLoading } = deliveryHooks.useGet(deliveryId)
+  const {
+    data: delivery,
+    isLoading: deliveryLoading,
+    isError: deliveryError,
+    refetch: refetchDelivery,
+  } = deliveryHooks.useGet(deliveryId)
 
   const isDO = delivery?.type === 'DO'
 
   if (deliveryLoading) return <div className="p-8 text-slate-400">Loading…</div>
+  // Same distinction made in OrderDetailPage/InvoicePrintPage/
+  // KwitansiPrintPage: a failed fetch (network drop, 500, etc.) previously
+  // looked identical to a genuinely missing delivery — "Delivery not
+  // found." — sending people searching for a bad link instead of just
+  // retrying the request that failed.
+  if (deliveryError) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-red-400 mb-3">Couldn't load this delivery — check your connection and try again.</p>
+        <button onClick={() => refetchDelivery()} className="btn-secondary">Retry</button>
+      </div>
+    )
+  }
   if (!delivery) return <div className="p-8 text-red-400">Delivery not found.</div>
 
   return (

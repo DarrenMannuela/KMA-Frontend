@@ -53,8 +53,12 @@ interface SpreadsheetViewProps<T> {
   getNextId?: () => string
   /** Blank rows kept ready to type into. Defaults to 1 — the buffer tops back up to this after each row graduates into real data; use the "+ Add another row" button for more at once. */
   minBlankRows?: number
-  /** Defaults merged into every new blank row (e.g. si_unit: 'yard'). Don't put keyColumn's value here if getNextId is set. */
-  emptyRowTemplate?: () => Partial<T>
+  /** Defaults merged into every new blank row (e.g. si_unit: 'yard'). Don't put keyColumn's value here if getNextId is set.
+   *  Typed as Record<string, any> rather than Partial<T> on purpose — a blank row is allowed to hold a
+   *  deliberate "not yet filled" sentinel for a field whose real type is numeric (e.g. price: '' instead
+   *  of 0), so a required column reads as genuinely empty until it's actually typed into. See
+   *  updateBlankField's isFilled check below, which is what that sentinel exists for. */
+  emptyRowTemplate?: () => Record<string, any>
   /** Scroll container height so the sheet stays put while the page around it scrolls. */
   maxHeight?: string
   /** Groups collapsed by default (matched against the group name). Groups still start expanded unless listed here. */
@@ -130,6 +134,15 @@ export function SpreadsheetView<T extends { id: string | number }>({
             if (shouldKeepGoing === false) {
               setBlankRows(cur => [...cur, row])
             }
+          }).catch(() => {
+            // A rejected promise means the create actually failed (network
+            // error, server validation, etc.) — not the same as the
+            // shouldKeepGoing===false "user cancelled" case above, but it
+            // needs the same recovery: put the typed row back instead of
+            // silently discarding data the person already entered. The
+            // caller is still responsible for surfacing *why* it failed
+            // (e.g. a toast) — this only guarantees the data isn't lost.
+            setBlankRows(cur => [...cur, row])
           })
         }
         return prev.filter(r => r.__key !== rowKey)
@@ -193,6 +206,61 @@ export function SpreadsheetView<T extends { id: string | number }>({
 
     return groups
   }, [data, groupByKey, calculateSubtotal])
+
+  // ── Keyboard grid navigation ────────────────────────────────────────────
+  // A flat, render-order list of every row currently on screen — real rows
+  // from collapsed-aware groups, followed by the pinned "new entries" blank
+  // rows. Arrow-key Up/Down walks this list rather than the two underlying
+  // tables separately, so the last data row flows straight into the first
+  // blank row with no special-casing at the boundary. Recomputed whenever
+  // what's actually visible changes (group collapse/expand, data, or the
+  // blank-row buffer) so it never drifts from what's on screen.
+  const orderedVisibleRowKeys = useMemo(() => {
+    const keys: string[] = []
+    Object.entries(groupedData).forEach(([groupName, group]) => {
+      const collapsed = groupByKey ? collapsedGroups.has(groupName) : false
+      if (collapsed) return
+      group.rows.forEach(row => keys.push(String(row.id)))
+    })
+    blankRows.forEach(row => keys.push(row.__key))
+    return keys
+  }, [groupedData, groupByKey, collapsedGroups, blankRows])
+
+  // Left/Right only ever moves between EDITABLE columns — a non-editable
+  // column (e.g. Production's derived "Total") has no EditableCell to
+  // receive focus, so it's not a stop on the path, just skipped over.
+  const editableColIndices = useMemo(
+    () => columns.map((_, i) => i).filter(i => columns[i].editable),
+    [columns]
+  )
+
+  // rowKey is a row's id (real rows) or __key (blank rows); colIdx is its
+  // position in `columns`. Cells register/unregister themselves as they
+  // mount/unmount (including on collapse, since their <tr> unmounts too),
+  // so this map only ever holds what's actually on screen right now.
+  const cellRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const cellRegistryKey = (rowKey: string, colIdx: number) => `${rowKey}::${colIdx}`
+  const registerCell = useCallback((rowKey: string, colIdx: number, el: HTMLDivElement | null) => {
+    const k = cellRegistryKey(rowKey, colIdx)
+    if (el) cellRefs.current.set(k, el)
+    else cellRefs.current.delete(k)
+  }, [])
+
+  const moveFocus = useCallback((rowKey: string, colIdx: number, direction: 'up' | 'down' | 'left' | 'right') => {
+    if (direction === 'left' || direction === 'right') {
+      const pos = editableColIndices.indexOf(colIdx)
+      if (pos === -1) return
+      const nextPos = direction === 'left' ? pos - 1 : pos + 1
+      if (nextPos < 0 || nextPos >= editableColIndices.length) return // clamp at row edges — Tab already crosses rows
+      cellRefs.current.get(cellRegistryKey(rowKey, editableColIndices[nextPos]))?.focus()
+      return
+    }
+    const rowPos = orderedVisibleRowKeys.indexOf(rowKey)
+    if (rowPos === -1) return
+    const nextRowPos = direction === 'up' ? rowPos - 1 : rowPos + 1
+    if (nextRowPos < 0 || nextRowPos >= orderedVisibleRowKeys.length) return // clamp at top/bottom of the sheet
+    cellRefs.current.get(cellRegistryKey(orderedVisibleRowKeys[nextRowPos], colIdx))?.focus()
+  }, [editableColIndices, orderedVisibleRowKeys])
 
   const colCount = columns.length + (onDeleteRow ? 1 : 0)
 
@@ -287,6 +355,8 @@ export function SpreadsheetView<T extends { id: string | number }>({
                               uppercase={col.uppercase}
                               format={val => (col.format ? col.format(val, row) : val)}
                               onSave={(newVal) => onUpdateRow(String(row.id), { ...row, [col.key]: newVal })}
+                              cellRef={(el) => registerCell(String(row.id), idx, el)}
+                              onNavigate={(dir) => moveFocus(String(row.id), idx, dir)}
                             />
                           ) : (
                             <div className="px-2 py-1 break-words">
@@ -383,6 +453,8 @@ export function SpreadsheetView<T extends { id: string | number }>({
                           uppercase={col.uppercase}
                           format={val => (col.format ? col.format(val, row as unknown as T) : val)}
                           onSave={(newVal) => updateBlankField(row.__key, col.key, newVal)}
+                          cellRef={(el) => registerCell(row.__key, idx, el)}
+                          onNavigate={(dir) => moveFocus(row.__key, idx, dir)}
                         />
                       ) : (
                         <div className="px-2 py-1 break-words">

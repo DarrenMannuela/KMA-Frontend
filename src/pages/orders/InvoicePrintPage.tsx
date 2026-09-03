@@ -477,7 +477,7 @@ export function InvoicePrintPage() {
   // measurement above sidesteps the same trap a different way: see its
   // own comment.)
 
-  const { data: invoice, isLoading: invoiceLoading } = useQuery({
+  const { data: invoice, isLoading: invoiceLoading, isError: invoiceError, refetch: refetchInvoice } = useQuery({
     queryKey: ['invoice', invoiceId],
     queryFn: () => invoicesApi.get(invoiceId),
     enabled: !!invoiceId,
@@ -766,6 +766,18 @@ export function InvoicePrintPage() {
   )
 
   if (invoiceLoading) return <div className="p-8 text-slate-400">Loading…</div>
+  // Same distinction as KwitansiPrintPage: a failed fetch (network drop,
+  // 500, etc.) previously rendered identically to a genuinely missing
+  // invoice — "Invoice not found." — which sent people looking for a typo
+  // in the URL instead of just retrying.
+  if (invoiceError) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-red-400 mb-3">Couldn't load this invoice — check your connection and try again.</p>
+        <button onClick={() => refetchInvoice()} className="btn-secondary">Retry</button>
+      </div>
+    )
+  }
   if (!invoice) return <div className="p-8 text-red-400">Invoice not found.</div>
 
   const dpPercent = invoice.total > 0

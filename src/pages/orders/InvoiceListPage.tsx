@@ -18,7 +18,7 @@ const TYPE_BADGE: Record<string, string> = {
 }
 
 export function InvoiceListPage() {
-  const { data, isLoading } = invoiceHooks.useList()
+  const { data, isLoading, isError, refetch } = invoiceHooks.useList()
   const del = invoiceHooks.useDelete()
   const update = invoiceHooks.useUpdate()
   const navigate = useNavigate()
@@ -46,6 +46,8 @@ export function InvoiceListPage() {
       icon={FileText}
       data={filteredData}
       isLoading={isLoading}
+      isError={isError}
+      onRetry={refetch}
       searchKeys={['id', 'kepada_yth', 'order_id']}
       filterBar={
         <div className="flex gap-1 bg-slate-100 rounded-lg p-1">

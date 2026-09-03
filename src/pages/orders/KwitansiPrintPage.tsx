@@ -23,7 +23,7 @@ export function KwitansiPrintPage() {
   const { rekening, setRekening } = useRekening()
   const [method, setMethod] = useState<PaymentMethod>('transfer')
 
-  const { data: invoice, isLoading } = useQuery({
+  const { data: invoice, isLoading, isError, refetch } = useQuery({
     queryKey: ['invoice', invoiceId],
     queryFn: () => invoicesApi.get(invoiceId),
     enabled: !!invoiceId,
@@ -36,6 +36,19 @@ export function KwitansiPrintPage() {
   })
 
   if (isLoading) return <div className="p-8 text-slate-400">Loading…</div>
+  // Distinguish "the fetch actually failed" (network drop, 500, etc.) from
+  // "the server answered and there's genuinely no such invoice" — these
+  // used to render identically as "Invoice not found.", which sent people
+  // down a dead end (double-checking an ID that was actually fine) instead
+  // of just retrying the request that failed.
+  if (isError) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-red-400 mb-3">Couldn't load this invoice — check your connection and try again.</p>
+        <button onClick={() => refetch()} className="btn-secondary">Retry</button>
+      </div>
+    )
+  }
   if (!invoice) return <div className="p-8 text-red-400">Invoice not found.</div>
 
   // The amount THIS kwitansi is a receipt for — the D/P amount if this is

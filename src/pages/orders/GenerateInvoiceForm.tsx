@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { RotateCcw, Building2 } from 'lucide-react'
 import { FormField, formatRp, UppercaseField } from '@/components/ui'
-import { invoicesApi } from '@/api'
+import { invoicesApi, ApiError } from '@/api'
 import { invoiceHooks, clientHooks, clientContactHooks } from '@/hooks'
 import type { Order, Item, Invoice, CreateInvoiceRequest, UpdateInvoiceRequest } from '@/types'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
@@ -86,7 +86,7 @@ interface Props {
 export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType, prefillFrom, clientId, onClose }: Props) {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { data: invoices = [] } = invoiceHooks.useList()
+  const { data: invoices = [], refetch: refetchInvoices } = invoiceHooks.useList()
 
   // Only fetched when the order is actually linked to a client — an
   // unlinked order just falls back to typing everything by hand, same as
@@ -225,9 +225,16 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoices, existingInvoice])
 
-  const resetIdSuggestion = () => {
+  // Refetches before recomputing — same reasoning as OrdersPage's own
+  // resetIdSuggestion: our local `invoices` cache can be stale by the
+  // time this runs (e.g. right after a 409, where the invoice that just
+  // caused the conflict hasn't landed in our cache yet). Suggesting off
+  // stale data risks handing the user right back the same number that
+  // just collided.
+  const resetIdSuggestion = async () => {
     setIdTouched(false)
-    setForm(p => ({ ...p, id: suggestNextInvoiceId(invoices) }))
+    const { data: freshInvoices } = await refetchInvoices()
+    setForm(p => ({ ...p, id: suggestNextInvoiceId(freshInvoices ?? invoices) }))
   }
 
   const idAlreadyExists = invoices.some(inv => inv.id === form.id && inv.id !== existingInvoice?.id)
@@ -268,7 +275,21 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
       onClose()
       navigate(`/invoice/${encodeURIComponent(inv.id)}`)
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      // Same race OrdersPage.tsx already guards against: the suggested
+      // "next number" is only a client-side guess (this.invoices), so two
+      // people generating an invoice off the same order/list at once can
+      // both land on the same suggested ID. The backend is the real
+      // source of truth and rejects the second submit with 409 — rather
+      // than a confusing raw failure, tell the user plainly and hand them
+      // a fresh, still-open number so the only cost is one extra click.
+      if (e instanceof ApiError && e.status === 409) {
+        toast.error('That invoice number was just taken by someone else — grabbing you a new one.')
+        resetIdSuggestion()
+        return
+      }
+      toast.error(e.message)
+    },
   })
 
   const update = useMutation({

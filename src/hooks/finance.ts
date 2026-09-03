@@ -79,7 +79,20 @@ export const productionHooks = {
       () => (headers.data && items.data) ? toProductionRows(headers.data, items.data) : [],
       [headers.data, items.data]
     )
-    return { data, isLoading: headers.isLoading || items.isLoading }
+    // Unlike makeCrudHooks' plain useList, this composes two separate
+    // queries — a failure in either one previously vanished into the same
+    // `data: []` the ternary above produces for "still loading", so a
+    // failed fetch and a genuinely empty Production page looked identical
+    // to any caller (e.g. CrudPage's isError/onRetry support added
+    // elsewhere has nothing to plug into without this). refetch() re-runs
+    // both underlying queries so a caller's Retry button actually retries
+    // everything this page depends on, not just one half of it.
+    return {
+      data,
+      isLoading: headers.isLoading || items.isLoading,
+      isError: headers.isError || items.isError,
+      refetch: () => Promise.all([headers.refetch(), items.refetch()]),
+    }
   },
 
   // Creates the FinanceHeader (if this header_id doesn't exist yet) and the
@@ -199,7 +212,14 @@ export const operationHooks = {
       () => (headers.data && items.data) ? toOperationRows(headers.data, items.data) : [],
       [headers.data, items.data]
     )
-    return { data, isLoading: headers.isLoading || items.isLoading }
+    // See productionHooks.useList's comment — same composed-query error
+    // gap, same fix.
+    return {
+      data,
+      isLoading: headers.isLoading || items.isLoading,
+      isError: headers.isError || items.isError,
+      refetch: () => Promise.all([headers.refetch(), items.refetch()]),
+    }
   },
 
   useCreate: () => {

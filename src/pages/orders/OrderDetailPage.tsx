@@ -208,7 +208,7 @@ export function OrderDetailPage() {
   const location = useLocation()
   const orderId = decodeURIComponent(id ?? '')
 
-  const { data: order, isLoading: orderLoading } = orderHooks.useGet(orderId)
+  const { data: order, isLoading: orderLoading, isError: orderError, refetch: refetchOrder } = orderHooks.useGet(orderId)
   const { data: orderItems = [] } = useQuery({
     queryKey: ['items', orderId],
     queryFn: () => itemsApi.getByOrder(orderId),
@@ -309,6 +309,18 @@ export function OrderDetailPage() {
   }
 
   if (orderLoading) return <div className="p-8 text-slate-400">Loading…</div>
+  // Same distinction made in InvoicePrintPage/KwitansiPrintPage: a failed
+  // fetch (network drop, 500, etc.) previously looked identical to a
+  // genuinely missing order — "Order not found." — sending people
+  // searching for a bad link instead of just retrying.
+  if (orderError) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-red-400 mb-3">Couldn't load this order — check your connection and try again.</p>
+        <button onClick={() => refetchOrder()} className="btn-secondary">Retry</button>
+      </div>
+    )
+  }
   if (!order) return <div className="p-8 text-red-400">Order not found.</div>
 
   return (

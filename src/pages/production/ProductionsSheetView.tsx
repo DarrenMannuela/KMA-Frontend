@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Factory } from 'lucide-react'
+import { ArrowLeft, Factory, AlertTriangle } from 'lucide-react'
 import { productionHooks, supplierHooks } from '@/hooks'
 import { Spinner } from '@/components/ui'
 import { MonthNavigator } from '@/components/ui/MonthNavigator'
@@ -14,7 +14,7 @@ interface ProductionSheetViewProps {
 }
 
 export function ProductionSheetView({ onBack, initialSupplierId }: ProductionSheetViewProps) {
-  const { data: allData = [], isLoading } = productionHooks.useList()
+  const { data: allData = [], isLoading, isError, refetch } = productionHooks.useList()
   const { data: suppliers = [] } = supplierHooks.useList()
 
   const now = new Date()
@@ -40,6 +40,17 @@ export function ProductionSheetView({ onBack, initialSupplierId }: ProductionShe
 
   if (isLoading) {
     return <Spinner />
+  }
+  // Same distinction made throughout — a failed fetch previously showed
+  // exactly the same spreadsheet a genuinely empty month would.
+  if (isError) {
+    return (
+      <div className="p-8 text-center">
+        <AlertTriangle className="w-8 h-8 text-red-300 mx-auto mb-3" />
+        <p className="text-red-400 mb-3">Couldn't load production data — check your connection and try again.</p>
+        <button onClick={() => refetch()} className="btn-secondary">Retry</button>
+      </div>
+    )
   }
 
   return (

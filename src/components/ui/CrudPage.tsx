@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Pencil, Trash2, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, AlertTriangle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog, Spinner, EmptyState } from '@/components/ui'
@@ -15,6 +15,16 @@ interface CrudPageProps<T extends { id: string | number }> {
   icon: LucideIcon
   data: T[] | undefined
   isLoading: boolean
+  // Distinct from "loaded successfully and there's just nothing yet" — a
+  // failed fetch previously fell through to the same EmptyState as a
+  // genuinely empty table ("No invoices yet — click Add New"), which sent
+  // people looking for data that was never actually missing, just
+  // unreachable. Optional and defaults to false so existing callers that
+  // haven't wired their query's isError through keep behaving exactly as
+  // before; `data` is expected to be undefined/[] in the error case same
+  // as it already is during loading.
+  isError?: boolean
+  onRetry?: () => void
   columns: Column<T>[]
   formTitle: (editing: T | null) => string
   renderForm: (editing: T | null, onClose: () => void) => React.ReactNode
@@ -36,7 +46,7 @@ interface CrudPageProps<T extends { id: string | number }> {
 }
 
 export function CrudPage<T extends { id: string | number }>({
-  title, icon: Icon, data = [], isLoading,
+  title, icon: Icon, data = [], isLoading, isError = false, onRetry,
   columns, formTitle, renderForm, onDelete,
   deleteMessage, searchKeys = [], rowActions, onEditClick, onAddClick, filterBar,
 }: CrudPageProps<T>) {
@@ -102,6 +112,15 @@ export function CrudPage<T extends { id: string | number }>({
       <div className="card fade-up delay-2 overflow-hidden">
         {isLoading ? (
           <Spinner />
+        ) : isError ? (
+          <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+            <AlertTriangle className="w-10 h-10 mb-3 text-red-300" />
+            <p className="font-medium text-slate-500 text-sm">Couldn't load {title.toLowerCase()}</p>
+            <p className="text-xs text-slate-400 mt-1 mb-4">Check your connection and try again.</p>
+            {onRetry && (
+              <button className="btn-secondary btn-sm" onClick={onRetry}>Retry</button>
+            )}
+          </div>
         ) : filtered.length === 0 ? (
           <EmptyState icon={Icon} title={`No ${title.toLowerCase()} yet`} subtitle="Click Add New to create one" />
         ) : (

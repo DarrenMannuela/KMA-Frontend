@@ -28,7 +28,7 @@ export function DeliveryPrintPage() {
   const navigate = useNavigate()
   const deliveryId = decodeURIComponent(id ?? '')
 
-  const { data: delivery, isLoading } = useQuery({
+  const { data: delivery, isLoading, isError, refetch } = useQuery({
     queryKey: ['delivery', deliveryId],
     queryFn: () => deliveryApi.get(deliveryId),
     enabled: !!deliveryId,
@@ -84,6 +84,19 @@ export function DeliveryPrintPage() {
   const grandTotal = rekapBoxes.reduce((s, b) => s + b.subtotal, 0)
 
   if (isLoading) return <div className="p-8 text-slate-400">Loading…</div>
+  // Same distinction made in KwitansiPrintPage/InvoicePrintPage/
+  // OrderDetailPage: a failed fetch (network drop, 500, etc.) previously
+  // looked identical to a genuinely missing delivery — "Delivery not
+  // found." — sending people searching for a bad link instead of just
+  // retrying the request that failed.
+  if (isError) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-red-400 mb-3">Couldn't load this delivery — check your connection and try again.</p>
+        <button onClick={() => refetch()} className="btn-secondary">Retry</button>
+      </div>
+    )
+  }
   if (!delivery) return <div className="p-8 text-red-400">Delivery not found.</div>
 
   const slips = boxGroups.map(([boxLabel, boxItems]) => ({ boxLabel: boxLabel === 'unassigned' ? null : boxLabel, items: boxItems }))

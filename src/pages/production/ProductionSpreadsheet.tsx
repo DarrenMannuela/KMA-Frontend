@@ -99,8 +99,23 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
     const isNewKasBon = !!payload.header_id && !existingHeaderIds.has(payload.header_id)
 
     if (!isNewKasBon) {
-      create.mutate(payload)
-      return
+      // Same data-loss risk confirmNewKasBon's comment below describes and
+      // fixes for a brand-new Kas Bon — SpreadsheetView removes a row from
+      // the "New entries" buffer the instant onCreateRow is called, and
+      // only restores it if onCreateRow's Promise later resolves false/
+      // rejects. A bare create.mutate() here returned void ("optimistic,
+      // discard immediately"), so a failed append to an *existing* Kas Bon
+      // (network drop, a validation error) silently discarded whatever was
+      // typed, with nothing to restore it — the exact loss the Promise
+      // path exists to prevent, just not wired up on this (far more
+      // common) branch. mutateAsync + resolving on the real outcome fixes
+      // it here too.
+      return new Promise<boolean>(resolve => {
+        create.mutateAsync(payload).then(
+          () => resolve(true),
+          () => resolve(false),
+        )
+      })
     }
 
     return new Promise<boolean>(resolve => {
@@ -110,9 +125,22 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
 
   const confirmNewKasBon = (date: string) => {
     if (!pendingNewKasBon) return
-    create.mutate({ ...pendingNewKasBon.payload, date })
-    pendingNewKasBon.resolve(true)
+    const { payload, resolve } = pendingNewKasBon
     setPendingNewKasBon(null)
+    // mutateAsync (not mutate) — resolve(true) previously fired
+    // unconditionally right after calling mutate, regardless of whether
+    // the create actually succeeded. That meant a failed create (e.g. a
+    // 409 on a Kas Bon ID someone else just took) still told
+    // SpreadsheetView "this worked," so the row was discarded from the
+    // "New entries" buffer with the typed data gone and nothing but a
+    // toast to show for it — the exact loss SpreadsheetView's own
+    // onCreateRow.catch() restore path exists to prevent, just bypassed
+    // here by always resolving true. Tying resolve to the mutation's real
+    // outcome lets that restore path do its job.
+    create.mutateAsync({ ...payload, date }).then(
+      () => resolve(true),
+      () => resolve(false),
+    )
   }
 
   // Resolving `false` tells SpreadsheetView to restore the typed row into
@@ -243,11 +271,23 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
         description: '',
         supplier_id: defaultSupplierId ?? suppliers[0]?.id ?? 0,
         material_name: '',
-        price: 0,
+        // '' rather than a real 0 — required.every(isFilled) below treats
+        // 0 as already "filled" (it's non-empty/non-null), so a numeric
+        // default let a row graduate into a real record via material_name
+        // alone, with price still untouched. Blank makes the required
+        // check actually mean something; EditableCell's number handling
+        // converts it to a real number the moment it's typed, before the
+        // row can ever submit.
+        price: '',
         si_unit: 'yard',
         amount: 1,
         date: todayISODate(),
       })}
+      // material_name alone used to be enough to submit a row — price
+      // could still be sitting at its numeric default and slip through
+      // uncaught. Requiring both keeps a row staged in "New entries"
+      // until there's an actual price on it.
+      requiredColumns={['material_name', 'price']}
       onCreateRow={handleCreateRow}
       onUpdateRow={(id, body) => update.mutate({ id: Number(id), body })}
       onDeleteRow={(id) => del.mutate(Number(id))}

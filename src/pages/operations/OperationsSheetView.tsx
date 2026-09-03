@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Wrench } from 'lucide-react'
+import { ArrowLeft, Wrench, AlertTriangle } from 'lucide-react'
 import { operationHooks } from '@/hooks'
 import { Spinner } from '@/components/ui'
 import { MonthNavigator } from '@/components/ui/MonthNavigator'
@@ -15,7 +15,7 @@ interface OperationsSheetViewProps {
 }
 
 export function OperationsSheetView({ onBack, initialCategory }: OperationsSheetViewProps) {
-  const { data: allData = [], isLoading } = operationHooks.useList()
+  const { data: allData = [], isLoading, isError, refetch } = operationHooks.useList()
 
   const now = new Date()
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() })
@@ -34,6 +34,17 @@ export function OperationsSheetView({ onBack, initialCategory }: OperationsSheet
 
   if (isLoading) {
     return <Spinner />
+  }
+  // Same distinction made throughout — a failed fetch previously showed
+  // exactly the same spreadsheet a genuinely empty month would.
+  if (isError) {
+    return (
+      <div className="p-8 text-center">
+        <AlertTriangle className="w-8 h-8 text-red-300 mx-auto mb-3" />
+        <p className="text-red-400 mb-3">Couldn't load operations data — check your connection and try again.</p>
+        <button onClick={() => refetch()} className="btn-secondary">Retry</button>
+      </div>
+    )
   }
 
   return (

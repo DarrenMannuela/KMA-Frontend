@@ -129,7 +129,7 @@ function ItemForm({ editing, onClose }: { editing: Item | null; onClose: () => v
 }
 
 export function ItemsPage() {
-  const { data, isLoading } = itemHooks.useList()
+  const { data, isLoading, isError, refetch } = itemHooks.useList()
   const del = itemHooks.useDelete()
 
   return (
@@ -138,6 +138,8 @@ export function ItemsPage() {
       icon={ListOrdered}
       data={data}
       isLoading={isLoading}
+      isError={isError}
+      onRetry={refetch}
       searchKeys={['item_name']}
       columns={[
         { header: 'ID',        key: 'id' },

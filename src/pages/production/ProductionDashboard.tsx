@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Factory, Plus, ArrowRight, RotateCcw } from 'lucide-react'
+import { Factory, Plus, ArrowRight, RotateCcw, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { productionHooks, supplierHooks, useFinanceHeaders } from '@/hooks'
 import { useKasBonIdSuggestion } from '@/hooks/useKasBonIdSuggestion'
@@ -10,6 +10,7 @@ import { isInMonth, todayISODate } from '@/utils/MonthUtils'
 import { SI_UNITS } from '@/utils/Units'
 import { formatThousands, stripCommas } from '@/utils/NumberFormat'
 import { CATEGORY_LABELS, CATEGORY_COLORS } from '@/constants/supplierCategories'
+import { ApiError } from '@/api'
 import type { CreateProductionRowRequest } from '@/types'
 
 interface ProductionDashboardProps {
@@ -30,9 +31,9 @@ const emptyQuickAdd = () => ({
 })
 
 export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: ProductionDashboardProps) {
-  const { data: allData = [], isLoading } = productionHooks.useList()
+  const { data: allData = [], isLoading, isError, refetch } = productionHooks.useList()
   const { data: suppliers = [] } = supplierHooks.useList()
-  const { data: headers = [] } = useFinanceHeaders()
+  const { data: headers = [], refetch: refetchHeaders } = useFinanceHeaders()
   const create = productionHooks.useCreate()
 
   const now = new Date()
@@ -50,11 +51,15 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
   )
 
   // Same convention as OrdersPage's idTouched. Shared with
-  // OperationsDashboard via useKasBonIdSuggestion.
+  // OperationsDashboard via useKasBonIdSuggestion. refetchHeaders is
+  // passed so resetIdSuggestion (below, wired to the 409 handler) recomputes
+  // off a fresh header list instead of this render's possibly-stale one —
+  // same reasoning as OrdersPage/GenerateInvoiceForm's own resetIdSuggestion.
   const { idTouched, setIdTouched, reset: resetIdSuggestion } = useKasBonIdSuggestion(
     headers,
     quickAdd.header_id,
-    header_id => setQuickAdd(p => ({ ...p, header_id }))
+    header_id => setQuickAdd(p => ({ ...p, header_id })),
+    refetchHeaders
   )
 
   const supplierTotals = useMemo(() => {
@@ -104,6 +109,17 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
         // Bon" to start a different header instead.
         setQuickAdd(p => ({ ...p, material_name: '', price: '', amount: '1' }))
       },
+      // Same race OrdersPage/GenerateInvoiceForm guard against: the
+      // suggested Kas Bon ID is a client-side guess, so two people quick-
+      // adding at once can land on the same suggestion. The backend 409s
+      // the second submit — resuggest a fresh number instead of leaving
+      // the form stuck on one that's already taken.
+      onError: (e: Error) => {
+        if (e instanceof ApiError && e.status === 409) {
+          toast.error('That Kas Bon ID was just taken by someone else — grabbing you a new one.')
+          resetIdSuggestion()
+        }
+      },
     })
   }
 
@@ -111,6 +127,19 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
 
   if (isLoading) {
     return <Spinner />
+  }
+  // Distinguish "the fetch actually failed" from "there's just no spend
+  // recorded yet" — previously indistinguishable, since productionHooks.
+  // useList() folded any query failure into the same empty `data` used
+  // while still loading (see finance.ts's own fix for the underlying gap).
+  if (isError) {
+    return (
+      <div className="p-8 text-center">
+        <AlertTriangle className="w-8 h-8 text-red-300 mx-auto mb-3" />
+        <p className="text-red-400 mb-3">Couldn't load production data — check your connection and try again.</p>
+        <button onClick={() => refetch()} className="btn-secondary">Retry</button>
+      </div>
+    )
   }
 
   return (
@@ -257,7 +286,18 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
           <SpendBars
             items={supplierTotals}
             selectedId={selectedSupplierId ?? null}
-            onSelect={(id) => onOpenSheet(id != null ? Number(id) : undefined)}
+            // Not id != null ? onOpenSheet(Number(id)) : onOpenSheet(undefined)
+            // — SpendBars treats clicking an already-selected bar as a
+            // "deselect" and calls onSelect(null), which used to fall
+            // through to onOpenSheet(undefined) and navigate to the
+            // spreadsheet with NO filter. That reads as the bar's
+            // highlight just turning off; it actually jumped to a
+            // different (unfiltered) screen. Every bar click here always
+            // means "open this supplier's entries," so the null/deselect
+            // case is simply ignored — clicking a highlighted bar again
+            // just re-opens the same filtered view instead of surprising
+            // you with the unfiltered one.
+            onSelect={(id) => { if (id != null) onOpenSheet(Number(id)) }}
             emptyLabel="No production spend recorded for this month"
           />
         </div>

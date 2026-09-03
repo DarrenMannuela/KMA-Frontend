@@ -66,8 +66,23 @@ export function OperationsSpreadsheet({ data }: OperationsSpreadsheetProps) {
     const isNewKasBon = !!payload.header_id && !existingHeaderIds.has(payload.header_id)
 
     if (!isNewKasBon) {
-      create.mutate(payload)
-      return
+      // Same data-loss risk confirmNewKasBon's comment below describes and
+      // fixes for a brand-new Kas Bon — SpreadsheetView removes a row from
+      // the "New entries" buffer the instant onCreateRow is called, and
+      // only restores it if onCreateRow's Promise later resolves false/
+      // rejects. A bare create.mutate() here returned void ("optimistic,
+      // discard immediately"), so a failed append to an *existing* Kas Bon
+      // (network drop, a validation error) silently discarded whatever was
+      // typed, with nothing to restore it — the exact loss the Promise
+      // path exists to prevent, just not wired up on this (far more
+      // common) branch. mutateAsync + resolving on the real outcome fixes
+      // it here too.
+      return new Promise<boolean>(resolve => {
+        create.mutateAsync(payload).then(
+          () => resolve(true),
+          () => resolve(false),
+        )
+      })
     }
 
     return new Promise<boolean>(resolve => {
@@ -77,9 +92,16 @@ export function OperationsSpreadsheet({ data }: OperationsSpreadsheetProps) {
 
   const confirmNewKasBon = (date: string) => {
     if (!pendingNewKasBon) return
-    create.mutate({ ...pendingNewKasBon.payload, date })
-    pendingNewKasBon.resolve(true)
+    const { payload, resolve } = pendingNewKasBon
     setPendingNewKasBon(null)
+    // See the identical comment in ProductionSpreadsheet.tsx's
+    // confirmNewKasBon — mutateAsync so resolve() reflects whether the
+    // create actually succeeded, instead of always claiming success right
+    // after firing the mutation.
+    create.mutateAsync({ ...payload, date }).then(
+      () => resolve(true),
+      () => resolve(false),
+    )
   }
 
   // Resolving `false` tells SpreadsheetView to restore the typed row into
@@ -120,7 +142,20 @@ export function OperationsSpreadsheet({ data }: OperationsSpreadsheetProps) {
         // Kas Bon number instead of blank, but it's still a regular editable
         // field, so typing over it works exactly like overriding Quick Add's
         // suggestion.
-        emptyRowTemplate={() => ({ header_id: suggestNextKasBonId(headers), description: '', category: '', item_description: '', price: 0, date: todayISODate() })}
+        //
+        // price is '' rather than a real 0 for the same reason category is
+        // blank — required.every(isFilled) below treats 0 as already
+        // "filled" (it's non-empty/non-null), so a numeric default would
+        // let a row graduate via item_description alone, with price never
+        // actually touched. EditableCell's number handling converts it to
+        // a real number the moment it's typed, before the row can submit.
+        emptyRowTemplate={() => ({ header_id: suggestNextKasBonId(headers), description: '', category: '', item_description: '', price: '', date: todayISODate() })}
+        // item_description alone used to be enough to submit a row —
+        // Category (what the spend-by-category bars group and filter by)
+        // and Price could still be at their blank/zero defaults and slip
+        // through uncaught. Requiring all three keeps a row staged in "New
+        // entries" until it actually has both.
+        requiredColumns={['item_description', 'category', 'price']}
         onCreateRow={handleCreateRow}
         onUpdateRow={(id, body) => update.mutate({ id: Number(id), body })}
         onDeleteRow={(id) => del.mutate(Number(id))}

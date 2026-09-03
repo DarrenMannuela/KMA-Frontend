@@ -426,7 +426,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
 }
 
 export function DeliveryPage() {
-  const { data, isLoading } = deliveryHooks.useList()
+  const { data, isLoading, isError, refetch } = deliveryHooks.useList()
   const del = deliveryHooks.useDelete()
   const navigate = useNavigate() 
 
@@ -436,6 +436,8 @@ export function DeliveryPage() {
       icon={Truck}
       data={data}
       isLoading={isLoading}
+      isError={isError}
+      onRetry={refetch}
       searchKeys={['company', 'address', 'contact_person', 'po_number']}
       columns={[
         { header: 'Delivery ID',     key: 'id',             render: r => <span className="id-chip">{r.id}</span> },

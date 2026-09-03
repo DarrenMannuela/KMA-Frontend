@@ -211,7 +211,7 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
 }
 
 export function OrdersPage() {
-  const { data, isLoading } = orderHooks.useList()
+  const { data, isLoading, isError, refetch } = orderHooks.useList()
   const del = orderHooks.useDelete()
   const navigate = useNavigate()
 
@@ -221,6 +221,8 @@ export function OrdersPage() {
       icon={ShoppingBag}
       data={data}
       isLoading={isLoading}
+      isError={isError}
+      onRetry={refetch}
       searchKeys={['company', 'po_number']}
       columns={[
         { header: 'Order ID',  key: 'id',         render: r => <span className="id-chip">{r.id}</span> },

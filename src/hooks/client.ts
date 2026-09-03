@@ -96,5 +96,14 @@ export function useClientCatalogueRows(clientId: number | undefined) {
     () => (items.data && grouped.data) ? toClientItemPriceRows(items.data, grouped.data) : [],
     [items.data, grouped.data]
   )
-  return { data, isLoading: items.isLoading || grouped.isLoading }
+  // Same composed-query gap as productionHooks/operationHooks.useList in
+  // finance.ts — a failure in either underlying query previously fell
+  // back to the same `data: []` "still loading" produces, so a failed
+  // fetch and a client with a genuinely empty catalogue looked identical.
+  return {
+    data,
+    isLoading: items.isLoading || grouped.isLoading,
+    isError: items.isError || grouped.isError,
+    refetch: () => Promise.all([items.refetch(), grouped.refetch()]),
+  }
 }
