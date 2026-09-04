@@ -54,7 +54,7 @@ function ClientForm({ editing, onClose }: { editing: Client | null; onClose: () 
 // (a real route, see App.tsx) instead of swapping local state, same
 // pattern DeliveryPage uses to link to DeliveryDetailPage.
 export function ClientsPage() {
-  const { data, isLoading } = clientHooks.useList()
+  const { data, isLoading, isError, refetch } = clientHooks.useList()
   const del = clientHooks.useDelete()
   const navigate = useNavigate()
 
@@ -64,14 +64,21 @@ export function ClientsPage() {
       icon={Building2}
       data={data}
       isLoading={isLoading}
+      isError={isError}
+      onRetry={refetch}
       searchKeys={['client_name', 'address']}
       columns={[
         { header: 'ID', key: 'id' },
         { header: 'Client Name', key: 'client_name', render: r => <span className="font-medium text-navy-900">{r.client_name}</span> },
         { header: 'Address', key: 'address', render: r => <span className="text-slate-500">{r.address ?? '—'}</span> },
-        // Not a real field — reuses the 'id' key for an actions column, same
-        // trick ProductionsSpreadsheet's "Total" column uses (key: 'price').
-        { header: '', key: 'id', render: r => (
+        // Not a real field — an actions-only column that just needs a key
+        // CrudPage can use for React's list reconciliation. Deliberately
+        // NOT 'id': CrudPage's <td>/<th> keys are just String(c.key), with
+        // no per-column index folded in the way SpreadsheetView's are — so
+        // reusing 'id' here would put two elements with key="id" in the
+        // same row (the plain ID column above it uses that key too),
+        // which is a real duplicate-key case, not just a lint warning.
+        { header: '', key: 'catalogue_link', render: r => (
           <button
             onClick={(e) => { e.stopPropagation(); navigate(`/clients/${r.id}`) }}
             className="inline-flex items-center gap-1 text-sm font-medium text-navy-600 hover:text-navy-800"

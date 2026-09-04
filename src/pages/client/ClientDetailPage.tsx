@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Building2, Users, Package, Printer, Image as ImageIcon } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField, Spinner, UppercaseField } from '@/components/ui'
 import { clientHooks, clientContactHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
@@ -134,15 +135,28 @@ function ClientItemForm({ clientId, editing, onClose }: { clientId: number; edit
     } else {
       create.mutate(form, {
         onSuccess: (newItem) => {
-          if (priceDigits) {
-            createPrice.mutate({
+          if (!priceDigits) { onClose(); return }
+          // Wait on the price create too, rather than closing the instant
+          // the item exists — this used to fire-and-forget createPrice and
+          // close immediately regardless of outcome, so a failed price
+          // save left the new item silently priceless with no indication
+          // anything went wrong. onSettled (not onSuccess) so the modal
+          // still closes on failure too — the item itself is already
+          // saved either way, and the person can always add a price from
+          // the item's own page; what's fixed here is that a failure is
+          // no longer invisible.
+          createPrice.mutate(
+            {
               client_item_id: newItem.id,
               year: priceYear,
               price: Number(priceDigits),
               effective_date: priceEffectiveDate ? new Date(priceEffectiveDate).toISOString() : null,
-            })
-          }
-          onClose()
+            },
+            {
+              onError: () => toast.error(`"${newItem.item_name}" was saved, but its initial price didn't — add it from the item's page.`),
+              onSettled: onClose,
+            }
+          )
         },
       })
     }
@@ -207,16 +221,28 @@ export function ClientDetailPage() {
 
   const { data: client, isLoading: clientLoading } = clientHooks.useGet(clientId)
 
-  const { data: contacts = [], isLoading: contactsLoading } = clientContactHooks.useByClient(clientId)
+  const { data: contacts = [], isLoading: contactsLoading, isError: contactsError, refetch: refetchContacts } = clientContactHooks.useByClient(clientId)
   const delContact = clientContactHooks.useDelete()
 
-  const { data: catalogueItems = [], isLoading: itemsLoading } = clientItemHooks.useByClient(clientId)
+  const { data: catalogueItems = [], isLoading: itemsLoading, isError: itemsError, refetch: refetchItems } = clientItemHooks.useByClient(clientId)
   const delItem = clientItemHooks.useDelete()
 
   // Only fetched now to build pricesByItem for the print dialog below —
   // the year-by-year spreadsheet/calculator that used to live on this page
   // moved to ClientItemDetailPage, which fetches its own item's history.
   const { data: groupedPrices } = clientItemPriceHooks.useGrouped()
+
+  // Hook, not a plain computation — has to sit above the clientLoading/
+  // !client early returns below so hook order stays stable across renders
+  // (a useMemo after a conditional return would be skipped on some
+  // renders and not others, which breaks the Rules of Hooks).
+  const pricesByItem: Record<number, ClientItemPrice[]> = useMemo(() => {
+    const map: Record<number, ClientItemPrice[]> = {}
+    catalogueItems.forEach(item => {
+      map[item.id] = groupedPrices?.[String(item.id)] ?? []
+    })
+    return map
+  }, [catalogueItems, groupedPrices])
 
   const [showPrint, setShowPrint] = useState(false)
   // Backed by ?tab= instead of plain useState — ClientItemDetailPage's
@@ -233,11 +259,6 @@ export function ClientDetailPage() {
   if (!client) {
     return <div className="p-8 text-red-400">Client not found.</div>
   }
-
-  const pricesByItem: Record<number, ClientItemPrice[]> = {}
-  catalogueItems.forEach(item => {
-    pricesByItem[item.id] = groupedPrices?.[String(item.id)] ?? []
-  })
 
   return (
     <div className="p-6 space-y-6">
@@ -297,6 +318,8 @@ export function ClientDetailPage() {
           icon={Users}
           data={contacts}
           isLoading={contactsLoading}
+          isError={contactsError}
+          onRetry={refetchContacts}
           searchKeys={['name', 'role', 'location_label']}
           columns={[
             { header: 'Name', key: 'name', render: r => (
@@ -329,6 +352,8 @@ export function ClientDetailPage() {
           icon={Package}
           data={catalogueItems}
           isLoading={itemsLoading}
+          isError={itemsError}
+          onRetry={refetchItems}
           searchKeys={['item_name', 'size', 'notes']}
           columns={[
             { header: 'Photo', key: 'id',        render: r => <ClientItemPhotoCell item={r} clientId={clientId} /> },

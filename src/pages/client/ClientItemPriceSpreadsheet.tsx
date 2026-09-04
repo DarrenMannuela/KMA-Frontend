@@ -64,7 +64,14 @@ export function ClientItemPriceSpreadsheet({ data, items }: ClientItemPriceSprea
         const { item_name, size, ...rest } = body as Partial<ClientItemPriceRow>
         update.mutate({
           id: Number(id),
-          body: { ...rest, effective_date: rest.effective_date ? new Date(rest.effective_date).toISOString() : rest.effective_date },
+          // Falls back to null, not the raw (possibly '') value — clearing
+          // the date via EditableCell leaves rest.effective_date as '',
+          // and `rest.effective_date : rest.effective_date` would send
+          // that '' straight to the API. Every other place that writes
+          // this same field (ClientItemForm, ItemPriceHikeCalculator)
+          // falls back to null for "no date", so this matches that
+          // instead of introducing a second, inconsistent "empty" value.
+          body: { ...rest, effective_date: rest.effective_date ? new Date(rest.effective_date).toISOString() : null },
         })
       }}
       onDeleteRow={(id) => del.mutate(Number(id))}

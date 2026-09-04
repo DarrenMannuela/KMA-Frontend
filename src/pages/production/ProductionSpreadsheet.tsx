@@ -277,8 +277,12 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
         // alone, with price still untouched. Blank makes the required
         // check actually mean something; EditableCell's number handling
         // converts it to a real number the moment it's typed, before the
-        // row can ever submit.
-        price: '',
+        // row can ever submit. The cast is a white lie to TypeScript only —
+        // ProductionRow.price is a real `number`, so this blank sentinel
+        // has to be asserted past that; it never reaches onCreateRow as a
+        // string because required.every(isFilled) blocks submission until
+        // it's been typed over with an actual number.
+        price: '' as unknown as number,
         si_unit: 'yard',
         amount: 1,
         date: todayISODate(),

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { X, Printer } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatRp } from '@/components/ui'
+import { sortPricesByRecency } from '@/utils/PriceHistory'
 import type { Client, ClientItem, ClientItemPrice } from '@/types'
 
 interface ClientPriceListPrintProps {
@@ -18,17 +19,40 @@ interface ClientPriceListPrintProps {
 // legible at a glance instead of needing to cross-reference two documents.
 // Uses the visibility trick below rather than a dedicated print route,
 // since the app has no /clients/:id/print route wired up yet.
+
+// Same broken-image fallback ItemPhotoPanel (ClientItemDetailPage) and
+// ClientItemPhotoCell (ClientDetailPage) both use — a stale/broken
+// photo_path shouldn't leave a broken-image glyph sitting on a printed
+// price list. Needs its own component (not just inline `useState` in the
+// row map) since each row's failure is independent — one broken photo
+// shouldn't affect any other row's `imgFailed` state.
+function PrintPhotoCell({ item }: { item: ClientItem }) {
+  const [imgFailed, setImgFailed] = useState(false)
+  if (!item.photo_path || imgFailed) {
+    return <div className="w-10 h-10 rounded bg-slate-50 border border-slate-100" />
+  }
+  return (
+    <img
+      src={item.photo_path}
+      alt=""
+      className="w-10 h-10 rounded object-cover border border-slate-200"
+      onError={() => setImgFailed(true)}
+    />
+  )
+}
+
 export function ClientPriceListPrint({ client, items, pricesByItem, onClose }: ClientPriceListPrintProps) {
   type Row = { item: ClientItem; latest: ClientItemPrice | undefined; previous: ClientItemPrice | undefined }
 
   const allRows = useMemo(() => {
     return items
       .map((item): Row => {
-        // Tie-break same-year entries by effective_date (see the matching
-        // comment in ClientItemDetailPage.tsx) — otherwise a mid-year price
-        // revision can get printed as "Previous" with the older price
-        // shown as "Current", inverted from reality.
-        const history = [...(pricesByItem[item.id] ?? [])].sort((a, b) => a.year - b.year || (a.effective_date ?? '').localeCompare(b.effective_date ?? ''))
+        // Chronological (oldest first) so the last two entries are
+        // "previous" and "latest" — see sortPricesByRecency for why the
+        // effective_date tie-break matters (a mid-year price revision
+        // can otherwise get printed as "Previous" with the older price
+        // shown as "Current", inverted from reality).
+        const history = sortPricesByRecency(pricesByItem[item.id] ?? [], 'asc')
         return { item, latest: history[history.length - 1], previous: history[history.length - 2] }
       })
       .filter((r): r is { item: ClientItem; latest: ClientItemPrice; previous: ClientItemPrice | undefined } => !!r.latest)
@@ -146,15 +170,7 @@ export function ClientPriceListPrint({ client, items, pricesByItem, onClose }: C
                   return (
                     <tr key={item.id} className="border-b border-slate-100">
                       <td className="py-2 pr-2">
-                        {item.photo_path ? (
-                          <img
-                            src={item.photo_path}
-                            alt=""
-                            className="w-10 h-10 rounded object-cover border border-slate-200"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded bg-slate-50 border border-slate-100" />
-                        )}
+                        <PrintPhotoCell item={item} />
                       </td>
                       <td className="py-2 text-navy-900">
                         {item.item_name}

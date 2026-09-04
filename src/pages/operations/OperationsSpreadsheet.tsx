@@ -149,7 +149,18 @@ export function OperationsSpreadsheet({ data }: OperationsSpreadsheetProps) {
         // let a row graduate via item_description alone, with price never
         // actually touched. EditableCell's number handling converts it to
         // a real number the moment it's typed, before the row can submit.
-        emptyRowTemplate={() => ({ header_id: suggestNextKasBonId(headers), description: '', category: '', item_description: '', price: '', date: todayISODate() })}
+        // The cast is a white lie to TypeScript only — OperationRow.price
+        // is a real `number`, so this blank sentinel has to be asserted
+        // past that; it never reaches onCreateRow as a string because
+        // required.every(isFilled) blocks submission until it's typed over.
+        emptyRowTemplate={() => ({
+          header_id: suggestNextKasBonId(headers),
+          description: '',
+          category: '',
+          item_description: '',
+          price: '' as unknown as number,
+          date: todayISODate(),
+        })}
         // item_description alone used to be enough to submit a row —
         // Category (what the spend-by-category bars group and filter by)
         // and Price could still be at their blank/zero defaults and slip

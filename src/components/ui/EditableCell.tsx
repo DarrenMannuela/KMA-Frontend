@@ -24,28 +24,16 @@ interface EditableCellProps {
    *  (e.g. Kas Bon IDs) where "01/kb/26" and "01/KB/26" should read as the
    *  same value rather than silently diverging. Only applies to type="text". */
   uppercase?: boolean
-  /** Excel-style grid navigation. Called when the cell should hand focus to
-   *  a neighboring cell — arrow keys on the non-editing display div, or
-   *  Up/Down/Enter while editing (which commit first, then navigate). Not
-   *  called for Tab (native focus order already moves to the next
-   *  focusable cell) or for Left/Right while editing text/number/date
-   *  (default caret movement instead). The grid (SpreadsheetView) owns row/
-   *  column position and decides where "up"/"down"/"left"/"right" actually
-   *  goes — this component just reports the gesture. */
-  onNavigate?: (direction: 'up' | 'down' | 'left' | 'right') => void
-  /** Registers this cell's focusable display element with the grid so a
-   *  neighboring cell's onNavigate can find and focus it. Only the
-   *  non-editing div is registered — while a cell is actively being
-   *  edited it's rarely also someone else's navigation target, so the
-   *  input/select itself isn't wired into the registry. */
-  cellRef?: (el: HTMLDivElement | null) => void
-}
-
-const NAV_KEYS: Record<string, 'up' | 'down' | 'left' | 'right'> = {
-  ArrowUp: 'up',
-  ArrowDown: 'down',
-  ArrowLeft: 'left',
-  ArrowRight: 'right',
+  /** Registers this cell's focusable DOM node with SpreadsheetView's grid-
+   *  navigation map, so arrow keys pressed elsewhere in the sheet can call
+   *  .focus() on it directly. Fires for whichever element is currently
+   *  rendered — the display div or the input/select — since React swaps
+   *  one for the other on every edit-mode toggle. */
+  cellRef?: (el: HTMLElement | null) => void
+  /** Called to move focus to a neighboring cell: (rowDelta, colDelta), e.g.
+   *  (0, 1) for "one cell right". SpreadsheetView owns the actual grid and
+   *  resolves this into a .focus() call on the target cell. */
+  onNavigate?: (rowDelta: number, colDelta: number) => void
 }
 
 export function EditableCell({
@@ -58,13 +46,18 @@ export function EditableCell({
   suggestions,
   allowDecimal = false,
   uppercase = false,
-  onNavigate,
   cellRef,
+  onNavigate,
 }: EditableCellProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [val, setVal] = useState(initialValue)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const selectRef = useRef<HTMLSelectElement>(null)
+  // Typed as `T | null` (not just `T`) so these come back as mutable refs —
+  // `useRef<T>(null)` alone types `.current` readonly in current React
+  // types (meant for handing straight to JSX's `ref` prop only), which is
+  // exactly what broke the manual `selectRef.current = el` assignment
+  // below once cellRef needed to also observe the same node.
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const selectRef = useRef<HTMLSelectElement | null>(null)
   const datalistId = useId()
   // React re-sets a controlled input's DOM value on every keystroke, which
   // resets the caret to the end of the string unless something restores
@@ -75,15 +68,6 @@ export function EditableCell({
   // string every time), but it's a general controlled-input issue, not an
   // uppercase-only one, so this restores position after every change.
   const caretPos = useRef<number | null>(null)
-  // Guards against a double commit. Normally commit() -> setIsEditing(false)
-  // is the last thing that happens to a cell: the input unmounts on the
-  // next render, so a later blur can't fire commit() again. Grid navigation
-  // breaks that assumption — moveFocus() calls .focus() on the *next* cell
-  // synchronously, before React has re-rendered this one, which fires this
-  // input's onBlur (and therefore commit()) a second time on the same
-  // still-mounted input. Tracked as a ref (not state) since it needs to be
-  // read/written within the same synchronous event-handling pass.
-  const hasCommittedRef = useRef(false)
 
   useEffect(() => { setVal(initialValue) }, [initialValue])
 
@@ -99,25 +83,7 @@ export function EditableCell({
     }
   }, [val, isEditing, type])
 
-  // Shared entry point for opening a cell for editing — used by the click
-  // handler below, by Enter/F2 on a focused display cell, and by the
-  // "just start typing" shortcut (which passes the character that was
-  // typed so it lands in the field instead of being swallowed by the
-  // click-to-focus keystroke). Resets the double-commit guard so a fresh
-  // edit session starts clean.
-  const beginEditing = (initialChar?: string) => {
-    hasCommittedRef.current = false
-    if (initialChar !== undefined) {
-      const next = uppercase ? initialChar.toUpperCase() : initialChar
-      caretPos.current = next.length
-      setVal(next)
-    }
-    setIsEditing(true)
-  }
-
   const commit = (raw: any) => {
-    if (hasCommittedRef.current) return
-    hasCommittedRef.current = true
     setIsEditing(false)
     // A native <select> always hands back a string in e.target.value, even
     // when the field it represents is numeric (e.g. supplier_id/client_id).
@@ -161,11 +127,12 @@ export function EditableCell({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      // Excel behavior: Enter commits and drops down to the same column on
-      // the next row, rather than just closing the cell in place.
+      // Commit-then-move-down mirrors Excel: Enter confirms the cell and
+      // advances to the next row, same column (Shift+Enter goes up
+      // instead) rather than just sitting in place.
       e.preventDefault()
       commit(val)
-      onNavigate?.('down')
+      onNavigate?.(e.shiftKey ? -1 : 1, 0)
       return
     }
     if (e.key === 'Escape') {
@@ -173,29 +140,50 @@ export function EditableCell({
       setIsEditing(false)
       return
     }
-    const navDir = NAV_KEYS[e.key]
-    if (!navDir) return
-    if (navDir === 'up' || navDir === 'down') {
-      // Native <input type="date"> uses Up/Down to increment/decrement the
-      // focused date segment, and a <select> uses them to change the
-      // selected option without opening the dropdown — both are exactly
-      // what a person expects while editing that field type, so grid
-      // navigation stands aside here rather than hijacking the keys.
-      if (type === 'date' || type === 'select') return
+    // Up/Down commit-and-move too, same as Enter — a single-line input has
+    // no native use for vertical arrows anyway. Left/Right are deliberately
+    // left alone here so they keep moving the caret within the text being
+    // typed, exactly like Excel: arrows only jump cells once you're NOT
+    // actively editing. select is excluded because its native Up/Down
+    // already means something (cycle the highlighted option) and
+    // hijacking that would fight the browser rather than help.
+    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && type !== 'select') {
       e.preventDefault()
       commit(val)
-      onNavigate?.(navDir)
-      return
+      onNavigate?.(e.key === 'ArrowUp' ? -1 : 1, 0)
     }
-    // Left/Right: a <select> doesn't use these keys for anything, so it's
-    // safe to treat them as "commit and move to the neighboring column."
-    // Text/number/date all use Left/Right for normal caret movement (a
-    // date input moves between its mm/dd/yyyy segments), so those are left
-    // alone entirely — intercepting them would break editing mid-value.
-    if (type === 'select') {
+  }
+
+  // Fires on the non-editing display div — i.e. only when this cell is
+  // focused but NOT currently being typed into.
+  const handleDisplayKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return
+    switch (e.key) {
+      case 'ArrowUp':    e.preventDefault(); onNavigate?.(-1, 0); return
+      case 'ArrowDown':  e.preventDefault(); onNavigate?.(1, 0); return
+      case 'ArrowLeft':  e.preventDefault(); onNavigate?.(0, -1); return
+      case 'ArrowRight': e.preventDefault(); onNavigate?.(0, 1); return
+      case 'Enter':
+      case 'F2':
+        e.preventDefault(); setIsEditing(true); return
+    }
+    // "Just start typing" — the classic Excel shortcut: a printable
+    // keystroke on a selected-but-not-editing cell opens it for editing
+    // with that character already entered, instead of requiring
+    // Enter/click first. Limited to text/number — select's options aren't
+    // something a single keystroke can meaningfully seed, and date's
+    // native picker doesn't take free text either.
+    if ((type === 'text' || type === 'number') && e.key.length === 1) {
+      let seeded = e.key
+      if (type === 'number') {
+        seeded = seeded.replace(allowDecimal ? /[^\d.]/g : /[^\d]/g, '')
+        if (!seeded) return // first keystroke wasn't a usable digit — ignore, don't open edit mode on nothing
+      } else if (uppercase) {
+        seeded = seeded.toUpperCase()
+      }
       e.preventDefault()
-      commit(val)
-      onNavigate?.(navDir)
+      setVal(seeded)
+      setIsEditing(true)
     }
   }
 
@@ -203,7 +191,7 @@ export function EditableCell({
     if (type === 'select') {
       return (
         <select
-          ref={selectRef}
+          ref={(el) => { selectRef.current = el; cellRef?.(el) }}
           value={val ?? ''}
           onChange={(e) => setVal(e.target.value)}
           onBlur={(e) => commit(e.target.value)}
@@ -221,11 +209,16 @@ export function EditableCell({
     return (
       <>
         <input
-          ref={inputRef}
+          ref={(el) => { inputRef.current = el; cellRef?.(el) }}
           type={type === 'number' ? 'text' : type}
           inputMode={type === 'number' ? (allowDecimal ? 'decimal' : 'numeric') : undefined}
           value={val ?? ''}
-          onChange={(e) => handleChange(e.target.value, e.target.selectionStart)}
+          // input[type=date] (like range/color/checkbox) doesn't support the
+          // selection API — reading .selectionStart on it throws
+          // ("does not support selection") the moment a date is picked, so
+          // this is skipped for date fields; there's no meaningful caret to
+          // preserve on a native date picker anyway.
+          onChange={(e) => handleChange(e.target.value, type === 'date' ? null : e.target.selectionStart)}
           onBlur={() => commit(val)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
@@ -243,58 +236,20 @@ export function EditableCell({
 
   const isEmpty = initialValue === '' || initialValue === null || initialValue === undefined
 
-  // Handles the cell while it's focused but NOT being edited yet — arrow
-  // keys hand off to the grid's navigation (moving between cells, never
-  // touching this cell's own value), Enter/F2 open it for editing in
-  // place, and any other single printable keystroke opens it for editing
-  // WITH that keystroke already typed in, the classic Excel "just start
-  // typing over a selected cell" shortcut. Select/date are excluded from
-  // that last one — typing a stray letter isn't a meaningful way to set
-  // either (a <select> jumps to a matching option on its own once open;
-  // a date input's segments expect digits in a specific mm/dd/yyyy order
-  // this shortcut would only get in the way of).
-  const handleCellKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    const navDir = NAV_KEYS[e.key]
-    if (navDir) {
-      e.preventDefault()
-      onNavigate?.(navDir)
-      return
-    }
-    if (e.key === 'Enter' || e.key === 'F2') {
-      e.preventDefault()
-      beginEditing()
-      return
-    }
-    if (
-      type !== 'select' && type !== 'date' &&
-      e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey
-    ) {
-      // Number cells only open-on-type for characters handleChange would
-      // actually keep (digits, plus a single "." when allowDecimal) — a
-      // stray letter shouldn't open the cell into an edit session that
-      // then immediately strips everything back out.
-      const numericPattern = allowDecimal ? /^[\d.]$/ : /^\d$/
-      if (type === 'number' && !numericPattern.test(e.key)) return
-      e.preventDefault()
-      beginEditing(e.key)
-    }
-  }
-
   return (
     <div
       ref={cellRef}
       tabIndex={0}
-      onClick={() => beginEditing()}
-      onKeyDown={handleCellKeyDown}
+      onClick={() => setIsEditing(true)}
+      onKeyDown={handleDisplayKeyDown}
       // The dotted underline is a permanent editability affordance — hover
       // states (border/bg) don't exist on touch devices, so without this a
       // cell gives no visual hint it's clickable until the first accidental
       // tap teaches the pattern. Hover styling stays as a bonus for mouse users.
-      // focus:ring replaces that same role for keyboard users tabbing/
-      // arrowing through the grid — outline-none + ring (not the browser's
-      // default outline) so it reads as "this cell" rather than a generic
-      // focus rectangle that clips against the table's borders.
-      className="px-2 py-1 min-h-[1.75rem] cursor-cell border border-transparent border-b-slate-200 [border-bottom-style:dotted] hover:border-slate-300 hover:bg-slate-50 hover:[border-bottom-style:solid] transition-colors break-words outline-none focus:ring-2 focus:ring-inset focus:ring-blue-400 focus:border-b-transparent relative focus:z-10"
+      // focus: styling is the active-cell indicator for keyboard navigation
+      // — reuses the same border rather than a box-shadow ring so it reads
+      // as a natural extension of the existing hover/underline treatment.
+      className="px-2 py-1 min-h-[1.75rem] cursor-cell border border-transparent border-b-slate-200 [border-bottom-style:dotted] hover:border-slate-300 hover:bg-slate-50 hover:[border-bottom-style:solid] focus:outline-none focus:border-blue-400 focus:bg-blue-50/50 focus:[border-bottom-style:solid] transition-colors break-words"
     >
       {isEmpty
         ? <span className="text-slate-300 italic">{placeholder ?? 'click to fill'}</span>

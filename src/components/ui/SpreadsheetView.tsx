@@ -53,12 +53,8 @@ interface SpreadsheetViewProps<T> {
   getNextId?: () => string
   /** Blank rows kept ready to type into. Defaults to 1 — the buffer tops back up to this after each row graduates into real data; use the "+ Add another row" button for more at once. */
   minBlankRows?: number
-  /** Defaults merged into every new blank row (e.g. si_unit: 'yard'). Don't put keyColumn's value here if getNextId is set.
-   *  Typed as Record<string, any> rather than Partial<T> on purpose — a blank row is allowed to hold a
-   *  deliberate "not yet filled" sentinel for a field whose real type is numeric (e.g. price: '' instead
-   *  of 0), so a required column reads as genuinely empty until it's actually typed into. See
-   *  updateBlankField's isFilled check below, which is what that sentinel exists for. */
-  emptyRowTemplate?: () => Record<string, any>
+  /** Defaults merged into every new blank row (e.g. si_unit: 'yard'). Don't put keyColumn's value here if getNextId is set. */
+  emptyRowTemplate?: () => Partial<T>
   /** Scroll container height so the sheet stays put while the page around it scrolls. */
   maxHeight?: string
   /** Groups collapsed by default (matched against the group name). Groups still start expanded unless listed here. */
@@ -207,62 +203,43 @@ export function SpreadsheetView<T extends { id: string | number }>({
     return groups
   }, [data, groupByKey, calculateSubtotal])
 
-  // ── Keyboard grid navigation ────────────────────────────────────────────
-  // A flat, render-order list of every row currently on screen — real rows
-  // from collapsed-aware groups, followed by the pinned "new entries" blank
-  // rows. Arrow-key Up/Down walks this list rather than the two underlying
-  // tables separately, so the last data row flows straight into the first
-  // blank row with no special-casing at the boundary. Recomputed whenever
-  // what's actually visible changes (group collapse/expand, data, or the
-  // blank-row buffer) so it never drifts from what's on screen.
-  const orderedVisibleRowKeys = useMemo(() => {
+  const colCount = columns.length + (onDeleteRow ? 1 : 0)
+
+  // ── Keyboard navigation (arrow keys between cells, like Excel) ──────────
+  // Every cell registers its currently-mounted focusable node here, keyed
+  // by "<rowKey>:<colIndex>" — rowKey is String(row.id) for real rows and
+  // row.__key for blank ones, so the same map covers both. Whichever
+  // element EditableCell happens to be rendering (the display div, or the
+  // input/select while editing) re-registers itself via cellRef, so a
+  // lookup always finds whatever's actually focusable right now.
+  const cellRefs = useRef<Map<string, HTMLElement>>(new Map())
+  const setCellRef = (key: string) => (el: HTMLElement | null) => {
+    if (el) cellRefs.current.set(key, el)
+    else cellRefs.current.delete(key)
+  }
+
+  // Row order exactly as rendered — collapsed groups are skipped (arrow
+  // keys shouldn't land on hidden rows), and blank "New entries" rows are
+  // appended after, so arrowing down off the last real row continues
+  // straight into the New entries buffer instead of stopping dead.
+  const visibleRowKeys = useMemo(() => {
     const keys: string[] = []
     Object.entries(groupedData).forEach(([groupName, group]) => {
       const collapsed = groupByKey ? collapsedGroups.has(groupName) : false
-      if (collapsed) return
-      group.rows.forEach(row => keys.push(String(row.id)))
+      if (!collapsed) group.rows.forEach(r => keys.push(String(r.id)))
     })
-    blankRows.forEach(row => keys.push(row.__key))
+    blankRows.forEach(r => keys.push(r.__key))
     return keys
-  }, [groupedData, groupByKey, collapsedGroups, blankRows])
+  }, [groupedData, collapsedGroups, groupByKey, blankRows])
 
-  // Left/Right only ever moves between EDITABLE columns — a non-editable
-  // column (e.g. Production's derived "Total") has no EditableCell to
-  // receive focus, so it's not a stop on the path, just skipped over.
-  const editableColIndices = useMemo(
-    () => columns.map((_, i) => i).filter(i => columns[i].editable),
-    [columns]
-  )
-
-  // rowKey is a row's id (real rows) or __key (blank rows); colIdx is its
-  // position in `columns`. Cells register/unregister themselves as they
-  // mount/unmount (including on collapse, since their <tr> unmounts too),
-  // so this map only ever holds what's actually on screen right now.
-  const cellRefs = useRef<Map<string, HTMLDivElement>>(new Map())
-  const cellRegistryKey = (rowKey: string, colIdx: number) => `${rowKey}::${colIdx}`
-  const registerCell = useCallback((rowKey: string, colIdx: number, el: HTMLDivElement | null) => {
-    const k = cellRegistryKey(rowKey, colIdx)
-    if (el) cellRefs.current.set(k, el)
-    else cellRefs.current.delete(k)
-  }, [])
-
-  const moveFocus = useCallback((rowKey: string, colIdx: number, direction: 'up' | 'down' | 'left' | 'right') => {
-    if (direction === 'left' || direction === 'right') {
-      const pos = editableColIndices.indexOf(colIdx)
-      if (pos === -1) return
-      const nextPos = direction === 'left' ? pos - 1 : pos + 1
-      if (nextPos < 0 || nextPos >= editableColIndices.length) return // clamp at row edges — Tab already crosses rows
-      cellRefs.current.get(cellRegistryKey(rowKey, editableColIndices[nextPos]))?.focus()
-      return
-    }
-    const rowPos = orderedVisibleRowKeys.indexOf(rowKey)
-    if (rowPos === -1) return
-    const nextRowPos = direction === 'up' ? rowPos - 1 : rowPos + 1
-    if (nextRowPos < 0 || nextRowPos >= orderedVisibleRowKeys.length) return // clamp at top/bottom of the sheet
-    cellRefs.current.get(cellRegistryKey(orderedVisibleRowKeys[nextRowPos], colIdx))?.focus()
-  }, [editableColIndices, orderedVisibleRowKeys])
-
-  const colCount = columns.length + (onDeleteRow ? 1 : 0)
+  const moveFocus = (rowKey: string, colIdx: number, dRow: number, dCol: number) => {
+    const rowIdx = visibleRowKeys.indexOf(rowKey)
+    if (rowIdx === -1) return
+    const newRowIdx = Math.min(Math.max(rowIdx + dRow, 0), visibleRowKeys.length - 1)
+    const newColIdx = Math.min(Math.max(colIdx + dCol, 0), columns.length - 1)
+    const newRowKey = visibleRowKeys[newRowIdx]
+    cellRefs.current.get(`${newRowKey}:${newColIdx}`)?.focus()
+  }
 
   // Jump to the bottom on first load, once real data has actually rendered —
   // that's normally where people are working (most recent entries, or the
@@ -355,11 +332,24 @@ export function SpreadsheetView<T extends { id: string | number }>({
                               uppercase={col.uppercase}
                               format={val => (col.format ? col.format(val, row) : val)}
                               onSave={(newVal) => onUpdateRow(String(row.id), { ...row, [col.key]: newVal })}
-                              cellRef={(el) => registerCell(String(row.id), idx, el)}
-                              onNavigate={(dir) => moveFocus(String(row.id), idx, dir)}
+                              cellRef={setCellRef(`${row.id}:${idx}`)}
+                              onNavigate={(dRow, dCol) => moveFocus(String(row.id), idx, dRow, dCol)}
                             />
                           ) : (
-                            <div className="px-2 py-1 break-words">
+                            <div
+                              ref={setCellRef(`${row.id}:${idx}`)}
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                const delta: Record<string, [number, number]> = {
+                                  ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1],
+                                }
+                                const d = delta[e.key]
+                                if (!d) return
+                                e.preventDefault()
+                                moveFocus(String(row.id), idx, d[0], d[1])
+                              }}
+                              className="px-2 py-1 break-words focus:outline-none focus:bg-blue-50/50 rounded-sm"
+                            >
                               {col.format ? col.format(row[col.key], row) : String(row[col.key])}
                             </div>
                           )}
@@ -439,7 +429,20 @@ export function SpreadsheetView<T extends { id: string | number }>({
                       className="px-2 py-1 border-r border-slate-100 last:border-0 align-middle"
                     >
                       {col.key === keyColumn && getNextId ? (
-                        <div className="px-2 py-1 text-slate-400 font-mono text-xs italic">
+                        <div
+                          ref={setCellRef(`${row.__key}:${idx}`)}
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            const delta: Record<string, [number, number]> = {
+                              ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1],
+                            }
+                            const d = delta[e.key]
+                            if (!d) return
+                            e.preventDefault()
+                            moveFocus(row.__key, idx, d[0], d[1])
+                          }}
+                          className="px-2 py-1 text-slate-400 font-mono text-xs italic focus:outline-none focus:bg-blue-50/50 rounded-sm"
+                        >
                           auto — {getNextId()}
                         </div>
                       ) : col.editable ? (
@@ -453,11 +456,24 @@ export function SpreadsheetView<T extends { id: string | number }>({
                           uppercase={col.uppercase}
                           format={val => (col.format ? col.format(val, row as unknown as T) : val)}
                           onSave={(newVal) => updateBlankField(row.__key, col.key, newVal)}
-                          cellRef={(el) => registerCell(row.__key, idx, el)}
-                          onNavigate={(dir) => moveFocus(row.__key, idx, dir)}
+                          cellRef={setCellRef(`${row.__key}:${idx}`)}
+                          onNavigate={(dRow, dCol) => moveFocus(row.__key, idx, dRow, dCol)}
                         />
                       ) : (
-                        <div className="px-2 py-1 break-words">
+                        <div
+                          ref={setCellRef(`${row.__key}:${idx}`)}
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            const delta: Record<string, [number, number]> = {
+                              ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1],
+                            }
+                            const d = delta[e.key]
+                            if (!d) return
+                            e.preventDefault()
+                            moveFocus(row.__key, idx, d[0], d[1])
+                          }}
+                          className="px-2 py-1 break-words focus:outline-none focus:bg-blue-50/50 rounded-sm"
+                        >
                           {col.format
                             ? col.format(row[col.key as string], row as unknown as T)
                             : <span className="text-slate-300">—</span>}

@@ -686,7 +686,11 @@ export function InvoicePrintPage() {
   // the badge in the meantime.
   const hasMeasurements = measured.top > 0 || Object.keys(measured.groups).length > 0
   const predictedBreaks = new Set<string>()
-  let predictedTailNewPage = false
+  // Per-block tail flags — see the check below for why these are no
+  // longer a single combined boolean.
+  let predictedTotalsNewPage = false
+  let predictedNotesNewPage = false
+  let predictedClosingNewPage = false
   if (hasMeasurements) {
     let remaining = firstPageContentPx - measured.top - measured.thead
     groups.forEach((g, i) => {
@@ -709,15 +713,53 @@ export function InvoicePrintPage() {
       }
       remaining -= h
     })
-    // The totals block, notes, and signature/footer all travel together as
-    // a unit by the time they'd break (each already has its own
-    // pageBreakInside:'avoid'; treated as one combined tail here since
-    // they sit back-to-back with nothing breakable between them) — if
-    // that combined height doesn't fit in what's left after the last
-    // group, the whole thing moves to a fresh page.
-    const tail = measured.totals + measured.notes + measured.closing
-    if (tail > 0 && tail > remaining) predictedTailNewPage = true
+    // The totals block, notes, and signature/footer each carry their own
+    // `pageBreakInside: 'avoid'`, but nothing in the actual DOM/CSS glues
+    // those three separate elements to EACH OTHER — the browser is free to
+    // keep totals on the current page while only notes/closing spill to
+    // the next one, or any other split between them. Treating their
+    // combined height as one lump (the old approach) didn't reflect that:
+    // whenever the combined height didn't fit, it predicted ALL THREE
+    // moving to a fresh page together, even on invoices (like this one)
+    // where only the last block or two actually overflowed and an earlier
+    // block — TOTAL, here — comfortably stayed put on the real printed
+    // page. That mismatch is exactly what the screenshots show: the
+    // on-screen prediction moved TOTAL to page 2, but the real PDF kept it
+    // on page 1.
+    //
+    // Checked independently instead, in the same document order they
+    // render in and the same "does it fit in what's left, else start a
+    // fresh page" logic already used for item groups above — each block
+    // only lands on a new page if IT specifically doesn't fit in what's
+    // left after the block(s) before it.
+    if (measured.totals > 0 && measured.totals > remaining) {
+      predictedTotalsNewPage = true
+      // The totals block is still a <tbody> of the same <table> as the
+      // item groups, so a fresh page repeats the <thead> above it exactly
+      // like it would above any other continuation tbody.
+      remaining = laterPageContentPx - measured.thead
+    }
+    remaining -= measured.totals
+
+    if (measured.notes > 0 && measured.notes > remaining) {
+      predictedNotesNewPage = true
+      // Notes lives outside the <table> entirely (a plain div after it),
+      // so a fresh page for it doesn't reserve any thead height.
+      remaining = laterPageContentPx
+    }
+    remaining -= measured.notes
+
+    if (measured.closing > 0 && measured.closing > remaining) {
+      predictedClosingNewPage = true
+      remaining = laterPageContentPx
+    }
+    remaining -= measured.closing
   }
+  // How many pages the tail predicts adding beyond the item table's own
+  // pages — one for each block above that lands on a fresh page, since
+  // each such break starts a new physical page rather than sharing one.
+  const tailNewPageCount =
+    Number(predictedTotalsNewPage) + Number(predictedNotesNewPage) + Number(predictedClosingNewPage)
 
   // Splits `groups` into page segments at every break — manual ones are
   // KNOWN synchronously from state (the user clicked a toggle); predicted
@@ -744,10 +786,22 @@ export function InvoicePrintPage() {
     groupPageNumber.set(g.name, pageSegments.length)
   })
   if (pageSegments.length === 0) pageSegments.push({ groups: [] })
-  // The tail (totals/notes/signature) predicted onto its own fresh page
-  // counts toward the total too, same as a manual/predicted break between
-  // two item groups would.
-  const totalPredictedPages = pageSegments.length + (predictedTailNewPage ? 1 : 0)
+  // Running page numbers for the tail's own break markers further down —
+  // each block's marker needs to say "ends page X, starts page X+1" using
+  // whichever page the PREVIOUS tail block actually landed on, not always
+  // "the last item-table page", since totals/notes/closing can now each
+  // independently decide to start fresh. Declared here (after
+  // `pageSegments` exists) rather than up with the other tail flags, since
+  // `pageSegments.length` is what totalsPageNumber is anchored to.
+  const totalsPageNumber = pageSegments.length + (predictedTotalsNewPage ? 1 : 0)
+  const notesPageNumber = totalsPageNumber + (predictedNotesNewPage ? 1 : 0)
+  const closingPageNumber = notesPageNumber + (predictedClosingNewPage ? 1 : 0)
+  // Each tail block predicted onto its own fresh page counts toward the
+  // total too, same as a manual/predicted break between two item groups
+  // would — now potentially more than one, since totals/notes/closing are
+  // each checked (and can each break) independently. Equals `closingPageNumber`
+  // above, since that's the last page number in the chain.
+  const totalPredictedPages = pageSegments.length + tailNewPageCount
   // Single number the toolbar's "at least N pages" pill AND every
   // on-screen PageFlag badge (below) read from, so a page badge floating
   // over page 1 can never say "OF 2" while the toolbar pill says "at
@@ -1038,7 +1092,7 @@ export function InvoicePrintPage() {
           <div ref={topBlockRef}>
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <img src="/Logo.png" alt="KMA Logo" style={{ width: '80px', height: 'auto', marginBottom: '6px' }} />
               <div style={{ fontWeight: 'bold', fontSize: '13px', letterSpacing: '2px' }}>KREASI  MAKMUR  ABADI</div>
             </div>
@@ -1258,15 +1312,19 @@ export function InvoicePrintPage() {
               // because this only ever checked manualBreaks.
               const nextGroup = groups[groupIdx + 1]
               // The last group has no "next group" to carry a break, but
-              // the tail (totals/notes/signature, measured as one combined
-              // unit above) can still be predicted to spill onto its own
-              // fresh page — exactly the case from the original bug
-              // report (the totals block landing on page 2 with nothing
-              // printed to explain why page 1 ends with blank space).
+              // the totals block that immediately follows it (see the
+              // per-block tail check above) can still be predicted to
+              // spill onto its own fresh page — exactly the case from the
+              // original bug report (the totals block landing on page 2
+              // with nothing printed to explain why page 1 ends with blank
+              // space). Only `predictedTotalsNewPage` matters here, not
+              // notes/closing breaking further down — this note marks the
+              // seam right after the item table, which is specifically
+              // where totals sits.
               const isLastGroup = groupIdx === groups.length - 1
               const endsPageHere = nextGroup
                 ? (manualBreaks.has(nextGroup.name) || predictedBreaks.has(nextGroup.name))
-                : (isLastGroup && predictedTailNewPage)
+                : (isLastGroup && predictedTotalsNewPage)
 
               return (
                 <tbody
@@ -1416,30 +1474,30 @@ export function InvoicePrintPage() {
               )
             })}
 
-            {/* Bug fix: the tail (totals/notes/signature, measured as one
-                combined unit above) can be predicted to overflow onto its
-                own fresh page WITHOUT any item group ever breaking — e.g.
-                every item fits comfortably on page 1, and only TOTAL/D-P/
-                PELUNASAN spill over (this is exactly the case from the
-                original bug report: the item table ended cleanly, and the
-                totals block landed on page 2 alone). The marker above only
-                ever renders between two item groups, keyed to a group
-                boundary — there IS no group boundary here, so that marker
-                never fires for this case and page 2 previously had no
-                visible seam, no "PAGE 2 OF N" badge, and no gap at all: it
-                just silently continued as if there were still only one
-                page. This is the missing counterpart for that specific
-                gap. No manual/strong variant exists for it (manualBreaks
-                only key by item group name — there's nothing to toggle
-                between "last group" and "totals"), so it's always the
-                lighter "predicted" styling. */}
-            {predictedTailNewPage && (
+            {/* Bug fix: the totals block can be predicted to overflow onto
+                its own fresh page WITHOUT any item group ever breaking —
+                e.g. every item fits comfortably on page 1, and only TOTAL/
+                D-P/PELUNASAN spill over. The marker above only ever renders
+                between two item groups, keyed to a group boundary — there
+                IS no group boundary here, so that marker never fires for
+                this case and page 2 previously had no visible seam, no
+                "PAGE 2 OF N" badge, and no gap at all: it just silently
+                continued as if there were still only one page. This is the
+                missing counterpart for that specific gap. No manual/strong
+                variant exists for it (manualBreaks only key by item group
+                name — there's nothing to toggle between "last group" and
+                "totals"), so it's always the lighter "predicted" styling.
+                Only checks `predictedTotalsNewPage` now — not a combined
+                tail flag — since notes/closing breaking on their own,
+                further down, doesn't mean totals did too (see the
+                independent per-block check above). */}
+            {predictedTotalsNewPage && (
               <tbody className="print:hidden">
                 <tr>
                   <td colSpan={6} style={{ padding: 0 }}>
                     <PageBreakGap
                       endPage={pageSegments.length}
-                      startPage={pageSegments.length + 1}
+                      startPage={totalsPageNumber}
                       total={previewTotalPages}
                       invoiceId={invoice.id}
                       client={invoice.kepada_yth}
@@ -1529,20 +1587,25 @@ export function InvoicePrintPage() {
                   </td>
                 </tr>
               ) : (
+                // Same vertical-spacing goal as the real D/P row above
+                // (keep the gap before PELUNASAN uniform whether or not
+                // this invoice has an actual D/P line) — but without
+                // drawing a fully bordered, entirely empty 6-column grid
+                // row to do it, which read as leftover/broken table lines
+                // with nothing in them (see the "residual column lines"
+                // this replaced). Structured exactly like the real D/P
+                // row: NO/KETERANGAN/SIZE stay a borderless spacer (those
+                // three never had anything to show here anyway), while
+                // QTY/label/amount keep their normal borders — blank, but
+                // still part of the table's grid — so the right-hand edge
+                // stays visually closed against the TOTAL row above and
+                // PELUNASAN row below, the same as it already does when
+                // there IS a real D/P line.
                 <tr onClick={() => toggleRowHighlight('dp')} className="cursor-pointer print:cursor-default">
-                  {(() => {
-                    const cellStyle = { border: '1px solid #ccc', padding: '6px 8px', background: rowHighlights['dp'] }
-                    return (
-                      <>
-                        <td style={cellStyle} />
-                        <td style={cellStyle} />
-                        <td style={cellStyle} />
-                        <td style={cellStyle} />
-                        <td style={cellStyle} />
-                        <td style={cellStyle} />
-                      </>
-                    )
-                  })()}
+                  <td style={{ padding: '6px 8px', borderTopStyle: 'hidden', borderBottomStyle: 'hidden' }} colSpan={3} />
+                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', background: rowHighlights['dp'] }} />
+                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', background: rowHighlights['dp'] }} />
+                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', background: rowHighlights['dp'] }} />
                 </tr>
               )}
 
@@ -1663,6 +1726,24 @@ export function InvoicePrintPage() {
             </button>
           </div>
 
+          {/* Counterpart to the totals-block marker above, for the same
+              reason: notes lives outside the item <table> entirely, so
+              there's no group boundary to hang a break marker on, and it
+              can now be predicted to move to its own fresh page
+              independently of whether totals did (see the per-block check
+              above) — e.g. totals still fits right after the table, but
+              notes itself is long enough that it doesn't. */}
+          {predictedNotesNewPage && (
+            <PageBreakGap
+              endPage={totalsPageNumber}
+              startPage={notesPageNumber}
+              total={previewTotalPages}
+              invoiceId={invoice.id}
+              client={invoice.kepada_yth}
+              strong={false}
+            />
+          )}
+
           {/* Notes */}
           <div ref={notesRef} style={{ marginTop: '24px', fontSize: `${BASE_FONT_PX}px`, pageBreakInside: 'avoid' }}>
             <div style={{ fontWeight: 'bold', textDecoration: 'underline', marginBottom: '4px' }}>SYARAT & KETENTUAN :</div>
@@ -1746,6 +1827,21 @@ export function InvoicePrintPage() {
               doesn't, same as any other row-level content here. Forcing it
               to always start a fresh page wasted the rest of the previous
               page whenever it would have fit fine. */}
+          {/* Same counterpart as the notes marker above, one block later:
+              closing (signature + footer) can independently be predicted
+              to move to its own fresh page even when totals and notes both
+              stayed put. */}
+          {predictedClosingNewPage && (
+            <PageBreakGap
+              endPage={notesPageNumber}
+              startPage={closingPageNumber}
+              total={previewTotalPages}
+              invoiceId={invoice.id}
+              client={invoice.kepada_yth}
+              strong={false}
+            />
+          )}
+
           <div ref={closingRef} style={{ pageBreakInside: 'avoid' }}>
             {/* Signature block */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginTop: '24px', fontSize: `${BASE_FONT_PX}px` }}>

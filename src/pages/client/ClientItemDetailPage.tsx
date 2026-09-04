@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, Package, Image as ImageIcon, Pencil, X, Check } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { FormField, Spinner, formatRp, UppercaseField } from '@/components/ui'
 import { clientHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
 import { formatThousands, stripCommas } from '@/utils/NumberFormat'
+import { sortPricesByRecency } from '@/utils/PriceHistory'
 import { ClientItemPriceSpreadsheet } from './ClientItemPriceSpreadsheet'
 import type { ClientItem, ClientItemPrice, UpdateClientItemRequest } from '@/types'
 import type { ClientItemPriceRow } from '@/hooks'
@@ -16,6 +18,17 @@ function ItemPhotoPanel({ item }: { item: ClientItem }) {
   const remove = clientItemHooks.useDeletePhoto()
   const inputRef = useRef<HTMLInputElement>(null)
   const [imgFailed, setImgFailed] = useState(false)
+  // A bare "Remove" that fires on the first click is one misclick away from
+  // losing the photo with no undo — same reasoning as CrudPage's delete
+  // button and SpreadsheetView's row-delete trash icon, both of which arm
+  // on a first click and only act on a second, deliberate one.
+  const [confirmingRemove, setConfirmingRemove] = useState(false)
+
+  const handleRemove = () => {
+    if (!confirmingRemove) { setConfirmingRemove(true); return }
+    setConfirmingRemove(false)
+    remove.mutate(item.id, { onError: () => toast.error("Couldn't remove the photo — check your connection and try again.") })
+  }
 
   return (
     <div className="card p-4 flex flex-col items-center gap-3">
@@ -38,12 +51,21 @@ function ItemPhotoPanel({ item }: { item: ClientItem }) {
         </div>
       )}
       <div className="flex items-center gap-3">
-        <button onClick={() => inputRef.current?.click()} className="text-sm text-navy-600 hover:underline">
-          {item.photo_path ? 'Replace photo' : 'Upload photo'}
+        <button
+          onClick={() => inputRef.current?.click()}
+          disabled={upload.isPending}
+          className="text-sm text-navy-600 hover:underline disabled:opacity-40 disabled:no-underline"
+        >
+          {upload.isPending ? 'Uploading…' : item.photo_path ? 'Replace photo' : 'Upload photo'}
         </button>
         {item.photo_path && (
-          <button onClick={() => remove.mutate(item.id)} className="text-sm text-red-500 hover:underline">
-            Remove
+          <button
+            onClick={handleRemove}
+            onBlur={() => setConfirmingRemove(false)}
+            disabled={remove.isPending}
+            className={`text-sm hover:underline disabled:opacity-40 disabled:no-underline ${confirmingRemove ? 'text-red-700 font-medium' : 'text-red-500'}`}
+          >
+            {remove.isPending ? 'Removing…' : confirmingRemove ? 'Click again to confirm' : 'Remove'}
           </button>
         )}
       </div>
@@ -51,7 +73,10 @@ function ItemPhotoPanel({ item }: { item: ClientItem }) {
         ref={inputRef} type="file" accept="image/jpeg,image/png" className="hidden"
         onChange={e => {
           const file = e.target.files?.[0]
-          if (file) { upload.mutate({ id: item.id, file }); setImgFailed(false) }
+          if (file) {
+            upload.mutate({ id: item.id, file }, { onError: () => toast.error("Couldn't upload the photo — check your connection and try again.") })
+            setImgFailed(false)
+          }
           e.target.value = ''
         }}
       />
@@ -72,7 +97,10 @@ function ItemDetailsPanel({ item }: { item: ClientItem }) {
     setForm({ item_name: item.item_name, size: item.size, notes: item.notes })
     setEditing(true)
   }
-  const save = () => update.mutate({ id: item.id, body: form }, { onSuccess: () => setEditing(false) })
+  const save = () => update.mutate({ id: item.id, body: form }, {
+    onSuccess: () => setEditing(false),
+    onError: () => toast.error("Couldn't save — check your connection and try again."),
+  })
 
   if (!editing) {
     return (
@@ -127,28 +155,44 @@ function ItemPriceHikeCalculator({ item, prices }: { item: ClientItem; prices: C
   const [year, setYear] = useState(new Date().getFullYear())
   const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().slice(0, 10))
 
-  // Sorted by year first, then by effective_date within a year — a price
-  // can be revised mid-year, and year alone can't tell two same-year
-  // entries apart, so without this tie-break "last" could land on
-  // whichever one the API happened to return first rather than the one
-  // that's actually most recent.
-  const last = [...prices].sort((a, b) => b.year - a.year || (b.effective_date ?? '').localeCompare(a.effective_date ?? ''))[0]
+  // Most-recent-first — see sortPricesByRecency for why the effective_date
+  // tie-break matters (a price can be revised mid-year, and year alone
+  // can't tell two same-year entries apart).
+  const last = sortPricesByRecency(prices, 'desc')[0]
 
   useEffect(() => {
     const pctNum = Number(pct)
     if (last && pct !== '' && !isNaN(pctNum)) {
       setPriceDigits(String(Math.round(last.price * (1 + pctNum / 100))))
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pct])
+    // `last` deliberately included (unlike a typical "run only when the
+    // user types a %" effect) — prices can refetch in the background
+    // (e.g. after Save This Price, or another tab/user adding one), and
+    // without this, a percentage typed before that refetch would keep
+    // suggesting a price computed off the now-stale "Last Price" instead
+    // of the one the read-only field above it is currently showing.
+  }, [pct, last])
 
   const priceNum = priceDigits ? Number(priceDigits) : null
 
   const handleSave = () => {
     if (priceNum == null) return
-    create.mutate({ client_item_id: item.id, year, price: priceNum, effective_date: effectiveDate ? new Date(effectiveDate).toISOString() : null })
-    setPct('')
-    setPriceDigits('')
+    // setPct/setPriceDigits used to run unconditionally right after
+    // .mutate() fired — meaning they cleared regardless of whether the
+    // save actually succeeded. A failed save (network drop, validation
+    // error) silently wiped whatever price/percentage was just typed with
+    // no error shown and nothing to recover it — exactly the data-loss
+    // pattern the rest of the app's spreadsheets (ProductionSpreadsheet/
+    // OperationsSpreadsheet's onCreateRow handling) are careful to avoid.
+    // Gating the clear on onSuccess, and adding onError, fixes both: a
+    // failure now leaves the typed values in place and says so.
+    create.mutate(
+      { client_item_id: item.id, year, price: priceNum, effective_date: effectiveDate ? new Date(effectiveDate).toISOString() : null },
+      {
+        onSuccess: () => { setPct(''); setPriceDigits('') },
+        onError: () => toast.error("Couldn't save this price — check your connection and try again."),
+      }
+    )
   }
 
   return (
@@ -192,10 +236,23 @@ export function ClientItemDetailPage() {
   const itemId = Number(itemIdParam)
 
   const { data: client } = clientHooks.useGet(clientId)
-  const { data: item, isLoading: itemLoading } = clientItemHooks.useGet(itemId)
-  const { data: prices = [], isLoading: pricesLoading } = clientItemPriceHooks.useByItem(itemId)
+  const { data: item, isLoading: itemLoading, isError: itemError, refetch: refetchItem } = clientItemHooks.useGet(itemId)
+  const { data: prices = [], isLoading: pricesLoading, isError: pricesError, refetch: refetchPrices } = clientItemPriceHooks.useByItem(itemId)
 
   if (itemLoading) return <Spinner />
+  // Distinguish "the fetch actually failed" from "this item genuinely
+  // doesn't exist" — previously indistinguishable, since a failed
+  // clientItemHooks.useGet() left `item` undefined the same as a real
+  // 404 would, and both fell through to the same "Item not found."
+  // message with no way to retry a fetch that just needs another try.
+  if (itemError) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-red-400 mb-3">Couldn't load this item — check your connection and try again.</p>
+        <button onClick={() => refetchItem()} className="btn-secondary">Retry</button>
+      </div>
+    )
+  }
   if (!item) return <div className="p-8 text-red-400">Item not found.</div>
 
   // Reuses the existing spreadsheet component — grouped by client_item_id,
@@ -229,6 +286,11 @@ export function ClientItemDetailPage() {
         <h3 className="text-sm font-semibold text-slate-700 mb-3">Price History</h3>
         {pricesLoading ? (
           <Spinner />
+        ) : pricesError ? (
+          <div className="p-6 text-center">
+            <p className="text-red-400 mb-3">Couldn't load price history — check your connection and try again.</p>
+            <button onClick={() => refetchPrices()} className="btn-secondary">Retry</button>
+          </div>
         ) : (
           <>
             <ItemPriceHikeCalculator item={item} prices={prices} />
