@@ -1,4 +1,4 @@
-import { useRef, useLayoutEffect, useState } from 'react'
+import { useRef, useLayoutEffect, useState, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Printer, Receipt, Plus, PackageSearch } from 'lucide-react'
@@ -65,6 +65,15 @@ function escapeCssString(value: string): string {
 }
 
 const BASE_FONT_PX = 14
+// The item table's row height (company row, item rows, and the gap row
+// between groups all share this — see the KETERANGAN table below). One
+// number to tune instead of the ~13 separate `height: ` literals
+// that used to be scattered across those rows' cell styles — bump this to
+// make every row taller/shorter at once. It's a CSS table-layout MINIMUM,
+// not a cap: a cell whose content genuinely needs more (a long item name
+// wrapping to two lines) still grows past it, so shrinking this doesn't
+// risk clipping real content, only how much air short/empty rows get.
+const ROW_HEIGHT_PX = 26
 // Reserved strictly for the print-only running footer added below (page
 // number + invoice/client context) — carved out of the EXISTING bottom
 // padding rather than added on top of it, so the physical page size and
@@ -600,7 +609,13 @@ export function InvoicePrintPage() {
   // on top of that.
   const groupCount = new Set(items.map(i => i.item_name)).size
   const rowCount = items.length + groupCount /* gap row per group */ + 4 /* company + total + dp + pelunasan rows */
-  const approxRowPx = BASE_FONT_PX + 14 /* cell padding */
+  // Anchored to ROW_HEIGHT_PX (the item table's real row height) rather
+  // than its own separate BASE_FONT_PX-derived guess — this is only ever
+  // a rough PRE-estimate (the real pagination decision further down
+  // measures actual DOM heights), but there's no reason for it to use a
+  // different number than the rows it's estimating, especially now that
+  // number is meant to be tunable in one place.
+  const approxRowPx = ROW_HEIGHT_PX
   const approxOverheadPx = 620 /* masthead + customer detail + notes + signature/footer, roughly */
   const likelyMultiPage = approxOverheadPx + rowCount * approxRowPx > pageHeightPx * 1.05
 
@@ -686,11 +701,21 @@ export function InvoicePrintPage() {
   // the badge in the meantime.
   const hasMeasurements = measured.top > 0 || Object.keys(measured.groups).length > 0
   const predictedBreaks = new Set<string>()
-  // Per-block tail flags — see the check below for why these are no
-  // longer a single combined boolean.
-  let predictedTotalsNewPage = false
-  let predictedNotesNewPage = false
-  let predictedClosingNewPage = false
+  let predictedTailNewPage = false
+  // A real getBoundingClientRect() measurement on screen and the browser's
+  // own print-time layout are never pixel-for-pixel identical — font
+  // hinting/rounding differences between the two can shift a height by a
+  // few px either way. Comparing with a bare `>` treats "1px over budget"
+  // exactly like "200px over budget", and a FALSE "doesn't fit" prediction
+  // is far more disruptive than a false "fits" one: it plants a wrong
+  // page-break badge directly over real content and prints a "(continued
+  // on next page)" note that turns out to be a lie once the browser's own
+  // (authoritative) pagination doesn't actually break there — exactly the
+  // mismatch this was reported against. A small slack buffer, in the same
+  // spirit as `likelyMultiPage`'s own 1.05 tolerance above, means only a
+  // clearly-doesn't-fit case gets flagged; a borderline one is left for
+  // the browser's real engine to decide, which is authoritative anyway.
+  const BREAK_PREDICTION_SLACK_PX = 40
   if (hasMeasurements) {
     let remaining = firstPageContentPx - measured.top - measured.thead
     groups.forEach((g, i) => {
@@ -707,59 +732,36 @@ export function InvoicePrintPage() {
       // though the manually-started page had plenty of real room for it.
       if (i > 0 && manualBreaks.has(g.name)) {
         remaining = laterPageContentPx - measured.thead
-      } else if (i > 0 && !manualBreaks.has(g.name) && h > 0 && h > remaining) {
+      } else if (i > 0 && !manualBreaks.has(g.name) && h > 0 && h > remaining + BREAK_PREDICTION_SLACK_PX) {
         predictedBreaks.add(g.name)
         remaining = laterPageContentPx - measured.thead
       }
       remaining -= h
     })
-    // The totals block, notes, and signature/footer each carry their own
-    // `pageBreakInside: 'avoid'`, but nothing in the actual DOM/CSS glues
-    // those three separate elements to EACH OTHER — the browser is free to
-    // keep totals on the current page while only notes/closing spill to
-    // the next one, or any other split between them. Treating their
-    // combined height as one lump (the old approach) didn't reflect that:
-    // whenever the combined height didn't fit, it predicted ALL THREE
-    // moving to a fresh page together, even on invoices (like this one)
-    // where only the last block or two actually overflowed and an earlier
-    // block — TOTAL, here — comfortably stayed put on the real printed
-    // page. That mismatch is exactly what the screenshots show: the
-    // on-screen prediction moved TOTAL to page 2, but the real PDF kept it
-    // on page 1.
-    //
-    // Checked independently instead, in the same document order they
-    // render in and the same "does it fit in what's left, else start a
-    // fresh page" logic already used for item groups above — each block
-    // only lands on a new page if IT specifically doesn't fit in what's
-    // left after the block(s) before it.
-    if (measured.totals > 0 && measured.totals > remaining) {
-      predictedTotalsNewPage = true
-      // The totals block is still a <tbody> of the same <table> as the
-      // item groups, so a fresh page repeats the <thead> above it exactly
-      // like it would above any other continuation tbody.
-      remaining = laterPageContentPx - measured.thead
-    }
-    remaining -= measured.totals
-
-    if (measured.notes > 0 && measured.notes > remaining) {
-      predictedNotesNewPage = true
-      // Notes lives outside the <table> entirely (a plain div after it),
-      // so a fresh page for it doesn't reserve any thead height.
-      remaining = laterPageContentPx
-    }
-    remaining -= measured.notes
-
-    if (measured.closing > 0 && measured.closing > remaining) {
-      predictedClosingNewPage = true
-      remaining = laterPageContentPx
-    }
-    remaining -= measured.closing
+    // Totals, notes, and the signature/footer block each carry their OWN
+    // pageBreakInside:'avoid' — nothing in the actual CSS glues them
+    // together as a single atomic unit. Treating their combined height as
+    // one all-or-nothing tail (the previous version of this check) meant
+    // a real page where TOTALS comfortably fits but notes+closing don't
+    // still got predicted as "the whole tail — including TOTALS — moves
+    // to page 2", which is what produced a mismatch against the actual
+    // printed PDF: TOTAL stayed on page 1 there (with room to spare),
+    // while only notes/closing continued onto page 2. Walking the three
+    // blocks in order, each checked against whatever budget is left AFTER
+    // the one before it (and each independently able to start a fresh
+    // page of its own), mirrors that real per-block behavior instead.
+    let tailRemaining = remaining
+    let tailSpillsAtAll = false
+    ;([['totals', measured.totals], ['notes', measured.notes], ['closing', measured.closing]] as const)
+      .forEach(([name, h]) => {
+        if (h > 0 && h > tailRemaining + BREAK_PREDICTION_SLACK_PX) {
+          tailSpillsAtAll = true
+          if (name === 'totals') predictedTailNewPage = true
+          tailRemaining = laterPageContentPx
+        }
+        tailRemaining -= h
+      })
   }
-  // How many pages the tail predicts adding beyond the item table's own
-  // pages — one for each block above that lands on a fresh page, since
-  // each such break starts a new physical page rather than sharing one.
-  const tailNewPageCount =
-    Number(predictedTotalsNewPage) + Number(predictedNotesNewPage) + Number(predictedClosingNewPage)
 
   // Splits `groups` into page segments at every break — manual ones are
   // KNOWN synchronously from state (the user clicked a toggle); predicted
@@ -786,22 +788,10 @@ export function InvoicePrintPage() {
     groupPageNumber.set(g.name, pageSegments.length)
   })
   if (pageSegments.length === 0) pageSegments.push({ groups: [] })
-  // Running page numbers for the tail's own break markers further down —
-  // each block's marker needs to say "ends page X, starts page X+1" using
-  // whichever page the PREVIOUS tail block actually landed on, not always
-  // "the last item-table page", since totals/notes/closing can now each
-  // independently decide to start fresh. Declared here (after
-  // `pageSegments` exists) rather than up with the other tail flags, since
-  // `pageSegments.length` is what totalsPageNumber is anchored to.
-  const totalsPageNumber = pageSegments.length + (predictedTotalsNewPage ? 1 : 0)
-  const notesPageNumber = totalsPageNumber + (predictedNotesNewPage ? 1 : 0)
-  const closingPageNumber = notesPageNumber + (predictedClosingNewPage ? 1 : 0)
-  // Each tail block predicted onto its own fresh page counts toward the
-  // total too, same as a manual/predicted break between two item groups
-  // would — now potentially more than one, since totals/notes/closing are
-  // each checked (and can each break) independently. Equals `closingPageNumber`
-  // above, since that's the last page number in the chain.
-  const totalPredictedPages = pageSegments.length + tailNewPageCount
+  // The tail (totals/notes/signature) predicted onto its own fresh page
+  // counts toward the total too, same as a manual/predicted break between
+  // two item groups would.
+  const totalPredictedPages = pageSegments.length + (predictedTailNewPage ? 1 : 0)
   // Single number the toolbar's "at least N pages" pill AND every
   // on-screen PageFlag badge (below) read from, so a page badge floating
   // over page 1 can never say "OF 2" while the toolbar pill says "at
@@ -1249,14 +1239,26 @@ export function InvoicePrintPage() {
                 className="cursor-pointer print:cursor-default"
                 style={{ background: rowHighlights['company'] }}
               >
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', fontWeight: 'bold', fontStyle: 'italic' }}>
+                {/* height here is a MINIMUM, not a fixed/max height, in
+                    table layout — a cell whose content genuinely needs
+                    more (e.g. a long company name wrapping to two lines)
+                    still grows past it. Without it, a row where most
+                    cells are truly empty (no text node at all, as five of
+                    these six are) can render shorter than a row with real
+                    content in every cell, since an empty cell has no line
+                    box to give it height beyond its padding — exactly why
+                    this row and the item rows below it were visibly
+                    uneven heights. ROW_HEIGHT_PX matches the row height
+                    established elsewhere in this file (see the D/P vs
+                    Pelunasan strong/weak row heights above). */}
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px` }} />
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, fontWeight: 'bold', fontStyle: 'italic' }}>
                   {invoice.kepada_yth.toUpperCase()}
                 </td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px` }} />
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px` }} />
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px` }} />
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px` }} />
               </tr>
 
               {/* Item rows — grouped by item_name (regardless of the order
@@ -1312,102 +1314,115 @@ export function InvoicePrintPage() {
               // because this only ever checked manualBreaks.
               const nextGroup = groups[groupIdx + 1]
               // The last group has no "next group" to carry a break, but
-              // the totals block that immediately follows it (see the
-              // per-block tail check above) can still be predicted to
-              // spill onto its own fresh page — exactly the case from the
-              // original bug report (the totals block landing on page 2
-              // with nothing printed to explain why page 1 ends with blank
-              // space). Only `predictedTotalsNewPage` matters here, not
-              // notes/closing breaking further down — this note marks the
-              // seam right after the item table, which is specifically
-              // where totals sits.
+              // the tail (totals/notes/signature, measured as one combined
+              // unit above) can still be predicted to spill onto its own
+              // fresh page — exactly the case from the original bug
+              // report (the totals block landing on page 2 with nothing
+              // printed to explain why page 1 ends with blank space).
               const isLastGroup = groupIdx === groups.length - 1
               const endsPageHere = nextGroup
                 ? (manualBreaks.has(nextGroup.name) || predictedBreaks.has(nextGroup.name))
-                : (isLastGroup && predictedTotalsNewPage)
+                : (isLastGroup && predictedTailNewPage)
 
               return (
-                <tbody
-                  key={group.name}
-                  ref={el => { groupRefs.current[group.name] = el }}
-                  style={{
-                    pageBreakInside: 'avoid',
-                    // Applied to the whole tbody rather than just its first
-                    // row: page-break-before on a <tr> only reliably forces
-                    // a break when the browser treats that row as the
-                    // start of its own fragmentable unit, which is exactly
-                    // what this tbody boundary already establishes above
-                    // via pageBreakInside — putting the break on the same
-                    // element keeps both rules talking about the same
-                    // unit instead of two different ones that could
-                    // disagree. Skipped for the very first group: a break
-                    // "before" the first item would just be a blank first
-                    // page, which was never the intent of picking it in
-                    // the toolbar.
-                    ...(manualBreakHere
-                      ? { pageBreakBefore: 'always', breakBefore: 'page' }
-                      : {}),
-                  }}
-                >
-                  {/* Screen-only marker so the break is visible before you
-                      ever open the print dialog — print:hidden removes it
-                      from the actual output, where the real page boundary
-                      speaks for itself there instead. Deliberately styled
-                      to actually LOOK like a page edge (a paper-colored gap
-                      with shadowed top/bottom edges and real "Page N" /
-                      "Page N+1" labels) rather than a thin dashed rule —
-                      the rule technically marked the same spot but read as
-                      an annotation, not as what will actually happen to
-                      the document. Only shown at a manual break — a
-                      natural overflow break is entirely up to the browser's
-                      own print layout and can't be known ahead of time
-                      (see the multi-page policy comment at the top of this
-                      file). */}
-                  {showBreakMarker && (
-                    <tr className="print:hidden">
-                      <td colSpan={6} style={{ padding: 0 }}>
-                        <PageBreakGap
-                          endPage={endOfPageLabel}
-                          startPage={startOfPageLabel!}
-                          total={previewTotalPages}
-                          invoiceId={invoice.id}
-                          client={invoice.kepada_yth}
-                          strong
-                        />
-                      </td>
-                    </tr>
+                <Fragment key={group.name}>
+                  {/* Screen-only break markers live in their OWN sibling
+                      tbody, deliberately NOT inside the one groupRefs
+                      measures below — these badges/bars only ever exist on
+                      screen (print:hidden) and would otherwise get counted
+                      as if they were real printed content the moment one
+                      renders, quietly inflating that group's measured
+                      height and throwing off the very budget calculation
+                      that decided whether a break was needed in the first
+                      place. Kept as a real DOM sibling, not folded into
+                      the content tbody, so neither marker can ever affect
+                      what's measured. */}
+                  {(showBreakMarker || predictedBreakHere) && (
+                    <tbody>
+                      {/* Screen-only marker so the break is visible before
+                          you ever open the print dialog — print:hidden
+                          removes it from the actual output, where the real
+                          page boundary speaks for itself there instead.
+                          Deliberately styled to actually LOOK like a page
+                          edge (a paper-colored gap with shadowed top/
+                          bottom edges and real "Page N" / "Page N+1"
+                          labels) rather than a thin dashed rule — the rule
+                          technically marked the same spot but read as an
+                          annotation, not as what will actually happen to
+                          the document. Only shown at a manual break — a
+                          natural overflow break is entirely up to the
+                          browser's own print layout and can't be known
+                          ahead of time (see the multi-page policy comment
+                          at the top of this file). */}
+                      {showBreakMarker && (
+                        <tr className="print:hidden">
+                          <td colSpan={6} style={{ padding: 0 }}>
+                            <PageBreakGap
+                              endPage={endOfPageLabel}
+                              startPage={startOfPageLabel!}
+                              total={previewTotalPages}
+                              invoiceId={invoice.id}
+                              client={invoice.kepada_yth}
+                              strong
+                            />
+                          </td>
+                        </tr>
+                      )}
+                      {/* Lighter, screen-only hint for a PREDICTED (not
+                          user-placed) natural break — deliberately a thin
+                          dashed rule rather than the bold "END OF PAGE"
+                          bar above, so it doesn't read as an editable
+                          action point the way a manual break's marker
+                          does; this is only ever this component's best
+                          guess, not something the user set. Lets whoever's
+                          laying out the invoice see roughly where the page
+                          will likely turn on its own, without implying
+                          it's a toggle. */}
+                      {predictedBreakHere && (
+                        <tr className="print:hidden">
+                          <td colSpan={6} style={{ padding: '4px 0' }}>
+                            <PageBreakGap
+                              endPage={endOfPageLabel}
+                              startPage={startOfPageLabel!}
+                              total={previewTotalPages}
+                              invoiceId={invoice.id}
+                              client={invoice.kepada_yth}
+                              strong={false}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
                   )}
-                  {/* Lighter, screen-only hint for a PREDICTED (not
-                      user-placed) natural break — deliberately a thin
-                      dashed rule rather than the bold "END OF PAGE" bar
-                      above, so it doesn't read as an editable action point
-                      the way a manual break's marker does; this is only
-                      ever this component's best guess, not something the
-                      user set. Lets whoever's laying out the invoice see
-                      roughly where the page will likely turn on its own,
-                      without implying it's a toggle. */}
-                  {predictedBreakHere && (
-                    <tr className="print:hidden">
-                      <td colSpan={6} style={{ padding: '4px 0' }}>
-                        <PageBreakGap
-                          endPage={endOfPageLabel}
-                          startPage={startOfPageLabel!}
-                          total={previewTotalPages}
-                          invoiceId={invoice.id}
-                          client={invoice.kepada_yth}
-                          strong={false}
-                        />
-                      </td>
-                    </tr>
-                  )}
-                  {/* No "continued from previous page" counterpart here on
-                      purpose — the "continued on next page" note printed at
-                      the bottom of the PRIOR page (below) already tells the
-                      client the invoice keeps going, so repeating that same
-                      fact at the top of this page was pure redundancy, not
-                      new information. Only kept the one that's the client's
-                      first/only signal of a coming break. */}
-                  {group.rows.map((item, rowIdx) => {
+                  <tbody
+                    ref={el => { groupRefs.current[group.name] = el }}
+                    style={{
+                      pageBreakInside: 'avoid',
+                      // Applied to the whole tbody rather than just its first
+                      // row: page-break-before on a <tr> only reliably forces
+                      // a break when the browser treats that row as the
+                      // start of its own fragmentable unit, which is exactly
+                      // what this tbody boundary already establishes above
+                      // via pageBreakInside — putting the break on the same
+                      // element keeps both rules talking about the same
+                      // unit instead of two different ones that could
+                      // disagree. Skipped for the very first group: a break
+                      // "before" the first item would just be a blank first
+                      // page, which was never the intent of picking it in
+                      // the toolbar.
+                      ...(manualBreakHere
+                        ? { pageBreakBefore: 'always', breakBefore: 'page' }
+                        : {}),
+                    }}
+                  >
+                    {/* No "continued from previous page" counterpart here on
+                        purpose — the "continued on next page" note printed at
+                        the bottom of the PRIOR page (below) already tells the
+                        client the invoice keeps going, so repeating that same
+                        fact at the top of this page was pure redundancy, not
+                        new information. Only kept the one that's the client's
+                        first/only signal of a coming break. */}
+                    {group.rows.map((item, rowIdx) => {
                     const key = `item-${item.id}`
                     return (
                       <tr
@@ -1416,14 +1431,20 @@ export function InvoicePrintPage() {
                         className="cursor-pointer print:cursor-default"
                         style={{ background: rowHighlights[key] }}
                       >
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        {/* height is a minimum here too (see the identical
+                            comment on the company row above) — a group's
+                            size-variant rows (rowIdx > 0) leave NO. and
+                            KETERANGAN empty, which is exactly what was
+                            making them render shorter than that group's
+                            own first row. */}
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'center', whiteSpace: 'nowrap' }}>
                           {rowIdx === 0 ? groupIdx + 1 : ''}
                         </td>
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px' }}>{rowIdx === 0 ? item.item_name.toUpperCase() : ''}</td>
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{item.size ?? '—'}</td>
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>{item.amount.toLocaleString('id-ID')}</td>
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.price.toLocaleString('id-ID')}</td>
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.sub_total.toLocaleString('id-ID')}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px` }}>{rowIdx === 0 ? item.item_name.toUpperCase() : ''}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{item.size ?? '—'}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'center', whiteSpace: 'nowrap' }}>{item.amount.toLocaleString('id-ID')}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', whiteSpace: 'nowrap' }}>{item.price.toLocaleString('id-ID')}</td>
+                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', whiteSpace: 'nowrap' }}>{item.sub_total.toLocaleString('id-ID')}</td>
                       </tr>
                     )
                   })}
@@ -1433,10 +1454,15 @@ export function InvoicePrintPage() {
                       no content). Plain white by default — the KETERANGAN
                       table's column headers are what's highlighted
                       automatically — but still clickable/paintable like
-                      every other row here. */}
+                      every other row here. Same ROW_HEIGHT_PX height as
+                      every item row (not a smaller deliberate gap
+                      anymore) — the ask
+                      was every row in the table reading as one consistent
+                      height, and a shorter spacer row stood out exactly
+                      the same way the empty-cell rows did before that fix. */}
                   {(() => {
                     const key = `gap-${group.name}`
-                    const cellStyle = { border: '1px solid #ccc', padding: '6px 8px', height: '20px', background: rowHighlights[key] }
+                    const cellStyle = { border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, background: rowHighlights[key] }
                     return (
                       <tr key={key} onClick={() => toggleRowHighlight(key)} className="cursor-pointer print:cursor-default">
                         <td style={cellStyle} />
@@ -1470,34 +1496,35 @@ export function InvoicePrintPage() {
                       </td>
                     </tr>
                   )}
-                </tbody>
+                  </tbody>
+                </Fragment>
               )
             })}
 
-            {/* Bug fix: the totals block can be predicted to overflow onto
-                its own fresh page WITHOUT any item group ever breaking —
-                e.g. every item fits comfortably on page 1, and only TOTAL/
-                D-P/PELUNASAN spill over. The marker above only ever renders
-                between two item groups, keyed to a group boundary — there
-                IS no group boundary here, so that marker never fires for
-                this case and page 2 previously had no visible seam, no
-                "PAGE 2 OF N" badge, and no gap at all: it just silently
-                continued as if there were still only one page. This is the
-                missing counterpart for that specific gap. No manual/strong
-                variant exists for it (manualBreaks only key by item group
-                name — there's nothing to toggle between "last group" and
-                "totals"), so it's always the lighter "predicted" styling.
-                Only checks `predictedTotalsNewPage` now — not a combined
-                tail flag — since notes/closing breaking on their own,
-                further down, doesn't mean totals did too (see the
-                independent per-block check above). */}
-            {predictedTotalsNewPage && (
+            {/* Bug fix: the tail (totals/notes/signature, measured as one
+                combined unit above) can be predicted to overflow onto its
+                own fresh page WITHOUT any item group ever breaking — e.g.
+                every item fits comfortably on page 1, and only TOTAL/D-P/
+                PELUNASAN spill over (this is exactly the case from the
+                original bug report: the item table ended cleanly, and the
+                totals block landed on page 2 alone). The marker above only
+                ever renders between two item groups, keyed to a group
+                boundary — there IS no group boundary here, so that marker
+                never fires for this case and page 2 previously had no
+                visible seam, no "PAGE 2 OF N" badge, and no gap at all: it
+                just silently continued as if there were still only one
+                page. This is the missing counterpart for that specific
+                gap. No manual/strong variant exists for it (manualBreaks
+                only key by item group name — there's nothing to toggle
+                between "last group" and "totals"), so it's always the
+                lighter "predicted" styling. */}
+            {predictedTailNewPage && (
               <tbody className="print:hidden">
                 <tr>
                   <td colSpan={6} style={{ padding: 0 }}>
                     <PageBreakGap
                       endPage={pageSegments.length}
-                      startPage={totalsPageNumber}
+                      startPage={pageSegments.length + 1}
                       total={previewTotalPages}
                       invoiceId={invoice.id}
                       client={invoice.kepada_yth}
@@ -1726,24 +1753,6 @@ export function InvoicePrintPage() {
             </button>
           </div>
 
-          {/* Counterpart to the totals-block marker above, for the same
-              reason: notes lives outside the item <table> entirely, so
-              there's no group boundary to hang a break marker on, and it
-              can now be predicted to move to its own fresh page
-              independently of whether totals did (see the per-block check
-              above) — e.g. totals still fits right after the table, but
-              notes itself is long enough that it doesn't. */}
-          {predictedNotesNewPage && (
-            <PageBreakGap
-              endPage={totalsPageNumber}
-              startPage={notesPageNumber}
-              total={previewTotalPages}
-              invoiceId={invoice.id}
-              client={invoice.kepada_yth}
-              strong={false}
-            />
-          )}
-
           {/* Notes */}
           <div ref={notesRef} style={{ marginTop: '24px', fontSize: `${BASE_FONT_PX}px`, pageBreakInside: 'avoid' }}>
             <div style={{ fontWeight: 'bold', textDecoration: 'underline', marginBottom: '4px' }}>SYARAT & KETENTUAN :</div>
@@ -1827,21 +1836,6 @@ export function InvoicePrintPage() {
               doesn't, same as any other row-level content here. Forcing it
               to always start a fresh page wasted the rest of the previous
               page whenever it would have fit fine. */}
-          {/* Same counterpart as the notes marker above, one block later:
-              closing (signature + footer) can independently be predicted
-              to move to its own fresh page even when totals and notes both
-              stayed put. */}
-          {predictedClosingNewPage && (
-            <PageBreakGap
-              endPage={notesPageNumber}
-              startPage={closingPageNumber}
-              total={previewTotalPages}
-              invoiceId={invoice.id}
-              client={invoice.kepada_yth}
-              strong={false}
-            />
-          )}
-
           <div ref={closingRef} style={{ pageBreakInside: 'avoid' }}>
             {/* Signature block */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginTop: '24px', fontSize: `${BASE_FONT_PX}px` }}>
