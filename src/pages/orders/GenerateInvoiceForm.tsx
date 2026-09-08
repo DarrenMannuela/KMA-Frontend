@@ -67,8 +67,25 @@ interface Props {
   existingInvoice: Invoice | null
   // Which invoice this form is for — set by the caller (OrderDetailPage),
   // not chosen in the UI. There's no "invoice type" selector; whichever
-  // button the user clicked (Generate DP / Generate Pelunasan) decides it.
-  forcedType: 'dp' | 'pelunasan'
+  // button the user clicked (Generate DP / Generate Pelunasan / Generate
+  // COD) decides it. 'cod' is a UI-level shortcut, not a real Invoice.type
+  // value — see the `type` field in `form` below for why: it maps to
+  // 'dp' with a 0% down payment (down_payment: 0), the exact same shape
+  // the system already uses for "this order's full amount, paid in one
+  // invoice" (see OrderDetailPage's dpIsFullPayment and every isFullInvoice
+  // check across InvoiceListPage/InvoicePrintPage/KwitansiPrintPage).
+  // Introducing a genuine third Invoice.type value would mean touching
+  // every one of those isFullInvoice-style checks (and the backend schema)
+  // for a distinction that's otherwise purely "how this invoice's amount
+  // was decided," not something that needs to survive past invoice
+  // creation — 'cod' only exists here, as a friendlier on-ramp to a state
+  // the form already fully supports, so an invoice created this way is
+  // indistinguishable from a manually-typed 0% D/P afterward (same
+  // "Full Invoice" badge, same Kwitansi wording, etc.). If COD invoices
+  // ever need to be tracked or worded differently after the fact, that's
+  // a real schema field to add later — flagging it here rather than
+  // guessing at that now.
+  forcedType: 'dp' | 'pelunasan' | 'cod'
   // When creating a brand-new Pelunasan invoice, we prefill client and
   // production details from the order's existing DP invoice — same
   // client, same production info, just a second document. Null/undefined
@@ -105,19 +122,27 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
   // becomes "" here, not 0, so backspacing to clear the field doesn't
   // instantly get overwritten back to "0" by a controlled re-render
   // before you can type a replacement. Only meaningful for forcedType
-  // 'dp'; Pelunasan bypasses this entirely (see downPayment below).
+  // 'dp'; Pelunasan bypasses this entirely (see downPayment below). COD
+  // starts at '0' rather than the '50' a real D/P defaults to — COD IS
+  // the 0%-down case (the whole point of the button), not a percentage
+  // someone picks, so there's nothing to default toward 50% of.
   const [dpPercent, setDpPercent] = useState(() => {
     if (existingInvoice && existingInvoice.total > 0) {
       return String(Math.round(((existingInvoice.down_payment ?? 0) / existingInvoice.total) * 100))
     }
-    return '50'
+    return forcedType === 'cod' ? '0' : '50'
   })
   const dpPercentNum = Math.min(100, Number(dpPercent) || 0)
 
   const [form, setForm] = useState({
     id:             existingInvoice?.id             ?? '',
     order_id:       order.id,
-    type:           forcedType,
+    // 'cod' is a UI-level concept only (see the Props comment above) —
+    // the record itself is always saved as a real 'dp'/'pelunasan'
+    // Invoice.type, so every isFullInvoice-style check elsewhere in the
+    // app keeps working on this invoice without needing to know COD was
+    // ever involved.
+    type:           forcedType === 'cod' ? 'dp' : forcedType,
     kepada_yth:     existingInvoice?.kepada_yth     ?? prefillFrom?.kepada_yth     ?? order.company ?? '',
     untuk:          existingInvoice?.untuk          ?? prefillFrom?.untuk          ?? '',
     alamat:         existingInvoice?.alamat         ?? prefillFrom?.alamat         ?? '',
@@ -395,6 +420,20 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
               </p>
             )}
           </FormField>
+        ) : forcedType === 'cod' ? (
+          // No percentage to pick — COD is inherently "the whole amount,
+          // collected on delivery," so this just confirms that rather
+          // than asking for an input the way the DP branch does. Reuses
+          // the exact same downPayment=0/remaining=total math as a
+          // manually-typed 0% D/P (see the Props comment on forcedType
+          // above) — this FormField only differs in wording.
+          <FormField label="Amount (COD)">
+            <input className="field font-mono bg-slate-50 text-slate-500 cursor-not-allowed" readOnly
+              value={formatRp(remaining)} />
+            <p className="text-xs text-slate-400 mt-1">
+              Full total, collected on delivery — no separate Pelunasan invoice will be offered for this order.
+            </p>
+          </FormField>
         ) : (
           <FormField label="Remaining to Collect">
             <input className="field font-mono bg-slate-50 text-slate-500 cursor-not-allowed" readOnly
@@ -515,7 +554,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
           </div>
           <div className="flex justify-between">
             <span className="text-slate-500">
-              {forcedType === 'dp' ? `D/P (${dpPercentNum}%)` : 'Already Paid (D/P)'}
+              {forcedType === 'dp' ? `D/P (${dpPercentNum}%)` : forcedType === 'cod' ? 'Down Payment' : 'Already Paid (D/P)'}
             </span>
             <span className="font-mono text-green-700">{formatRp(downPayment)}</span>
           </div>

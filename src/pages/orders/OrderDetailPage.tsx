@@ -236,7 +236,7 @@ export function OrderDetailPage() {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Item | null>(null)
   const [duplicating, setDuplicating] = useState<Item | null>(null)
-  const [invoiceFormType, setInvoiceFormType] = useState<'dp' | 'pelunasan' | null>(null)
+  const [invoiceFormType, setInvoiceFormType] = useState<'dp' | 'pelunasan' | 'cod' | null>(null)
 
   // Arriving here from InvoiceListPage's pencil icon carries which invoice
   // type to edit in navigation state — open that form immediately, then
@@ -355,6 +355,18 @@ export function OrderDetailPage() {
             <button className="btn-primary flex items-center gap-1" onClick={openAdd}>
               <Plus size={14} /> Add Item
             </button>
+            {/* COD ("pay the full amount, no D/P split") is a UI-level
+                shortcut to the exact same state a manually-typed 0% D/P
+                already produces (see GenerateInvoiceForm's Props comment
+                on forcedType) — so once dpInvoice exists, regardless of
+                which button created it, there's only ever the one
+                'Update Invoice' button below to edit it. This one is only
+                ever a STARTING choice. */}
+            {!dpInvoice && (
+              <button className="btn-secondary flex items-center gap-1" onClick={() => setInvoiceFormType('cod')}>
+                <FileText size={14} /> Generate COD Invoice
+              </button>
+            )}
             <button className="btn-secondary flex items-center gap-1" onClick={() => setInvoiceFormType('dp')}>
               <FileText size={14} />
               {!dpInvoice ? 'Generate DP Invoice' : dpIsFullPayment ? 'Update Invoice' : 'Update DP Invoice'}
@@ -522,9 +534,11 @@ export function OrderDetailPage() {
       {invoiceFormType && (
         <Modal
           title={
-            invoiceFormType === 'dp'
-              ? (!dpInvoice ? 'Generate DP Invoice' : dpIsFullPayment ? 'Update Invoice' : 'Update DP Invoice')
-              : (pelunasanInvoice ? 'Update Pelunasan Invoice' : 'Generate Pelunasan Invoice')
+            invoiceFormType === 'cod'
+              ? 'Generate COD Invoice'
+              : invoiceFormType === 'dp'
+                ? (!dpInvoice ? 'Generate DP Invoice' : dpIsFullPayment ? 'Update Invoice' : 'Update DP Invoice')
+                : (pelunasanInvoice ? 'Update Pelunasan Invoice' : 'Generate Pelunasan Invoice')
           }
           onClose={() => setInvoiceFormType(null)}
           size="lg"
@@ -533,7 +547,11 @@ export function OrderDetailPage() {
             order={order}
             items={orderItems}
             forcedType={invoiceFormType}
-            existingInvoice={invoiceFormType === 'dp' ? dpInvoice : pelunasanInvoice}
+            // 'cod' resolves to dpInvoice too — it's saved as a real 'dp'
+            // Invoice.type under the hood (see GenerateInvoiceForm's
+            // Props comment), so editing an existing COD invoice means
+            // finding the same record a real D/P invoice would.
+            existingInvoice={invoiceFormType === 'pelunasan' ? pelunasanInvoice : dpInvoice}
             prefillFrom={invoiceFormType === 'pelunasan' ? dpInvoice : null}
             clientId={order.client_id}
             onClose={() => setInvoiceFormType(null)}

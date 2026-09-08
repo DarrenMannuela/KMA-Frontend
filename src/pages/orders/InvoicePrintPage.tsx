@@ -1,4 +1,4 @@
-import { useRef, useLayoutEffect, useState, Fragment } from 'react'
+import { useRef, useLayoutEffect, useEffect, useState, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Printer, Receipt, Plus, PackageSearch } from 'lucide-react'
@@ -346,6 +346,19 @@ export function InvoicePrintPage() {
   // and a free-text field lets it also carry a date or note if wanted.
   // Defaults to "LUNAS" since that's what it almost always ends up saying.
   const dpPaidLabel = useUppercaseField('LUNAS')
+  // J/T (jatuh tempo / due date) — this used to be plain interpolated text
+  // ({invoice.due_date ? `J/T : ...` : ''}), not an input at all, which is
+  // exactly why it wasn't typeable: there was nothing there to click into
+  // or edit. Made typable the same way as dpPaidLabel/signatoryName/notes
+  // above — a free-text field, local to this print session rather than
+  // written back to invoice.due_date. Starts blank and is filled once the
+  // invoice loads (see the effect below); left editable afterward so a
+  // one-off adjustment for THIS printed document (a extended due date,
+  // a "J/T : SAAT PENGIRIMAN" note instead of a date, etc.) doesn't
+  // require going back to the invoice form and changing the real due date
+  // on the record.
+  const jatuhTempo = useUppercaseField('')
+  const jatuhTempoInitialized = useRef(false)
   // CATATAN (notes) list — previously five hardcoded bullet lines with no
   // way to add, remove, or reword any of them for a particular invoice
   // (an order with different shipping terms, a one-off note about this
@@ -411,6 +424,27 @@ export function InvoicePrintPage() {
       if (next.has(name)) next.delete(name)
       else next.add(name)
       return next
+    })
+  }
+
+  // Extra blank rows under a given item group, on top of the one gap row
+  // every group already gets automatically (see the gap-row block further
+  // down). Keyed by group name, same convention as manualBreaks/
+  // rowHighlights above. Only ADDITIONAL rows live here — the baseline
+  // gap row isn't represented in this map at all, so a group with no
+  // entry (or an entry of 0) still prints its normal single gap row; this
+  // only ever adds MORE blank room after that, for whenever the automatic
+  // single gap isn't enough space (e.g. leaving room for a handwritten
+  // note, or matching a longer gap on a template the client already has).
+  const [extraGapRows, setExtraGapRows] = useState<Record<string, number>>({})
+  const addGapRow = (name: string) => {
+    setExtraGapRows(prev => ({ ...prev, [name]: (prev[name] ?? 0) + 1 }))
+  }
+  const removeGapRow = (name: string) => {
+    setExtraGapRows(prev => {
+      const current = prev[name] ?? 0
+      if (current <= 0) return prev
+      return { ...prev, [name]: current - 1 }
     })
   }
 
@@ -491,6 +525,19 @@ export function InvoicePrintPage() {
     queryFn: () => invoicesApi.get(invoiceId),
     enabled: !!invoiceId,
   })
+
+  // Fills jatuhTempo from the invoice's real due_date the first time the
+  // invoice is available — guarded by the ref (not just `invoice` in the
+  // dependency array) so a later refetch of the same invoice never
+  // stomps on something the user already typed into the field.
+  useEffect(() => {
+    if (jatuhTempoInitialized.current || !invoice) return
+    jatuhTempoInitialized.current = true
+    jatuhTempo.setValue(
+      invoice.due_date ? `J/T : ${format(new Date(invoice.due_date), 'd MMMM yyyy').toUpperCase()}` : ''
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoice])
 
   // Per-invoice, not global — see PaperFormatStore's own comment for why
   // this isn't a shared preference the way column widths are.
@@ -608,7 +655,8 @@ export function InvoicePrintPage() {
   // count; each item row and each item-group gap row adds its own slice
   // on top of that.
   const groupCount = new Set(items.map(i => i.item_name)).size
-  const rowCount = items.length + groupCount /* gap row per group */ + 4 /* company + total + dp + pelunasan rows */
+  const extraGapRowCount = Object.values(extraGapRows).reduce((s, n) => s + n, 0)
+  const rowCount = items.length + groupCount /* gap row per group */ + extraGapRowCount /* user-added extra blank rows */ + 4 /* company + total + dp + pelunasan rows */
   // Anchored to ROW_HEIGHT_PX (the item table's real row height) rather
   // than its own separate BASE_FONT_PX-derived guess — this is only ever
   // a rough PRE-estimate (the real pagination decision further down
@@ -702,6 +750,7 @@ export function InvoicePrintPage() {
   const hasMeasurements = measured.top > 0 || Object.keys(measured.groups).length > 0
   const predictedBreaks = new Set<string>()
   let predictedTailNewPage = false
+  let tailSpillsAt: 'totals' | 'notes' | 'closing' | null = null
   // A real getBoundingClientRect() measurement on screen and the browser's
   // own print-time layout are never pixel-for-pixel identical — font
   // hinting/rounding differences between the two can shift a height by a
@@ -741,26 +790,46 @@ export function InvoicePrintPage() {
     // Totals, notes, and the signature/footer block each carry their OWN
     // pageBreakInside:'avoid' — nothing in the actual CSS glues them
     // together as a single atomic unit. Treating their combined height as
-    // one all-or-nothing tail (the previous version of this check) meant
-    // a real page where TOTALS comfortably fits but notes+closing don't
+    // one all-or-nothing tail (an earlier version of this check) meant a
+    // real page where TOTALS comfortably fits but notes+closing don't
     // still got predicted as "the whole tail — including TOTALS — moves
-    // to page 2", which is what produced a mismatch against the actual
-    // printed PDF: TOTAL stayed on page 1 there (with room to spare),
-    // while only notes/closing continued onto page 2. Walking the three
-    // blocks in order, each checked against whatever budget is left AFTER
-    // the one before it (and each independently able to start a fresh
-    // page of its own), mirrors that real per-block behavior instead.
+    // to page 2", which mismatched the actual printed PDF: TOTAL stayed on
+    // page 1 there (with room to spare), while only notes/closing
+    // continued onto page 2. Walking the three blocks in order, each
+    // checked against whatever budget is left AFTER the one before it
+    // (and each independently able to start a fresh page of its own),
+    // mirrors that real per-block behavior instead — and, critically,
+    // remembers WHICH block was the first to actually spill, so the break
+    // marker and "(continued on next page)" note below can be printed at
+    // the real seam (e.g. right after TOTAL/PELUNASAN, before notes) — not
+    // always right after the item table regardless of whether it's really
+    // totals, notes, or the closing block that moved to page 2. Only the
+    // FIRST spill is recorded: once one block has moved to a fresh page,
+    // whatever follows it naturally continues on that same fresh page, so
+    // there's exactly one real seam to mark, not one per block.
     let tailRemaining = remaining
-    let tailSpillsAtAll = false
     ;([['totals', measured.totals], ['notes', measured.notes], ['closing', measured.closing]] as const)
       .forEach(([name, h]) => {
         if (h > 0 && h > tailRemaining + BREAK_PREDICTION_SLACK_PX) {
-          tailSpillsAtAll = true
-          if (name === 'totals') predictedTailNewPage = true
+          if (tailSpillsAt === null) tailSpillsAt = name
           tailRemaining = laterPageContentPx
         }
         tailRemaining -= h
       })
+    // predictedTailNewPage only ever needs to answer "does the tail as a
+    // whole need a page the last item group didn't already have?" for the
+    // page-count badge — it used to only fire when TOTALS itself was the
+    // block that overflowed, which is exactly backwards for the common
+    // case: TOTALS is usually small and fits fine right after the items,
+    // while it's NOTES or the signature/footer closing block — often the
+    // bulkier of the three — that actually pushes onto a fresh page. That
+    // case silently produced zero warning: no page-count bump, no
+    // continuation note, nothing — even though the real printed PDF
+    // genuinely grew an extra page. Any of the three spilling means the
+    // tail needed room the last item group's page didn't have, so any of
+    // them should count toward the page total; WHICH one is what
+    // `tailSpillsAt` (below) is for.
+    predictedTailNewPage = tailSpillsAt !== null
   }
 
   // Splits `groups` into page segments at every break — manual ones are
@@ -1322,7 +1391,7 @@ export function InvoicePrintPage() {
               const isLastGroup = groupIdx === groups.length - 1
               const endsPageHere = nextGroup
                 ? (manualBreaks.has(nextGroup.name) || predictedBreaks.has(nextGroup.name))
-                : (isLastGroup && predictedTailNewPage)
+                : (isLastGroup && tailSpillsAt === 'totals')
 
               return (
                 <Fragment key={group.name}>
@@ -1461,18 +1530,58 @@ export function InvoicePrintPage() {
                       height, and a shorter spacer row stood out exactly
                       the same way the empty-cell rows did before that fix. */}
                   {(() => {
-                    const key = `gap-${group.name}`
-                    const cellStyle = { border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, background: rowHighlights[key] }
-                    return (
-                      <tr key={key} onClick={() => toggleRowHighlight(key)} className="cursor-pointer print:cursor-default">
-                        <td style={cellStyle} />
-                        <td style={cellStyle} />
-                        <td style={cellStyle} />
-                        <td style={cellStyle} />
-                        <td style={cellStyle} />
-                        <td style={cellStyle} />
-                      </tr>
-                    )
+                    const extra = extraGapRows[group.name] ?? 0
+                    const totalGapRows = 1 + extra
+                    return Array.from({ length: totalGapRows }, (_, gapIdx) => {
+                      const key = `gap-${group.name}-${gapIdx}`
+                      const isLastGapRow = gapIdx === totalGapRows - 1
+                      const cellStyle = { border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, background: rowHighlights[key] }
+                      return (
+                        <tr key={key} onClick={() => toggleRowHighlight(key)} className="cursor-pointer print:cursor-default">
+                          <td style={cellStyle} />
+                          <td style={cellStyle} />
+                          <td style={cellStyle} />
+                          <td style={cellStyle} />
+                          <td style={cellStyle} />
+                          {/* +/- controls only ever sit in the LAST gap row
+                              of the group, and only on screen — print:hidden
+                              keeps them out of the printed document
+                              entirely, same as every other editing control
+                              on this page. Stacked in the JUMLAH cell
+                              (otherwise always blank here) rather than as a
+                              separate row, so adding/removing a blank row
+                              doesn't itself shift the table around. */}
+                          <td style={cellStyle}>
+                            {isLastGapRow && (
+                              <div
+                                className="print:hidden"
+                                onClick={e => e.stopPropagation()}
+                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}
+                              >
+                                {extra > 0 && (
+                                  <button
+                                    type="button"
+                                    title="Remove blank row"
+                                    onClick={() => removeGapRow(group.name)}
+                                    style={{ border: '1px solid #cbd5e1', borderRadius: '4px', width: '18px', height: '18px', lineHeight: 1, fontSize: '12px', color: '#64748b', background: 'white', cursor: 'pointer' }}
+                                  >
+                                    −
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  title="Add blank row"
+                                  onClick={() => addGapRow(group.name)}
+                                  style={{ border: '1px solid #cbd5e1', borderRadius: '4px', width: '18px', height: '18px', lineHeight: 1, fontSize: '12px', color: '#64748b', background: 'white', cursor: 'pointer' }}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })
                   })()}
                   {/* Prints at the bottom of the page that's about to end.
                       Without this, any blank space below the last item on
@@ -1501,9 +1610,8 @@ export function InvoicePrintPage() {
               )
             })}
 
-            {/* Bug fix: the tail (totals/notes/signature, measured as one
-                combined unit above) can be predicted to overflow onto its
-                own fresh page WITHOUT any item group ever breaking — e.g.
+            {/* Bug fix: totals can be predicted to overflow onto its own
+                fresh page WITHOUT any item group ever breaking — e.g.
                 every item fits comfortably on page 1, and only TOTAL/D-P/
                 PELUNASAN spill over (this is exactly the case from the
                 original bug report: the item table ended cleanly, and the
@@ -1514,11 +1622,18 @@ export function InvoicePrintPage() {
                 visible seam, no "PAGE 2 OF N" badge, and no gap at all: it
                 just silently continued as if there were still only one
                 page. This is the missing counterpart for that specific
-                gap. No manual/strong variant exists for it (manualBreaks
-                only key by item group name — there's nothing to toggle
-                between "last group" and "totals"), so it's always the
-                lighter "predicted" styling. */}
-            {predictedTailNewPage && (
+                gap. Gated on `tailSpillsAt === 'totals'` specifically —
+                NOT "does anything in the tail spill" — because notes or
+                the closing block spilling instead (their own markers sit
+                further down, right before each of them) is a DIFFERENT
+                seam than this one; showing this marker for those cases
+                would draw the page break in the wrong place, right above
+                a TOTALS row that's actually printing on page 1 just fine.
+                No manual/strong variant exists for it (manualBreaks only
+                key by item group name — there's nothing to toggle between
+                "last group" and "totals"), so it's always the lighter
+                "predicted" styling. */}
+            {tailSpillsAt === 'totals' && (
               <tbody className="print:hidden">
                 <tr>
                   <td colSpan={6} style={{ padding: 0 }}>
@@ -1556,12 +1671,12 @@ export function InvoicePrintPage() {
                     spacer below it — 'hidden' is needed rather than just
                     leaving it unset, since border-collapse otherwise lets a
                     real border set by either neighboring cell win. */}
-                <td style={{ padding: '6px 8px', borderTop: '1px solid #ccc', borderBottomStyle: 'hidden' }} colSpan={3} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, borderTop: '1px solid #ccc', borderBottomStyle: 'hidden' }} colSpan={3} />
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
                   {items.reduce((s, i) => s + i.amount, 0).toLocaleString('id-ID')}
                 </td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>TOTAL</td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>TOTAL</td>
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
                   {invoice.total.toLocaleString('id-ID')}
                 </td>
               </tr>
@@ -1582,7 +1697,7 @@ export function InvoicePrintPage() {
                       spacer above, so no line bleeds through from either
                       neighboring row regardless of their own borders. Only
                       the LUNAS cell next to it should read as a box. */}
-                  <td style={{ padding: '6px 8px', borderTopStyle: 'hidden', borderBottomStyle: 'hidden' }} colSpan={3} />
+                  <td style={{ padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, borderTopStyle: 'hidden', borderBottomStyle: 'hidden' }} colSpan={3} />
                   {/* Only a Pelunasan invoice is printed after the D/P was
                       actually received, so only it gets a typable "LUNAS"
                       label here — a fresh D/P invoice hasn't been paid yet,
@@ -1595,7 +1710,7 @@ export function InvoicePrintPage() {
                       at that same bold size when sizing the QTY column
                       (see columnTexts.qty above), so the column itself
                       grows to fit it instead of the text needing to shrink. */}
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
+                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
                     {invoice.type === 'pelunasan' && (
                       <input
                         ref={dpPaidLabel.ref}
@@ -1606,53 +1721,63 @@ export function InvoicePrintPage() {
                       />
                     )}
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
+                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
                     D/P {dpPercent} %
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
+                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
                     {(invoice.down_payment ?? 0).toLocaleString('id-ID')}
                   </td>
                 </tr>
               ) : (
-                // Same vertical-spacing goal as the real D/P row above
-                // (keep the gap before PELUNASAN uniform whether or not
-                // this invoice has an actual D/P line) — but without
-                // drawing a fully bordered, entirely empty 6-column grid
-                // row to do it, which read as leftover/broken table lines
-                // with nothing in them (see the "residual column lines"
-                // this replaced). Structured exactly like the real D/P
-                // row: NO/KETERANGAN/SIZE stay a borderless spacer (those
-                // three never had anything to show here anyway), while
-                // QTY/label/amount keep their normal borders — blank, but
-                // still part of the table's grid — so the right-hand edge
-                // stays visually closed against the TOTAL row above and
-                // PELUNASAN row below, the same as it already does when
-                // there IS a real D/P line.
-                <tr onClick={() => toggleRowHighlight('dp')} className="cursor-pointer print:cursor-default">
-                  <td style={{ padding: '6px 8px', borderTopStyle: 'hidden', borderBottomStyle: 'hidden' }} colSpan={3} />
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', background: rowHighlights['dp'] }} />
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', background: rowHighlights['dp'] }} />
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', background: rowHighlights['dp'] }} />
-                </tr>
+                // No real D/P to show here — either a Full Invoice (dp
+                // type, 0% down) or a Pelunasan raised directly against the
+                // order with no D/P ever collected (down_payment 0/null).
+                // This used to still draw a fully bordered, entirely empty
+                // spacer row in D/P's place purely to keep the gap above
+                // PELUNASAN visually uniform — but for a Pelunasan that was
+                // generated directly (no D/P invoice preceded it), that
+                // just reads as a stray blank row between TOTAL and
+                // PELUNASAN with nothing explaining it. Rendering nothing
+                // here instead lets PELUNASAN sit directly under TOTAL,
+                // which is the correct read for "the whole order was
+                // invoiced/paid in one go" — table borders still close up
+                // cleanly between the two rows via border-collapse, same
+                // as between any two adjacent rows elsewhere in this table.
+                null
               )}
 
               {/* Pelunasan row — same click-to-override behavior as DP above. */}
               <tr onClick={() => toggleRowHighlight('pelunasan')} className="cursor-pointer print:cursor-default">
-                <td style={{ padding: '6px 8px', textAlign: 'right', borderTopStyle: 'hidden', borderBottomStyle: 'hidden' }} colSpan={3}>
-                  {/* Same fix as the D/P row above: "LUNAS" → paid_date,
-                      "J/T" (jatuh tempo = due date) → due_date. Both were
-                      previously reading the other field. PLEASE VERIFY
-                      against a real printed kwitansi before relying on
-                      this. */}
-                  {isFullInvoice
-                    ? (invoice.paid_date ? `LUNAS - ${format(new Date(invoice.paid_date), 'd MMMM yyyy').toUpperCase()}` : 'LUNAS')
-                    : (invoice.due_date ? `J/T : ${format(new Date(invoice.due_date), 'd MMMM yyyy').toUpperCase()}` : '')}
+                <td style={{ padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', borderTopStyle: 'hidden', borderBottomStyle: 'hidden' }} colSpan={3}>
+                  {/* "J/T" (jatuh tempo = due date) — pre-filled from
+                      invoice.due_date (see the init effect near the top of
+                      this component), always regardless of invoice type.
+                      This used to branch on isFullInvoice and show "LUNAS
+                      - {paid_date}" instead for a full/direct invoice, but
+                      a bare "LUNAS" here read as a payment-confirmation
+                      stamp duplicating what the Paid/Unpaid status badge
+                      already covers elsewhere (InvoiceListPage) — dropped
+                      per explicit request so every invoice shows its due
+                      date consistently in this spot. Now a real input
+                      (previously just interpolated text with nothing to
+                      click into) so it's actually typable — e.g. to push
+                      out a due date or swap in "J/T : SAAT PENGIRIMAN" for
+                      this one printed copy without touching the invoice's
+                      real due_date. */}
+                  <input
+                    ref={jatuhTempo.ref}
+                    value={jatuhTempo.value}
+                    onChange={jatuhTempo.onChange}
+                    onClick={e => e.stopPropagation()}
+                    placeholder="J/T : —"
+                    style={{ border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: `${BASE_FONT_PX}px`, textAlign: 'right', width: '100%', padding: 0 }}
+                  />
                 </td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px' }} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px` }} />
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
                   PELUNASAN
                 </td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
                   {/* ar_receivable is `remaining` with any discount
                       already subtracted (see GenerateInvoiceForm) —
                       printing `remaining` here would show the client a
@@ -1663,9 +1788,40 @@ export function InvoicePrintPage() {
                   {(invoice.ar_receivable ?? invoice.remaining).toLocaleString('id-ID')}
                 </td>
               </tr>
+              {/* Same "(continued on next page)" note as under the item
+                  table, but for the seam actually being HERE — after
+                  PELUNASAN, before SYARAT & KETENTUAN — which is where it
+                  belongs when totals themselves print fine on page 1 and
+                  it's notes/closing that spill instead. Printing the items
+                  table's note in this situation (the old behavior, since
+                  it fired for ANY tail spill) falsely implied the ITEM
+                  TABLE continued onto page 2, when really the whole table
+                  including TOTAL/PELUNASAN printed intact on page 1. */}
+              {tailSpillsAt === 'notes' && (
+                <tr className="continuation-note">
+                  <td colSpan={6} style={{ padding: '10px 8px 0', textAlign: 'right', fontSize: '10px', fontStyle: 'italic', color: '#64748b', border: 'none' }}>
+                    (continued on next page)
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
 
+          {/* Screen-only marker for the same 'notes' seam — sits after the
+              table (totals just printed above it) and before the notes
+              block below, matching where the break actually lands rather
+              than always appearing right after the item table regardless
+              of which tail block is the one that spills. */}
+          {tailSpillsAt === 'notes' && (
+            <PageBreakGap
+              endPage={pageSegments.length}
+              startPage={pageSegments.length + 1}
+              total={previewTotalPages}
+              invoiceId={invoice.id}
+              client={invoice.kepada_yth}
+              strong={false}
+            />
+          )}
           {/* Add-item panel — print:hidden, and deliberately placed
               directly under the table it adds to rather than up in the
               toolbar, so it's obvious which table a new row lands in.
@@ -1826,6 +1982,25 @@ export function InvoicePrintPage() {
               </div>
             </div>
           </div>
+
+          {/* Same "(continued on next page)" treatment as the two seams
+              above, for when totals AND notes both print fine and it's
+              only the closing block (signature/footer) that spills. */}
+          {tailSpillsAt === 'closing' && (
+            <>
+              <div style={{ textAlign: 'right', fontSize: '10px', fontStyle: 'italic', color: '#64748b', marginTop: '8px' }}>
+                (continued on next page)
+              </div>
+              <PageBreakGap
+                endPage={pageSegments.length}
+                startPage={pageSegments.length + 1}
+                total={previewTotalPages}
+                invoiceId={invoice.id}
+                client={invoice.kepada_yth}
+                strong={false}
+              />
+            </>
+          )}
 
           {/* Signature block + Footer are grouped into a single
               page-break-inside:avoid unit so they're never split mid-block.
