@@ -754,21 +754,48 @@ export function InvoicePrintPage() {
   // A real getBoundingClientRect() measurement on screen and the browser's
   // own print-time layout are never pixel-for-pixel identical — font
   // hinting/rounding differences between the two can shift a height by a
-  // few px either way. Comparing with a bare `>` treats "1px over budget"
-  // exactly like "200px over budget", and a FALSE "doesn't fit" prediction
-  // is far more disruptive than a false "fits" one: it plants a wrong
-  // page-break badge directly over real content and prints a "(continued
-  // on next page)" note that turns out to be a lie once the browser's own
-  // (authoritative) pagination doesn't actually break there — exactly the
-  // mismatch this was reported against. A small slack buffer, in the same
-  // spirit as `likelyMultiPage`'s own 1.05 tolerance above, means only a
-  // clearly-doesn't-fit case gets flagged; a borderline one is left for
-  // the browser's real engine to decide, which is authoritative anyway.
-  const BREAK_PREDICTION_SLACK_PX = 40
+  // few px either way, and CRITICALLY that drift compounds: it's carried
+  // forward in `remaining` from every row already placed before the
+  // group/block being checked, so a document with a handful of rows might
+  // be off by a couple px by the time it matters, while one with dozens of
+  // rows across several groups can be off by more than an entire group's
+  // height (this is exactly what happened with KEMEJA WAITER — by group 4,
+  // enough small per-row drift had accumulated that the prediction thought
+  // there was still ~150px of real page-1 room left when there wasn't).
+  //
+  // A previous version of this used one FIXED slack value biased toward
+  // "assume it fits" (only flag a break once a group cleared it by more
+  // than the slack), on the reasoning that a false "doesn't fit" plants a
+  // wrong page-break badge and a "(continued on next page)" lie over
+  // content that the browser's real, authoritative pagination goes on to
+  // print as one unbroken page. That's true in isolation, but a false
+  // "fits" is just as damaging in the other direction — the KEMEJA WAITER
+  // case above IS a false "fits" — and a single fixed slack can never
+  // cover both a short one-group invoice AND a long multi-group one at the
+  // same time, since the real drift it's compensating for grows with the
+  // second and is roughly zero for the first.
+  //
+  // A first attempt at fixing that scaled the margin with a flat px amount
+  // per row already placed — that undershot in practice: for an invoice
+  // several groups deep, the real screen-vs-print gap was still bigger
+  // than a few rows' worth of flat per-row drift accounted for. Switched
+  // to a PERCENTAGE of the page height already consumed instead: whatever
+  // is producing the drift (font metrics, sub-pixel rounding, etc.) scales
+  // with how much content has been laid out, not with a row count that
+  // doesn't distinguish a page that's mostly still empty from one that's
+  // nearly full. 18% is deliberately aggressive — biased hard toward
+  // flagging a break too early rather than missing a real one, since a
+  // missed one prints silently wrong while an early one only means an
+  // occasional break predicted a little sooner than the browser strictly
+  // needed.
+  const BASE_SLACK_PX = 24
+  const DRIFT_FRACTION = 0.18
   if (hasMeasurements) {
     let remaining = firstPageContentPx - measured.top - measured.thead
+    let consumed = measured.top + measured.thead
     groups.forEach((g, i) => {
       const h = measured.groups[g.name] ?? 0
+      const driftBuffer = BASE_SLACK_PX + consumed * DRIFT_FRACTION
       // A manual break resets `remaining` to a fresh page's budget the
       // same way a predicted one does (below) — this was the actual bug:
       // previously only the predicted branch reset it, so a manual break
@@ -779,13 +806,19 @@ export function InvoicePrintPage() {
       // after the manual break could ever fit — including the totals
       // tail, which got wrongly predicted onto a bogus extra page even
       // though the manually-started page had plenty of real room for it.
+      // A manual break also resets the accumulated drift — it's a real,
+      // guaranteed page-break, so whatever measurement error built up
+      // before it can't carry over onto the fresh page it forces.
       if (i > 0 && manualBreaks.has(g.name)) {
         remaining = laterPageContentPx - measured.thead
-      } else if (i > 0 && !manualBreaks.has(g.name) && h > 0 && h > remaining + BREAK_PREDICTION_SLACK_PX) {
+        consumed = measured.thead
+      } else if (i > 0 && !manualBreaks.has(g.name) && h > 0 && h + driftBuffer > remaining) {
         predictedBreaks.add(g.name)
         remaining = laterPageContentPx - measured.thead
+        consumed = measured.thead
       }
       remaining -= h
+      consumed += h
     })
     // Totals, notes, and the signature/footer block each carry their OWN
     // pageBreakInside:'avoid' — nothing in the actual CSS glues them
@@ -807,14 +840,22 @@ export function InvoicePrintPage() {
     // FIRST spill is recorded: once one block has moved to a fresh page,
     // whatever follows it naturally continues on that same fresh page, so
     // there's exactly one real seam to mark, not one per block.
+    //
+    // The drift buffer keeps growing across into this tail check too — it
+    // carries `consumed` straight over from the item loop above, since
+    // the accumulated screen-vs-print drift doesn't reset just because
+    // we've moved from item rows to the totals/notes/closing blocks.
     let tailRemaining = remaining
     ;([['totals', measured.totals], ['notes', measured.notes], ['closing', measured.closing]] as const)
       .forEach(([name, h]) => {
-        if (h > 0 && h > tailRemaining + BREAK_PREDICTION_SLACK_PX) {
+        const driftBuffer = BASE_SLACK_PX + consumed * DRIFT_FRACTION
+        if (h > 0 && h + driftBuffer > tailRemaining) {
           if (tailSpillsAt === null) tailSpillsAt = name
           tailRemaining = laterPageContentPx
+          consumed = 0
         }
         tailRemaining -= h
+        consumed += h
       })
     // predictedTailNewPage only ever needs to answer "does the tail as a
     // whole need a page the last item group didn't already have?" for the
