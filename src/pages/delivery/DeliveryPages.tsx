@@ -59,7 +59,12 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
   const update = deliveryHooks.useUpdate()
   const createItem = deliveryItemHooks.useCreate()
   const navigate = useNavigate() 
-  const { data: deliveries = [] } = deliveryHooks.useList()
+  // isError matters here beyond the usual loading/retry case: idAlreadyExists
+  // and the auto-suggested next number below are both derived entirely from
+  // this list (same as GenerateInvoiceForm's identical invoices list), so a
+  // silent fetch failure would leave `deliveries` at [] and make the
+  // client-side duplicate-ID guard look like it passed when it never ran.
+  const { data: deliveries = [], isError: isDeliveriesError } = deliveryHooks.useList()
   const { data: orders = [] } = orderHooks.useList()
   const { data: clients = [] } = clientHooks.useList()
   // Only needed to build the SJ auto-documents preview/creation below — a
@@ -330,7 +335,11 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
             </button>
           )}
         </div>
-        {idAlreadyExists ? (
+        {isDeliveriesError ? (
+          <p className="text-xs text-amber-600 mt-1">
+            Couldn't check existing delivery numbers — this ID isn't verified as unique yet. The server will still reject a duplicate on submit.
+          </p>
+        ) : idAlreadyExists ? (
           <p className="text-xs text-red-500 mt-1">
             A delivery with this ID already exists — pick a different number.
           </p>
@@ -455,7 +464,7 @@ export function DeliveryPage() {
         { header: 'Contact',         key: 'contact_person', render: r => r.contact_person ?? '—' },
         { header: 'Phone',           key: 'phone_number',   render: r => <span className="font-mono text-xs">{r.phone_number ?? '—'}</span> },
         { header: 'PO',              key: 'po_number',      render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
-        { header: 'Date',            key: 'date',           render: r => r.date ? format(new Date(r.date), 'dd MMM yyyy') : '—' },
+        { header: 'Date',            key: 'date',           render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy')}</span> : '—' },
       ]}
       formTitle={e => e ? 'Edit Delivery' : 'New Delivery'}
       renderForm={(editing, onClose) => <DeliveryForm editing={editing} onClose={onClose} />}

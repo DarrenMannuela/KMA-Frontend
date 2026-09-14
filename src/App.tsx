@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Topbar } from '@/components/layout/Topbar'
@@ -28,6 +28,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { AdminRoute } from '@/components/auth/AdminRoute'
 import { MustChangePasswordRoute } from '@/components/auth/MustChangePasswordRoute'
 import { RedirectDirectAccess } from '@/components/auth/RedirectDirectAccess'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 // Print pages stay outside the Sidebar/Topbar chrome (unchanged from
 // before) — they're meant to be a clean printable page, not the app
@@ -35,12 +36,19 @@ import { RedirectDirectAccess } from '@/components/auth/RedirectDirectAccess'
 // dashboard shell, and it's the one route that must NOT be wrapped in
 // ProtectedRoute (that would infinite-redirect).
 function AppShell() {
+  const location = useLocation()
   return (
     <div className="flex min-h-screen">
       <Sidebar />
       <div className="flex-1 flex flex-col ml-[240px] min-h-screen">
         <Topbar />
         <main className="flex-1 overflow-y-auto bg-slate-50">
+          {/* Scoped to routed content only, so Sidebar/Topbar stay usable
+              if a page crashes — and keyed off the path so clicking to a
+              different page recovers on its own instead of being stuck on
+              the fallback until a manual reload (see ErrorBoundary's own
+              resetKeys comment). */}
+          <ErrorBoundary resetKeys={[location.pathname]}>
           <Routes>
             <Route path="/"                     element={<DashboardPage />} />
             <Route path="/orders"               element={<OrdersPage />} />
@@ -58,6 +66,7 @@ function AppShell() {
             <Route path="/reports/yearly"                   element={<YearlyReportPage />} />
             <Route path="/admin/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
           </Routes>
+          </ErrorBoundary>
         </main>
       </div>
     </div>

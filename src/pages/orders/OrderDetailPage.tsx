@@ -209,12 +209,24 @@ export function OrderDetailPage() {
   const orderId = decodeURIComponent(id ?? '')
 
   const { data: order, isLoading: orderLoading, isError: orderError, refetch: refetchOrder } = orderHooks.useGet(orderId)
-  const { data: orderItems = [] } = useQuery({
+  const {
+    data: orderItems = [],
+    isLoading: itemsLoading, isError: itemsError, refetch: refetchItems,
+  } = useQuery({
     queryKey: ['items', orderId],
     queryFn: () => itemsApi.getByOrder(orderId),
     enabled: !!orderId,
   })
-  const { data: allInvoices = [] } = useQuery({
+  // allInvoices silently staying [] on a failed fetch is worse here than
+  // most lists: dpInvoice/pelunasanInvoice below would resolve to null
+  // even though a DP invoice genuinely exists, which would offer "Generate
+  // DP Invoice" for an order that's already invoiced — folded into the
+  // same page-level loading/error gate as `order` and `orderItems` rather
+  // than letting the page render with that silently wrong state.
+  const {
+    data: allInvoices = [],
+    isLoading: invoicesLoading, isError: invoicesError, refetch: refetchInvoices,
+  } = useQuery({
     queryKey: ['invoices'],
     queryFn: () => invoicesApi.list(),
     enabled: !!orderId,
@@ -308,16 +320,19 @@ export function OrderDetailPage() {
     setDuplicating(null)
   }
 
-  if (orderLoading) return <div className="p-8 text-slate-400">Loading…</div>
+  if (orderLoading || itemsLoading || invoicesLoading) return <div className="p-8 text-slate-400">Loading…</div>
   // Same distinction made in InvoicePrintPage/KwitansiPrintPage: a failed
   // fetch (network drop, 500, etc.) previously looked identical to a
   // genuinely missing order — "Order not found." — sending people
-  // searching for a bad link instead of just retrying.
-  if (orderError) {
+  // searching for a bad link instead of just retrying. Covers the items
+  // and invoices queries too now (see their own comments above) — any one
+  // of the three failing blocks the page the same way, rather than
+  // rendering with silently-wrong item/invoice state.
+  if (orderError || itemsError || invoicesError) {
     return (
       <div className="p-8 text-center">
         <p className="text-red-400 mb-3">Couldn't load this order — check your connection and try again.</p>
-        <button onClick={() => refetchOrder()} className="btn-secondary">Retry</button>
+        <button onClick={() => { refetchOrder(); refetchItems(); refetchInvoices() }} className="btn-secondary">Retry</button>
       </div>
     )
   }
@@ -401,7 +416,7 @@ export function OrderDetailPage() {
         <div className="max-h-[420px] overflow-y-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs text-slate-400 uppercase border-b border-slate-100 sticky top-0 bg-white z-10">
+              <tr className="text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100 sticky top-0 bg-white z-10">
                 <th className="text-left p-4">Item</th>
                 <th className="text-left p-4">Size</th>
                 <th className="text-right p-4">Qty</th>
@@ -443,8 +458,9 @@ export function OrderDetailPage() {
                             <Pencil size={12} /> Edit
                           </button>
                           <button
-                            className="text-slate-400 hover:text-red-500 text-xs"
+                            className="text-slate-400 hover:text-red-500 text-xs disabled:opacity-50"
                             onClick={() => del.mutate(item.id)}
+                            disabled={del.isPending}
                           >
                             Delete
                           </button>
@@ -508,8 +524,9 @@ export function OrderDetailPage() {
                               <Pencil size={12} /> Edit
                             </button>
                             <button
-                              className="text-slate-400 hover:text-red-500 text-xs"
+                              className="text-slate-400 hover:text-red-500 text-xs disabled:opacity-50"
                               onClick={() => del.mutate(item.id)}
+                              disabled={del.isPending}
                             >
                               Delete
                             </button>

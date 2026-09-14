@@ -196,7 +196,7 @@ export function EditableCell({
           onChange={(e) => setVal(e.target.value)}
           onBlur={(e) => commit(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="w-full px-2 py-1 text-sm border-2 border-blue-500 rounded outline-none bg-white"
+          className="w-full px-2 py-1 text-sm border-2 border-navy-400 rounded outline-none bg-white"
         >
           <option value="">Select…</option>
           {options?.map(o => (
@@ -223,7 +223,7 @@ export function EditableCell({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           list={suggestions && suggestions.length > 0 ? datalistId : undefined}
-          className="w-full px-2 py-1 text-sm border-2 border-blue-500 rounded outline-none bg-white"
+          className="w-full px-2 py-1 text-sm border-2 border-navy-400 rounded outline-none bg-white"
         />
         {suggestions && suggestions.length > 0 && (
           <datalist id={datalistId}>
@@ -249,7 +249,7 @@ export function EditableCell({
       // focus: styling is the active-cell indicator for keyboard navigation
       // — reuses the same border rather than a box-shadow ring so it reads
       // as a natural extension of the existing hover/underline treatment.
-      className="px-2 py-1 min-h-[1.75rem] cursor-cell border border-transparent border-b-slate-200 [border-bottom-style:dotted] hover:border-slate-300 hover:bg-slate-50 hover:[border-bottom-style:solid] focus:outline-none focus:border-blue-400 focus:bg-blue-50/50 focus:[border-bottom-style:solid] transition-colors break-words"
+      className="px-2 py-1 min-h-[1.75rem] cursor-cell border border-transparent border-b-slate-200 [border-bottom-style:dotted] hover:border-slate-300 hover:bg-slate-50 hover:[border-bottom-style:solid] focus:outline-none focus:border-navy-400 focus:bg-navy-50/50 focus:[border-bottom-style:solid] transition-colors break-words"
     >
       {isEmpty
         ? <span className="text-slate-300 italic">{placeholder ?? 'click to fill'}</span>

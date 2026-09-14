@@ -15,6 +15,16 @@ export function ProductionPage() {
   // memory of which supplier was active, which reads as "did my click even
   // register?" on return.
   const [lastSupplierId, setLastSupplierId] = useState<number | undefined>(undefined)
+  // Same idea, for the month being viewed — previously each screen kept its
+  // own independent cursor defaulting to "today," so browsing to a past
+  // month on the dashboard and then clicking "Open full spreadsheet" (or a
+  // supplier bar) silently dropped back to the current month on the sheet,
+  // showing an empty "New entries" table even though the month you were
+  // just looking at had real data. Lifted up here so both screens read/
+  // write the same cursor and a round trip preserves whatever month you
+  // were on.
+  const now = new Date()
+  const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() })
 
   const openSheet = (supplierId?: number) => {
     setLastSupplierId(supplierId)
@@ -22,8 +32,22 @@ export function ProductionPage() {
   }
 
   if (view.mode === 'sheet') {
-    return <ProductionSheetView onBack={() => setView({ mode: 'dashboard' })} initialSupplierId={view.supplierId} />
+    return (
+      <ProductionSheetView
+        onBack={() => setView({ mode: 'dashboard' })}
+        initialSupplierId={view.supplierId}
+        cursor={cursor}
+        onCursorChange={(year, month) => setCursor({ year, month })}
+      />
+    )
   }
 
-  return <ProductionDashboard onOpenSheet={openSheet} selectedSupplierId={lastSupplierId} />
+  return (
+    <ProductionDashboard
+      onOpenSheet={openSheet}
+      selectedSupplierId={lastSupplierId}
+      cursor={cursor}
+      onCursorChange={(year, month) => setCursor({ year, month })}
+    />
+  )
 }

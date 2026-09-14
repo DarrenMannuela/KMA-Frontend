@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, BarChart3, Factory, Receipt, ShoppingBag, Truck, TrendingUp } from 'lucide-react'
-import { formatRp, StatCard } from '@/components/ui'
+import { AlertTriangle, ArrowLeft, BarChart3, Factory, Receipt, ShoppingBag, Truck, TrendingUp } from 'lucide-react'
+import { formatRp, Spinner, StatCard } from '@/components/ui'
 import { DivergingBarChart } from '@/components/ui/Charts'
 import { YearNavigator } from '@/components/ui/YearNavigator'
 import { orderHooks, deliveryHooks, productionHooks, operationHooks, invoiceHooks } from '@/hooks'
@@ -30,11 +30,26 @@ export function YearlyReportPage() {
   const navigate = useNavigate()
   const [year, setYear] = useState(new Date().getFullYear())
 
-  const { data: orders = [] }      = orderHooks.useList()
-  const { data: deliveries = [] }  = deliveryHooks.useList()
-  const { data: invoices = [] }    = invoiceHooks.useList()
-  const { data: productions = [] } = productionHooks.useList()
-  const { data: operations = [] }  = operationHooks.useList()
+  const orderQuery      = orderHooks.useList()
+  const deliveryQuery   = deliveryHooks.useList()
+  const invoiceQuery    = invoiceHooks.useList()
+  const productionQuery = productionHooks.useList()
+  const operationQuery  = operationHooks.useList()
+  const { data: orders = [] }      = orderQuery
+  const { data: deliveries = [] }  = deliveryQuery
+  const { data: invoices = [] }    = invoiceQuery
+  const { data: productions = [] } = productionQuery
+  const { data: operations = [] }  = operationQuery
+
+  // A financial report silently reading "Rp 0 profit/loss, 0 orders" for
+  // the year because one of five lists failed to fetch would look exactly
+  // like a genuinely dead year rather than a broken one — worth gating the
+  // whole report behind a single loading/error state rather than letting
+  // it render half-empty.
+  const reportQueries = [orderQuery, deliveryQuery, invoiceQuery, productionQuery, operationQuery]
+  const isLoading = reportQueries.some(q => q.isLoading)
+  const isError   = reportQueries.some(q => q.isError)
+  const retryAll  = () => reportQueries.forEach(q => q.refetch())
 
   // Used to highlight "now" in the monthly table — only meaningful when
   // looking at the current year; a past/future year has no "current" row.
@@ -98,6 +113,19 @@ export function YearlyReportPage() {
     category: r.label,
     value: (r.invoicedPaid + r.invoicedUnpaid) - (r.productionCost + r.operationsCost),
   }))
+
+  if (isLoading) {
+    return <Spinner />
+  }
+  if (isError) {
+    return (
+      <div className="p-8 text-center">
+        <AlertTriangle className="w-8 h-8 text-red-300 mx-auto mb-3" />
+        <p className="text-red-400 mb-3">Couldn't load report data — check your connection and try again.</p>
+        <button onClick={retryAll} className="btn-secondary">Retry</button>
+      </div>
+    )
+  }
 
   return (
     <div className="p-6 space-y-6 max-w-[1400px]">

@@ -1,22 +1,36 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Plus, X, UserX, UserCheck, Circle, Loader2 } from 'lucide-react'
+import { Plus, X, UserX, UserCheck, Circle, Loader2, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { usersApi, UsersApiError } from '@/api/usersApi'
 import type { AdminUser } from '@/api/usersApi'
+import { ConfirmDialog } from '@/components/ui'
 
 export function UsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
+  // Distinct from "loaded fine, there just aren't any users" — see
+  // CrudPage's own isError/EmptyState split for why folding a failed
+  // fetch into the same empty-list UI is misleading (this page predates
+  // CrudPage and has its own bespoke fetch/render, so it needs its own
+  // copy of that fix rather than getting it for free).
+  const [loadError, setLoadError] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  // Which row has a deactivate/reactivate request in flight — disables
+  // just that row's button so a fast double-click can't fire the mutation
+  // twice, without blocking the rest of the table.
+  const [pendingId, setPendingId] = useState<number | string | null>(null)
+  const [confirmDeactivate, setConfirmDeactivate] = useState<AdminUser | null>(null)
 
   async function loadUsers() {
     setLoading(true)
+    setLoadError(false)
     try {
       const { users } = await usersApi.list()
       setUsers(users)
     } catch (err) {
       toast.error(err instanceof UsersApiError ? err.message : 'Could not load users')
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -27,23 +41,28 @@ export function UsersPage() {
   }, [])
 
   async function handleDeactivate(u: AdminUser) {
-    if (!confirm(`Deactivate ${u.name}? They'll be signed out everywhere immediately.`)) return
+    setPendingId(u.id)
     try {
       await usersApi.deactivate(u.id)
       toast.success(`${u.name} deactivated`)
       setUsers(prev => prev.map(x => (x.id === u.id ? { ...x, active: false } : x)))
     } catch (err) {
       toast.error(err instanceof UsersApiError ? err.message : 'Could not deactivate user')
+    } finally {
+      setPendingId(null)
     }
   }
 
   async function handleReactivate(u: AdminUser) {
+    setPendingId(u.id)
     try {
       await usersApi.reactivate(u.id)
       toast.success(`${u.name} reactivated`)
       setUsers(prev => prev.map(x => (x.id === u.id ? { ...x, active: true } : x)))
     } catch (err) {
       toast.error(err instanceof UsersApiError ? err.message : 'Could not reactivate user')
+    } finally {
+      setPendingId(null)
     }
   }
 
@@ -76,6 +95,13 @@ export function UsersPage() {
         {loading ? (
           <div className="flex items-center justify-center py-12 text-slate-400">
             <Loader2 className="w-5 h-5 animate-spin" />
+          </div>
+        ) : loadError ? (
+          <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+            <AlertTriangle className="w-8 h-8 mb-3 text-red-300" />
+            <p className="font-medium text-slate-500 text-sm">Couldn't load users</p>
+            <p className="text-xs text-slate-400 mt-1 mb-4">Check your connection and try again.</p>
+            <button onClick={loadUsers} className="btn-secondary btn-sm">Retry</button>
           </div>
         ) : users.length === 0 ? (
           <p className="text-center text-sm text-slate-400 py-12">No users yet.</p>
@@ -111,8 +137,9 @@ export function UsersPage() {
                   <td className="px-5 py-3 text-right">
                     {u.active ? (
                       <button
-                        onClick={() => handleDeactivate(u)}
-                        className="flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 ml-auto"
+                        onClick={() => setConfirmDeactivate(u)}
+                        disabled={pendingId === u.id}
+                        className="flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 ml-auto disabled:opacity-50"
                       >
                         <UserX className="w-3.5 h-3.5" />
                         Deactivate
@@ -120,7 +147,8 @@ export function UsersPage() {
                     ) : (
                       <button
                         onClick={() => handleReactivate(u)}
-                        className="flex items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800 ml-auto"
+                        disabled={pendingId === u.id}
+                        className="flex items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800 ml-auto disabled:opacity-50"
                       >
                         <UserCheck className="w-3.5 h-3.5" />
                         Reactivate
@@ -133,6 +161,15 @@ export function UsersPage() {
           </table>
         )}
       </div>
+
+      {confirmDeactivate && (
+        <ConfirmDialog
+          message={`Deactivate ${confirmDeactivate.name}? They'll be signed out everywhere immediately.`}
+          confirmLabel="Deactivate"
+          onConfirm={() => { handleDeactivate(confirmDeactivate); setConfirmDeactivate(null) }}
+          onCancel={() => setConfirmDeactivate(null)}
+        />
+      )}
     </div>
   )
 }

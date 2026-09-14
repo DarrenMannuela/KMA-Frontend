@@ -103,7 +103,15 @@ interface Props {
 export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType, prefillFrom, clientId, onClose }: Props) {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { data: invoices = [], refetch: refetchInvoices } = invoiceHooks.useList()
+  // isError matters here beyond the usual "show a spinner/retry" case:
+  // idAlreadyExists and the auto-suggested next number below are both
+  // derived entirely from this list, so a silent fetch failure would
+  // leave `invoices` at [] and make the client-side duplicate-ID guard
+  // look like it passed when it never actually ran. The 409-on-submit
+  // handler further down is a real backend-side safety net for this, but
+  // the user gets no warning their local check isn't trustworthy without
+  // isInvoicesError below.
+  const { data: invoices = [], isError: isInvoicesError, refetch: refetchInvoices } = invoiceHooks.useList()
 
   // Only fetched when the order is actually linked to a client — an
   // unlinked order just falls back to typing everything by hand, same as
@@ -386,7 +394,11 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
               </button>
             )}
           </div>
-          {idAlreadyExists ? (
+          {isInvoicesError ? (
+            <p className="text-xs text-amber-600 mt-1">
+              Couldn't check existing invoice numbers — this ID isn't verified as unique yet. The server will still reject a duplicate on submit.
+            </p>
+          ) : idAlreadyExists ? (
             <p className="text-xs text-red-500 mt-1">
               An invoice with this ID already exists — pick a different number.
             </p>
@@ -591,11 +603,11 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
         <div className="rounded-lg border border-slate-100 overflow-hidden text-xs">
           <table className="w-full">
             <thead className="bg-slate-50">
-              <tr>
-                <th className="text-left p-2 text-slate-400">Item</th>
-                <th className="text-center p-2 text-slate-400">Size</th>
-                <th className="text-right p-2 text-slate-400">Qty</th>
-                <th className="text-right p-2 text-slate-400">Subtotal</th>
+              <tr className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <th className="text-left p-2">Item</th>
+                <th className="text-center p-2">Size</th>
+                <th className="text-right p-2">Qty</th>
+                <th className="text-right p-2">Subtotal</th>
               </tr>
             </thead>
             <tbody>

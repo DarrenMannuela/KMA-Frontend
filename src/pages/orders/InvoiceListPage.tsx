@@ -25,7 +25,24 @@ export function InvoiceListPage() {
 
   // Defaults to Unpaid — that's the actionable view (this is the AR
   // Receivable list, effectively); "All" and "Paid" are one click away.
-  const [statusFilter, setStatusFilter] = useState<'unpaid' | 'paid' | 'all'>('unpaid')
+  // Backed by sessionStorage rather than plain useState, same fix and same
+  // reasoning as CrudPage's own search box: the Eye/Receipt row actions
+  // below both navigate to a real route (invoice print / kwitansi), which
+  // unmounts this page — filtering to "Paid" or "All" to investigate
+  // something, opening a row, then coming back used to silently land back
+  // on "Unpaid" with no explanation, looking like the filtered results had
+  // vanished.
+  const [statusFilter, setStatusFilterState] = useState<'unpaid' | 'paid' | 'all'>(() => {
+    try {
+      const saved = sessionStorage.getItem('invoice-status-filter')
+      if (saved === 'unpaid' || saved === 'paid' || saved === 'all') return saved
+    } catch { /* ignore */ }
+    return 'unpaid'
+  })
+  const setStatusFilter = (value: 'unpaid' | 'paid' | 'all') => {
+    setStatusFilterState(value)
+    try { sessionStorage.setItem('invoice-status-filter', value) } catch { /* private mode / quota — filter just won't persist */ }
+  }
   const filteredData = data?.filter(inv => statusFilter === 'all' || inv.status === statusFilter)
 
   const toggleStatus = (row: Invoice) => {
@@ -108,7 +125,7 @@ export function InvoiceListPage() {
             )
           }},
         { header: 'Date',         key: 'tanggal',
-          render: r => r.tanggal ? format(new Date(r.tanggal), 'dd MMM yyyy') : '—' },
+          render: r => r.tanggal ? <span className="whitespace-nowrap">{format(new Date(r.tanggal), 'dd MMM yyyy')}</span> : '—' },
         { header: 'Status',       key: 'status',
           render: r => (
             <button

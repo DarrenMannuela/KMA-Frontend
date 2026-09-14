@@ -24,6 +24,24 @@ const TITLES: Record<string, string> = {
   '/production':      'Production',
   '/suppliers':       'Suppliers',
   '/operations':      'Operations',
+  '/reports/yearly':  'Yearly Report',
+  '/admin/users':     'Users',
+}
+
+// Longest-matching-prefix lookup, not an exact-string one — a dynamic
+// detail route (/orders/:id, /clients/:id, /delivery/:id, …) has no entry
+// of its own above and previously fell straight through to the generic
+// "KMA" fallback the moment you were one level deep in any section, while
+// every top-level list page showed a proper title. Falls back to a
+// section's own title for any sub-route under it instead.
+function titleFor(pathname: string): string {
+  let best: string | null = null
+  for (const path of Object.keys(TITLES)) {
+    if ((pathname === path || pathname.startsWith(`${path}/`)) && (best === null || path.length > best.length)) {
+      best = path
+    }
+  }
+  return best ? TITLES[best] : 'KMA'
 }
 
 // Routes that are fully wired to real DB handlers in main.go
@@ -107,7 +125,7 @@ function AccountMenu() {
 
 export function Topbar() {
   const { pathname } = useLocation()
-  const title = TITLES[pathname] ?? 'KMA'
+  const title = titleFor(pathname)
 
   // Ping the dedicated health endpoint — deliberately not an
   // auth-gated route like /api/v1/supplier, so this reflects whether

@@ -1,6 +1,6 @@
 import { ShoppingBag, Truck, Factory, Wrench, Users, TrendingUp, ArrowUpRight, Package, AlertTriangle, Receipt, BarChart3 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { formatRp } from '@/components/ui'
+import { formatRp, Spinner } from '@/components/ui'
 import { orderHooks, deliveryHooks, productionHooks, operationHooks, invoiceHooks } from '@/hooks'
 import { format, isPast, differenceInDays } from 'date-fns'
 import { isInMonth } from '@/utils/MonthUtils'
@@ -112,11 +112,26 @@ function StackedCostRow({ label, value, icon: Icon, sub }: KpiCardProps) {
 
 export function DashboardPage() {
   const navigate = useNavigate()
-  const { data: orders      = [] } = orderHooks.useList()
-  const { data: deliveries  = [] } = deliveryHooks.useList()
-  const { data: productions = [] } = productionHooks.useList()
-  const { data: operations  = [] } = operationHooks.useList()
-  const { data: invoices      = [] } = invoiceHooks.useList()
+  const orderQuery      = orderHooks.useList()
+  const deliveryQuery   = deliveryHooks.useList()
+  const productionQuery = productionHooks.useList()
+  const operationQuery  = operationHooks.useList()
+  const invoiceQuery    = invoiceHooks.useList()
+  const { data: orders      = [] } = orderQuery
+  const { data: deliveries  = [] } = deliveryQuery
+  const { data: productions = [] } = productionQuery
+  const { data: operations  = [] } = operationQuery
+  const { data: invoices      = [] } = invoiceQuery
+
+  // This is the landing page — a KPI silently reading "Rp 0" / "Nothing
+  // overdue" because one of five queries failed is worse than showing
+  // nothing at all, since it looks identical to a genuinely all-clear
+  // state for the exact numbers (AR, overdue invoices) someone opens this
+  // page to check first.
+  const dashboardQueries = [orderQuery, deliveryQuery, productionQuery, operationQuery, invoiceQuery]
+  const isLoading = dashboardQueries.some(q => q.isLoading)
+  const isError   = dashboardQueries.some(q => q.isError)
+  const retryAll  = () => dashboardQueries.forEach(q => q.refetch())
 
   const safeInvoices      = Array.isArray(invoices)      ? invoices      : []
   const safeProductions = Array.isArray(productions) ? productions : []
@@ -203,6 +218,19 @@ export function DashboardPage() {
     return { label: 'Fully Paid', className: 'bg-green-50 text-green-700' }
   }
 
+  if (isLoading) {
+    return <Spinner />
+  }
+  if (isError) {
+    return (
+      <div className="p-8 text-center">
+        <AlertTriangle className="w-8 h-8 text-red-300 mx-auto mb-3" />
+        <p className="text-red-400 mb-3">Couldn't load dashboard data — check your connection and try again.</p>
+        <button onClick={retryAll} className="btn-secondary">Retry</button>
+      </div>
+    )
+  }
+
   return (
     <div className="p-6 space-y-6 max-w-[1400px]">
 
@@ -278,7 +306,7 @@ export function DashboardPage() {
                       <td><span className="id-chip">{o.id}</span></td>
                       <td className="font-medium text-navy-900">{o.company ?? '—'}</td>
                       <td className="font-mono text-xs text-slate-500">{o.po_number ?? '—'}</td>
-                      <td className="text-xs text-slate-500">
+                      <td className="text-xs text-slate-500 whitespace-nowrap">
                         {o.date ? format(new Date(o.date), 'dd MMM yyyy') : '—'}
                       </td>
                       <td>
@@ -445,7 +473,7 @@ export function DashboardPage() {
                     </td>
                     <td className="currency font-semibold">{formatRp(invoiceAmountDue(inv))}</td>
                     <td className={`text-xs ${overdue ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
-                      {inv.due_date ? format(new Date(inv.due_date), 'dd MMM yyyy') : '—'}
+                      <span className="whitespace-nowrap">{inv.due_date ? format(new Date(inv.due_date), 'dd MMM yyyy') : '—'}</span>
                       {overdue && ' (overdue)'}
                     </td>
                   </tr>

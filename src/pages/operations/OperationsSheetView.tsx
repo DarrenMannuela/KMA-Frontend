@@ -12,13 +12,15 @@ interface OperationsSheetViewProps {
    *  Deliberately spans multiple Kas Bons — see the comment in OperationsDashboard
    *  on why Category, not Kas Bon ID, is the grouping/filtering dimension. */
   initialCategory?: string
+  /** Month being viewed — owned by OperationsPage so it survives a round
+   *  trip to the dashboard and back. See OperationsPage's own comment. */
+  cursor: { year: number; month: number }
+  onCursorChange: (year: number, month: number) => void
 }
 
-export function OperationsSheetView({ onBack, initialCategory }: OperationsSheetViewProps) {
+export function OperationsSheetView({ onBack, initialCategory, cursor, onCursorChange }: OperationsSheetViewProps) {
   const { data: allData = [], isLoading, isError, refetch } = operationHooks.useList()
 
-  const now = new Date()
-  const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() })
   const [categoryFilter, setCategoryFilter] = useState<string | undefined>(initialCategory)
 
   // If the dashboard sends us here again with a different category, pick that up.
@@ -62,7 +64,7 @@ export function OperationsSheetView({ onBack, initialCategory }: OperationsSheet
             )}
           </h2>
         </div>
-        <MonthNavigator year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
+        <MonthNavigator year={cursor.year} month={cursor.month} onChange={onCursorChange} />
       </div>
 
       {categoryFilter && (

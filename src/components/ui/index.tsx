@@ -27,10 +27,15 @@ export function EmptyState({ icon: Icon, title, subtitle }: {
 }
 
 // ─── ConfirmDialog ────────────────────────────────────────────────────────────
-export function ConfirmDialog({ message, onConfirm, onCancel }: {
+export function ConfirmDialog({ message, onConfirm, onCancel, confirmLabel = 'Delete' }: {
   message: string
   onConfirm: () => void
   onCancel: () => void
+  // Most callers are a delete, hence the default — but the same "are you
+  // sure" treatment is worth reusing for any other one-way action (e.g.
+  // deactivating a user) rather than falling back to a plain browser
+  // confirm() that looks nothing like the rest of the app.
+  confirmLabel?: string
 }) {
   return (
     <div
@@ -44,7 +49,7 @@ export function ConfirmDialog({ message, onConfirm, onCancel }: {
         </div>
         <div className="flex gap-2 justify-end">
           <button className="btn-secondary btn-sm" onClick={onCancel}>Cancel</button>
-          <button className="btn-danger btn-sm" onClick={onConfirm}>Delete</button>
+          <button className="btn-danger btn-sm" onClick={onConfirm}>{confirmLabel}</button>
         </div>
       </div>
     </div>

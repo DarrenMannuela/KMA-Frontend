@@ -14,6 +14,14 @@ export function OperationsPage() {
   // memory of which one was active, which reads as "did my click even
   // register?" on return.
   const [lastCategory, setLastCategory] = useState<string | undefined>(undefined)
+  // Same idea, for the month being viewed — see ProductionPage's identical
+  // fix and comment. Previously each screen kept its own cursor defaulting
+  // to "today," so browsing to a past month on the dashboard and then
+  // opening the spreadsheet silently dropped back to the current month,
+  // showing an empty sheet even though the month you were just looking at
+  // had real entries.
+  const now = new Date()
+  const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() })
 
   const openSheet = (category?: string) => {
     setLastCategory(category)
@@ -21,8 +29,22 @@ export function OperationsPage() {
   }
 
   if (view.mode === 'sheet') {
-    return <OperationsSheetView onBack={() => setView({ mode: 'dashboard' })} initialCategory={view.category} />
+    return (
+      <OperationsSheetView
+        onBack={() => setView({ mode: 'dashboard' })}
+        initialCategory={view.category}
+        cursor={cursor}
+        onCursorChange={(year, month) => setCursor({ year, month })}
+      />
+    )
   }
 
-  return <OperationsDashboard onOpenSheet={openSheet} selectedCategory={lastCategory} />
+  return (
+    <OperationsDashboard
+      onOpenSheet={openSheet}
+      selectedCategory={lastCategory}
+      cursor={cursor}
+      onCursorChange={(year, month) => setCursor({ year, month })}
+    />
+  )
 }

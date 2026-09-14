@@ -53,7 +53,26 @@ export function CrudPage<T extends { id: string | number }>({
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<T | null>(null)
   const [confirmRow, setConfirmRow] = useState<T | null>(null)
-  const [search, setSearch] = useState('')
+  // Backed by sessionStorage (keyed by `title`, which is unique per page
+  // that renders a CrudPage) rather than plain useState — every row action
+  // that opens a detail view (the pencil escape hatch, a custom rowAction,
+  // etc.) does a real route navigation, which unmounts this component
+  // entirely. A user who searches "Zenbu" on Orders, opens a row, then
+  // clicks Back found their search silently cleared — looked like the
+  // filtered results had vanished, the same "my data disappeared" bug the
+  // month-selector fix addressed elsewhere. sessionStorage (rather than,
+  // say, lifting into the URL) survives that round trip regardless of how
+  // any particular page's own Back button navigates — a hardcoded path, a
+  // history(-1), or something else entirely — since it doesn't depend on
+  // the URL carrying anything forward.
+  const searchStorageKey = `crud-search:${title}`
+  const [search, setSearchState] = useState(() => {
+    try { return sessionStorage.getItem(searchStorageKey) ?? '' } catch { return '' }
+  })
+  const setSearch = (value: string) => {
+    setSearchState(value)
+    try { sessionStorage.setItem(searchStorageKey, value) } catch { /* private mode / quota — search just won't persist */ }
+  }
 
   const filtered = search
     ? data.filter(row =>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Building2, Users, Package, Printer, Image as ImageIcon } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Building2, Users, Package, Printer, Image as ImageIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField, Spinner, UppercaseField } from '@/components/ui'
@@ -219,7 +219,7 @@ export function ClientDetailPage() {
   const navigate = useNavigate()
   const clientId = Number(id)
 
-  const { data: client, isLoading: clientLoading } = clientHooks.useGet(clientId)
+  const { data: client, isLoading: clientLoading, isError: clientError, refetch: refetchClient } = clientHooks.useGet(clientId)
 
   const { data: contacts = [], isLoading: contactsLoading, isError: contactsError, refetch: refetchContacts } = clientContactHooks.useByClient(clientId)
   const delContact = clientContactHooks.useDelete()
@@ -255,6 +255,19 @@ export function ClientDetailPage() {
 
   if (clientLoading) {
     return <Spinner />
+  }
+  // Same distinction the contacts/catalogueItems queries below already
+  // make: a failed fetch previously fell through to the same "Client not
+  // found" message as a genuinely bad id, sending people looking for a
+  // broken link instead of just retrying.
+  if (clientError) {
+    return (
+      <div className="p-8 text-center">
+        <AlertTriangle className="w-8 h-8 text-red-300 mx-auto mb-3" />
+        <p className="text-red-400 mb-3">Couldn't load this client — check your connection and try again.</p>
+        <button onClick={() => refetchClient()} className="btn-secondary">Retry</button>
+      </div>
+    )
   }
   if (!client) {
     return <div className="p-8 text-red-400">Client not found.</div>

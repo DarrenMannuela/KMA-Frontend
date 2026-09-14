@@ -17,6 +17,10 @@ interface OperationsDashboardProps {
   /** Last category selected from the bars, if any — kept in the parent page
    *  so the highlight survives a round trip to the spreadsheet and back. */
   selectedCategory?: string
+  /** Month being viewed — owned by OperationsPage; see its comment for why
+   *  this moved up (mirrors ProductionDashboard's identical fix). */
+  cursor: { year: number; month: number }
+  onCursorChange: (year: number, month: number) => void
 }
 
 // price kept as a raw string while typing — see comment in ProductionDashboard
@@ -28,13 +32,11 @@ interface OperationsDashboardProps {
 // after each add, same role Material plays in Production's quick add.
 const emptyQuickAdd = () => ({ header_id: '', category: '', item: '', price: '', date: todayISODate() })
 
-export function OperationsDashboard({ onOpenSheet, selectedCategory }: OperationsDashboardProps) {
+export function OperationsDashboard({ onOpenSheet, selectedCategory, cursor, onCursorChange }: OperationsDashboardProps) {
   const { data: allData = [], isLoading, isError, refetch } = operationHooks.useList()
   const { data: headers = [], refetch: refetchHeaders } = useFinanceHeaders()
   const create = operationHooks.useCreate()
 
-  const now = new Date()
-  const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() })
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [quickAdd, setQuickAdd] = useState(emptyQuickAdd())
   // Which required fields were empty on the last submit attempt — flags
@@ -141,7 +143,7 @@ export function OperationsDashboard({ onOpenSheet, selectedCategory }: Operation
           <Wrench className="text-navy-600" size={20} />
           <h2 className="text-lg font-semibold text-slate-800">Operations Costs</h2>
         </div>
-        <MonthNavigator year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
+        <MonthNavigator year={cursor.year} month={cursor.month} onChange={onCursorChange} />
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-3">

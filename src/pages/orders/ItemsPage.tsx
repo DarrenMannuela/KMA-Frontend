@@ -143,7 +143,7 @@ export function ItemsPage() {
       searchKeys={['item_name']}
       columns={[
         { header: 'ID',        key: 'id' },
-        { header: 'Order ID',  key: 'order_id' },
+        { header: 'Order ID',  key: 'order_id', render: r => <span className="font-mono text-xs text-slate-500">{r.order_id}</span> },
         { header: 'Item',      key: 'item_name', render: r => <span className="font-medium">{r.item_name}</span> },
         { header: 'Size',      key: 'size',      render: r => r.size ? <span className="badge-slate">{r.size}</span> : '—' },
         { header: 'Qty',       key: 'amount' },

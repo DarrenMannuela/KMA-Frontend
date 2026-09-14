@@ -237,7 +237,7 @@ export function OrdersPage() {
             </button>
           ) : <span className="text-slate-300 text-xs">Not linked</span> },
         { header: 'PO Number', key: 'po_number',   render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
-        { header: 'Date',      key: 'date',        render: r => r.date ? format(new Date(r.date), 'dd MMM yyyy') : '—' },
+        { header: 'Date',      key: 'date',        render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy')}</span> : '—' },
       ]}
       formTitle={e => e ? 'Edit Order' : 'New Order'}
       renderForm={(editing, onClose) => <OrderForm editing={editing} onClose={onClose} />}

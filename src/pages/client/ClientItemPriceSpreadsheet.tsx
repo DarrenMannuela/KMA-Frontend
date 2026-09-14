@@ -29,12 +29,24 @@ export function ClientItemPriceSpreadsheet({ data, items }: ClientItemPriceSprea
     return item.size ? `${item.item_name} (${item.size})` : item.item_name
   }
 
+  // The Item column repeats the exact same item name/size that
+  // renderGroupHeader below already shows once per group — the same
+  // redundant-with-its-own-group-header pattern already fixed in
+  // ProductionSpreadsheet's Supplier column (see that file's own
+  // groupedByHeader comment). Today's one caller (ClientItemDetailPage)
+  // always passes a single-item `items` array, so every row is already in
+  // the one and only group — showing this column would repeat the group
+  // header on every single row for nothing. Kept conditional rather than
+  // deleted outright: this component's props are still shaped for more
+  // than one item (itemOptions/groupByKey both support it), so a future
+  // caller passing several items back gets the column again, exactly when
+  // it'd stop being redundant.
   const columns: ColumnDef<ClientItemPriceRow>[] = [
-    {
-      key: 'client_item_id', header: 'Item', type: 'select', editable: true,
+    ...(items.length > 1 ? [{
+      key: 'client_item_id' as const, header: 'Item', type: 'select' as const, editable: true,
       options: itemOptions,
       format: (val: number) => <span className="font-medium text-navy-900">{itemLabel(Number(val))}</span>,
-    },
+    }] : []),
     {
       key: 'year', header: 'Year', type: 'number', editable: true, width: '90px',
       format: (val: number) => <span className="font-mono">{val}</span>,

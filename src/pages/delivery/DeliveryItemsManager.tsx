@@ -44,8 +44,16 @@ interface DeliveryItemsManagerProps {
 }
 
 export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) {
-  const { data: deliveries = [] } = deliveryHooks.useList()
-  const { data: allItems = [], isLoading, isError, refetch } = deliveryItemHooks.useList()
+  // isError here matters beyond the usual loading/retry case: a silent
+  // failure would leave `deliveries` at [], so `selectedDelivery` resolves
+  // to undefined and `isDO`/`orderId` silently fall back to "DO with no
+  // linked order" — which drops the order-item picker's "max remaining"
+  // constraint down to unconstrained free-text entry with no indication
+  // why. Folded into the same isLoading/isError gate as allItems below
+  // rather than letting the form silently change behavior.
+  const { data: deliveries = [], isError: isDeliveriesError } = deliveryHooks.useList()
+  const { data: allItems = [], isLoading, isError: isItemsError, refetch } = deliveryItemHooks.useList()
+  const isError = isDeliveriesError || isItemsError
   const create = deliveryItemHooks.useCreate()
 
   const [open, setOpen] = useState(false)

@@ -190,7 +190,7 @@ export function KwitansiPrintPage() {
     enabled: !!invoiceId,
   })
 
-  const { data: order } = useQuery({
+  const { data: order, isError: isOrderError, refetch: refetchOrder } = useQuery({
     queryKey: ['order', invoice?.order_id],
     queryFn: () => ordersApi.get(invoice!.order_id),
     enabled: !!invoice?.order_id,
@@ -206,7 +206,7 @@ export function KwitansiPrintPage() {
   // pattern is legacy only — new invoice numbers are independently
   // suggested, not deterministically derived from each other, so a string
   // trick here would silently misfire on current data.
-  const { data: allInvoices = [] } = invoiceHooks.useList()
+  const { data: allInvoices = [], isError: isAllInvoicesError, refetch: refetchAllInvoices } = invoiceHooks.useList()
   const dpInvoice = invoice?.type === 'dp'
     ? invoice
     : allInvoices.find(i => i.order_id === invoice?.order_id && i.type === 'dp')
@@ -243,12 +243,16 @@ export function KwitansiPrintPage() {
   // "the server answered and there's genuinely no such invoice" — these
   // used to render identically as "Invoice not found.", which sent people
   // down a dead end (double-checking an ID that was actually fine) instead
-  // of just retrying the request that failed.
-  if (isError) {
+  // of just retrying the request that failed. Covers the order/allInvoices
+  // queries too now: this receipt derives its DP/Pelunasan status lines
+  // (e.g. "PELUNASAN BELUM DITERBITKAN") from allInvoices, so a fetch
+  // failure there could otherwise print as a wrong status on a document
+  // someone signs, rather than as an obvious "didn't load."
+  if (isError || isOrderError || isAllInvoicesError) {
     return (
       <div className="p-8 text-center">
         <p className="text-red-400 mb-3">Couldn't load this invoice — check your connection and try again.</p>
-        <button onClick={() => refetch()} className="btn-secondary">Retry</button>
+        <button onClick={() => { refetch(); refetchOrder(); refetchAllInvoices() }} className="btn-secondary">Retry</button>
       </div>
     )
   }

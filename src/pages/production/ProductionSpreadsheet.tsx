@@ -165,6 +165,16 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
     supplier_id: {
       key: 'supplier_id', header: 'Supplier', type: 'select', editable: true,
       options: supplierOptions,
+      // Dot + name only — no category badge here. This column only ever
+      // renders in the grouped-by-supplier view (see the columns array
+      // below: it's dropped entirely once a supplier filter is active),
+      // and that view's own group header already shows this exact
+      // supplier's name AND category once per group (see
+      // renderGroupHeader's supplier branch below) — repeating the badge
+      // on every single row under it added nothing, just visual noise and,
+      // on narrow screens, squeezed the name itself into wrapping onto two
+      // lines. The dot stays: it's a fast color-scan aid across the whole
+      // column, not a repeat of the group header's own text.
       format: (val: number) => (
         <span className="inline-flex items-center gap-1.5">
           {supplierColor(Number(val)) && (
@@ -175,11 +185,6 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
             />
           )}
           {supplierName(Number(val))}
-          {supplierCategory(Number(val)) && (
-            <span className="text-[10px] font-medium uppercase tracking-wide bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
-              {supplierCategory(Number(val))}
-            </span>
-          )}
         </span>
       ),
     } as ColumnDef<ProductionRow>,

@@ -19,6 +19,12 @@ interface ProductionDashboardProps {
   /** Last supplier selected from the bars, if any — kept in the parent page
    *  so the highlight survives a round trip to the spreadsheet and back. */
   selectedSupplierId?: number
+  /** Month being viewed — owned by the parent page (ProductionPage) rather
+   *  than here, so it survives a round trip to the spreadsheet and back the
+   *  same way selectedSupplierId already does. See ProductionPage's own
+   *  comment on why this moved up. */
+  cursor: { year: number; month: number }
+  onCursorChange: (year: number, month: number) => void
 }
 
 // Price/Qty are kept as raw strings while the form is open so a controlled
@@ -30,14 +36,12 @@ const emptyQuickAdd = () => ({
   price: '', si_unit: 'yard', amount: '1', date: todayISODate(),
 })
 
-export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: ProductionDashboardProps) {
+export function ProductionDashboard({ onOpenSheet, selectedSupplierId, cursor, onCursorChange }: ProductionDashboardProps) {
   const { data: allData = [], isLoading, isError, refetch } = productionHooks.useList()
   const { data: suppliers = [] } = supplierHooks.useList()
   const { data: headers = [], refetch: refetchHeaders } = useFinanceHeaders()
   const create = productionHooks.useCreate()
 
-  const now = new Date()
-  const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() })
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [quickAdd, setQuickAdd] = useState(emptyQuickAdd())
   // Tracks which required fields were empty on the last submit attempt, so
@@ -149,7 +153,7 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
           <Factory className="text-navy-600" size={20} />
           <h2 className="text-lg font-semibold text-slate-800">Production Costs</h2>
         </div>
-        <MonthNavigator year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
+        <MonthNavigator year={cursor.year} month={cursor.month} onChange={onCursorChange} />
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -261,9 +265,16 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId }: Product
               onChange={e => setQuickAdd(p => ({ ...p, date: e.target.value }))} />
           </FormField>
 
-          {/* Live Price × Qty preview — lets people catch a fat-fingered
-              number before it's submitted rather than after. */}
-          <div className="md:col-span-4 flex items-center justify-between -mt-1">
+          {/* Live Price × Qty preview, paired on the same row as the submit
+              button (col-span-3 + the button's own col-start-4 fill the
+              4-column grid exactly, so they land side by side in auto-flow)
+              rather than each getting its own row — a preview stacked
+              directly above a right-indented button read as two
+              disconnected lines instead of one "here's the total, here's
+              submit" row. items-center keeps the preview text vertically
+              centered against the button's own height instead of sitting
+              at the row's top edge. */}
+          <div className="md:col-span-3 flex items-center -mt-1">
             <span className="text-xs text-slate-400">
               {quickAddSubtotal > 0 && <>= <span className="font-mono font-semibold text-slate-600">{formatRp(quickAddSubtotal)}</span> for this line</>}
             </span>

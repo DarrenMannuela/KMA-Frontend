@@ -11,14 +11,17 @@ interface ProductionSheetViewProps {
   onBack: () => void
   /** Pre-filter to this supplier when arriving from a bar click on the dashboard. */
   initialSupplierId?: number
+  /** Month being viewed — owned by ProductionPage so it survives a round
+   *  trip to the dashboard and back instead of resetting to the current
+   *  month every time this view mounts. See ProductionPage's own comment. */
+  cursor: { year: number; month: number }
+  onCursorChange: (year: number, month: number) => void
 }
 
-export function ProductionSheetView({ onBack, initialSupplierId }: ProductionSheetViewProps) {
+export function ProductionSheetView({ onBack, initialSupplierId, cursor, onCursorChange }: ProductionSheetViewProps) {
   const { data: allData = [], isLoading, isError, refetch } = productionHooks.useList()
   const { data: suppliers = [] } = supplierHooks.useList()
 
-  const now = new Date()
-  const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() })
   const [supplierFilter, setSupplierFilter] = useState<number | undefined>(initialSupplierId)
 
   // If the dashboard sends us here again with a different supplier, pick that up.
@@ -75,7 +78,7 @@ export function ProductionSheetView({ onBack, initialSupplierId }: ProductionShe
             )}
           </h2>
         </div>
-        <MonthNavigator year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
+        <MonthNavigator year={cursor.year} month={cursor.month} onChange={onCursorChange} />
       </div>
 
       {supplierFilter !== undefined && (

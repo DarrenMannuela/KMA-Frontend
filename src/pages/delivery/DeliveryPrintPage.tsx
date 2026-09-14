@@ -34,7 +34,15 @@ export function DeliveryPrintPage() {
     enabled: !!deliveryId,
   })
 
-  const { data: items = [] } = useQuery({
+  // Kept as a separate query from `delivery` above (loaded off the shared
+  // /delivery-item list rather than a nested field), but its own
+  // isLoading/isError feed the SAME gate below — this is the primary
+  // content of a document a customer signs for at the point of delivery,
+  // so if just this request fails while `delivery` itself succeeds, it
+  // must not be allowed to silently print as an empty "no items" slip
+  // (see the isError branch's own comment for the identical bug this
+  // already fixed for the header fetch).
+  const { data: items = [], isLoading: itemsLoading, isError: itemsError, refetch: refetchItems } = useQuery({
     queryKey: ['delivery-items', deliveryId],
     queryFn: () => deliveryItemApi.list().then(all => all.filter((i: DeliveryItem) => i.delivery_id === deliveryId)),
     enabled: !!deliveryId,
@@ -83,17 +91,20 @@ export function DeliveryPrintPage() {
 
   const grandTotal = rekapBoxes.reduce((s, b) => s + b.subtotal, 0)
 
-  if (isLoading) return <div className="p-8 text-slate-400">Loading…</div>
+  if (isLoading || itemsLoading) return <div className="p-8 text-slate-400">Loading…</div>
   // Same distinction made in KwitansiPrintPage/InvoicePrintPage/
   // OrderDetailPage: a failed fetch (network drop, 500, etc.) previously
   // looked identical to a genuinely missing delivery — "Delivery not
   // found." — sending people searching for a bad link instead of just
-  // retrying the request that failed.
-  if (isError) {
+  // retrying the request that failed. Covers the items query too now (see
+  // its own comment above) — either one failing blocks the print view the
+  // same way, rather than letting a failed items fetch through to print as
+  // a false "no items" slip.
+  if (isError || itemsError) {
     return (
       <div className="p-8 text-center">
         <p className="text-red-400 mb-3">Couldn't load this delivery — check your connection and try again.</p>
-        <button onClick={() => refetch()} className="btn-secondary">Retry</button>
+        <button onClick={() => { refetch(); refetchItems() }} className="btn-secondary">Retry</button>
       </div>
     )
   }
@@ -279,7 +290,12 @@ function DeliverySlipContent({
         </div>
       ) : (
         <div style={{ marginBottom: '10px', fontSize: '10.5px' }}>
-          <Field label="TANGGAL D/O" value={delivery.date ? format(new Date(delivery.date), 'd MMM yyyy').toUpperCase() : '—'} />
+          {/* "TANGGAL S/J" here, not "TANGGAL D/O" — this branch only ever
+              renders for a Surat Jalan (isDO is false), and the DO-specific
+              label got copy-pasted into this branch unchanged. Matches the
+              same D/O-vs-S/J naming already used for the header title and
+              boxLabelText just below. */}
+          <Field label="TANGGAL S/J" value={delivery.date ? format(new Date(delivery.date), 'd MMM yyyy').toUpperCase() : '—'} />
           <Field label="NAMA" value={delivery.company ?? '—'} />
           <Field
             label="UNTUK"

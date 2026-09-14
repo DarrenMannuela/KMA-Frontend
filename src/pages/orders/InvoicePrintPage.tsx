@@ -1,7 +1,7 @@
 import { useRef, useLayoutEffect, useEffect, useState, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Printer, Receipt, Plus, PackageSearch } from 'lucide-react'
+import { ArrowLeft, Printer, Receipt, Plus, PackageSearch, X, Highlighter } from 'lucide-react'
 import { format } from 'date-fns'
 import { invoicesApi, ordersApi, itemsApi } from '@/api'
 import { formatRp, FormField } from '@/components/ui'
@@ -399,6 +399,21 @@ export function InvoicePrintPage() {
   // part of this map — it always follows highlightChoice directly, since
   // that one's meant to always be on.
   const [rowHighlights, setRowHighlights] = useState<Record<string, string>>({})
+  // Highlighting used to be "always on" — literally every row in the
+  // table, all the time, was a live click target that instantly painted
+  // it. That's a different interaction style from every other editing
+  // feature on this page (Add Row is a button you open; a page break is a
+  // toolbar pill you toggle) — highlighting was the only one where the
+  // TABLE ITSELF doubled as the control surface with no visible on/off
+  // state, which made it feel like a stray click could paint something by
+  // accident, and meant every other click target living inside a row
+  // (the J/T input, the gap-row +/- buttons, etc.) had to explicitly
+  // stopPropagation() just to not also toggle a highlight underneath it.
+  // Now it's a toolbox tool like the others: rows only respond to clicks
+  // while "Highlight" is switched on in the toolbar, and existing
+  // highlights stay visible either way — turning the tool off just stops
+  // clicks from doing anything, it doesn't clear what's already painted.
+  const [highlightToolActive, setHighlightToolActive] = useState(false)
   const toggleRowHighlight = (key: string) => {
     setRowHighlights(prev => {
       const next = { ...prev }
@@ -407,6 +422,15 @@ export function InvoicePrintPage() {
       return next
     })
   }
+  // Spread onto whichever row/tr is highlightable — keeps the "only
+  // respond while the tool is active" gating and the "only show a pointer
+  // cursor while it'd actually do something" cursor styling in one place
+  // rather than repeated (and easy to miss a spot on) at each of the six
+  // rows that support it.
+  const highlightRowHandlers = (key: string) => ({
+    onClick: () => { if (highlightToolActive) toggleRowHighlight(key) },
+    className: highlightToolActive ? 'cursor-pointer print:cursor-default' : undefined,
+  })
 
   // Manual page breaks — keyed by item_name (same key each item group is
   // already grouped/rendered under below), so a break is "start a new page
@@ -481,6 +505,16 @@ export function InvoicePrintPage() {
   const groupRefs = useRef<Record<string, HTMLTableSectionElement | null>>({})
   const totalsRef = useRef<HTMLTableSectionElement>(null)
   const notesRef = useRef<HTMLDivElement>(null)
+  // The "+ Add note" button lives inside notesRef's own box (right under
+  // the SYARAT & KETENTUAN list) but is print:hidden — it needs its own
+  // ref so the measurement effect below can subtract it back out, or
+  // notesRef's measured height overstates how tall this block will
+  // actually print by the button's full height, making the tail-spill
+  // check (further down) think notes/closing need more room on the page
+  // than they really do. Concretely: this is what put a false "(continued
+  // on next page)" note right before a closing/signature block that, on
+  // the real printed page, still had room to start right there.
+  const addNoteBtnRef = useRef<HTMLButtonElement>(null)
   const closingRef = useRef<HTMLDivElement>(null)
   const [measured, setMeasured] = useState<{
     top: number; thead: number; groups: Record<string, number>; totals: number; notes: number; closing: number
@@ -568,6 +602,18 @@ export function InvoicePrintPage() {
   // order), and nothing here supports editing an item after the fact
   // (already covered by the real ItemsPage).
   const createItem = itemHooks.useCreate()
+  // Closed by default. This started as an inline panel that always
+  // rendered fully expanded right under the totals table, permanently
+  // pushing SYARAT & KETENTUAN and everything below it down the page even
+  // for the common case of just wanting to look at or print the invoice.
+  // It's now a dropdown grouped into the toolbar with Highlight and the
+  // page-break picker (see the toolbar section), so it costs nothing when
+  // closed and doesn't compete with the document's own layout when open.
+  // Left open across successive adds (handleAddItem's onSuccess only
+  // clears the fields, not this) so someone adding several rows in a row
+  // isn't forced to reopen it each time — it only closes via its own
+  // close button or the toggle button that opened it.
+  const [showAddItemPanel, setShowAddItemPanel] = useState(false)
   const newItemName = useUppercaseField('')
   const newItemSize = useUppercaseField('')
   const [newItemAmount, setNewItemAmount] = useState(1)
@@ -684,12 +730,20 @@ export function InvoicePrintPage() {
     Object.entries(groupRefs.current).forEach(([name, el]) => {
       groupHeights[name] = el?.getBoundingClientRect().height ?? 0
     })
+    // The "+ Add note" button (print:hidden) sits inside notesRef's own
+    // box — subtract its rendered height back out, plus the 8px
+    // margin-top from its own inline style (see addNoteBtnRef's comment
+    // above), so this doesn't count screen-only editing chrome as page
+    // content that has to fit somewhere in the real printed output.
+    const addNoteBtnPx = addNoteBtnRef.current
+      ? addNoteBtnRef.current.getBoundingClientRect().height + 8
+      : 0
     const next = {
       top: topBlockRef.current?.getBoundingClientRect().height ?? 0,
       thead: theadRef.current?.getBoundingClientRect().height ?? 0,
       groups: groupHeights,
       totals: totalsRef.current?.getBoundingClientRect().height ?? 0,
-      notes: notesRef.current?.getBoundingClientRect().height ?? 0,
+      notes: Math.max(0, (notesRef.current?.getBoundingClientRect().height ?? 0) - addNoteBtnPx),
       closing: closingRef.current?.getBoundingClientRect().height ?? 0,
     }
     const changed =
@@ -841,21 +895,37 @@ export function InvoicePrintPage() {
     // whatever follows it naturally continues on that same fresh page, so
     // there's exactly one real seam to mark, not one per block.
     //
-    // The drift buffer keeps growing across into this tail check too — it
-    // carries `consumed` straight over from the item loop above, since
-    // the accumulated screen-vs-print drift doesn't reset just because
-    // we've moved from item rows to the totals/notes/closing blocks.
+    // The drift buffer's BASIS carries over from the item loop above (the
+    // accumulated screen-vs-print drift doesn't reset just because we've
+    // moved from item rows to the totals/notes/closing blocks) — but,
+    // unlike the item loop, it does NOT keep growing again by each of
+    // THESE three blocks' own height as they're checked in turn. The 18%
+    // scaling is a model of drift compounding across many similar,
+    // individually-imprecise ROWS (see BASE_SLACK_PX/DRIFT_FRACTION's own
+    // comment) — that reasoning holds for a page built from dozens of
+    // table rows, but totals/notes/closing are three large, one-off,
+    // directly-measured blocks, not repeated rows whose per-row noise
+    // would keep compounding. Growing the SAME buffer by each of their
+    // full heights in turn made the buffer checked against `closing`
+    // balloon to nearly 140px on a page with a full item group before it —
+    // comfortably bigger than the ~8px real gap between prediction and an
+    // actual print export, which is exactly what put a false "(continued
+    // on next page)" note before a signature block that had real room to
+    // spare on the physical page. `tailDriftBasis` freezes at whatever
+    // `consumed` was once the item loop ended, and — like `consumed` — is
+    // reset to 0 (a fresh page, zero carried-over drift) whenever a tail
+    // block actually does spill.
     let tailRemaining = remaining
+    let tailDriftBasis = consumed
     ;([['totals', measured.totals], ['notes', measured.notes], ['closing', measured.closing]] as const)
       .forEach(([name, h]) => {
-        const driftBuffer = BASE_SLACK_PX + consumed * DRIFT_FRACTION
+        const driftBuffer = BASE_SLACK_PX + tailDriftBasis * DRIFT_FRACTION
         if (h > 0 && h + driftBuffer > tailRemaining) {
           if (tailSpillsAt === null) tailSpillsAt = name
           tailRemaining = laterPageContentPx
-          consumed = 0
+          tailDriftBasis = 0
         }
         tailRemaining -= h
-        consumed += h
       })
     // predictedTailNewPage only ever needs to answer "does the tail as a
     // whole need a page the last item group didn't already have?" for the
@@ -1053,8 +1123,28 @@ export function InvoicePrintPage() {
           )}
         </span>
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-slate-400 mr-0.5">Click a row to color it:</span>
-          {HIGHLIGHT_PALETTE.map(c => (
+          {/* Same on/off toggle-button pattern as any other tool in this
+              toolbar — pressed state (navy fill) mirrors the manual
+              page-break pills below, rather than inventing a different
+              "active" visual language just for this one control. */}
+          <button
+            type="button"
+            onClick={() => setHighlightToolActive(a => !a)}
+            title={highlightToolActive ? 'Turn off row highlighting' : 'Highlight rows'}
+            className={`px-2 py-1 rounded text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+              highlightToolActive
+                ? 'bg-navy-900 text-white border-navy-900'
+                : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+            }`}
+          >
+            <Highlighter size={13} /> Highlight
+          </button>
+          {/* Color swatches only appear once the tool is actually on —
+              picking a color while the tool is off would be a choice with
+              no visible effect (row clicks are ignored either way), which
+              is exactly the kind of "looks interactive, isn't" state this
+              change is meant to get rid of. */}
+          {highlightToolActive && HIGHLIGHT_PALETTE.map(c => (
             <button
               key={c.value}
               type="button"
@@ -1076,6 +1166,124 @@ export function InvoicePrintPage() {
             >
               Clear
             </button>
+          )}
+        </div>
+        {/* Add Row — grouped here with Highlight and (below) the
+            page-break picker rather than living inline in the document
+            body, where it used to permanently push SYARAT & KETENTUAN and
+            everything after it down the page whenever it was open. Same
+            toggle-button-plus-panel shape as Highlight, except the panel
+            here is a floating dropdown (position:absolute) rather than
+            inline color swatches, since a whole form doesn't fit
+            comfortably as toolbar-row content the way a few swatches do.
+            The dropdown's own onClick stopPropagation keeps typing/
+            clicking inside it from being mistaken for "click outside to
+            close" — there's no document-level outside-click listener here
+            (the toggle button itself is the only way to close it, same as
+            Highlight has no outside-click dismissal either), so this is
+            just cheap insurance against a future outside-click handler
+            swallowing clicks meant for the form. */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowAddItemPanel(a => !a)}
+            title={showAddItemPanel ? 'Close' : 'Add a row to the item table'}
+            className={`px-2 py-1 rounded text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+              showAddItemPanel
+                ? 'bg-navy-900 text-white border-navy-900'
+                : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+            }`}
+          >
+            <Plus size={13} /> Add Row
+          </button>
+          {showAddItemPanel && (
+            <div
+              onClick={e => e.stopPropagation()}
+              className="absolute right-0 mt-2 w-[28rem] space-y-5 bg-white border border-slate-200 rounded-lg shadow-lg p-6 z-20"
+            >
+              <div className="flex justify-between items-center">
+                <span className="text-base font-semibold text-slate-700">Add Row</span>
+                <button
+                  type="button"
+                  onClick={() => setShowAddItemPanel(false)}
+                  className="btn-ghost btn-sm !px-1.5"
+                  title="Close"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              {catalogue.length > 0 && (
+                <FormField label="Pick from Catalogue (optional)">
+                  <div className="relative">
+                    <PackageSearch size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <select className="field pl-8" value={catalogueItemId} onChange={e => handlePickCatalogueItem(e.target.value)}>
+                      <option value="">Type manually instead…</option>
+                      {catalogue.map(c => (
+                        <option key={c.id} value={c.id}>{c.item_name}{c.size ? ` (${c.size})` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Fills in the name, size, and latest catalogue price below — everything stays editable, or just skip this and type the item directly.
+                  </p>
+                </FormField>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Item Name" required>
+                  <input
+                    ref={newItemName.ref}
+                    value={newItemName.value}
+                    onChange={newItemName.onChange}
+                    placeholder="e.g. APRON"
+                    className="field"
+                  />
+                </FormField>
+                <FormField label="Size">
+                  <input
+                    ref={newItemSize.ref}
+                    value={newItemSize.value}
+                    onChange={newItemSize.onChange}
+                    placeholder="e.g. S, M, L"
+                    className="field"
+                  />
+                </FormField>
+                <FormField label="Qty" required>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={newItemAmount || ''}
+                    onChange={e => {
+                      const digits = e.target.value.replace(/\D/g, '')
+                      setNewItemAmount(digits === '' ? 0 : Math.trunc(Number(digits)))
+                    }}
+                    className="field"
+                  />
+                </FormField>
+                <FormField label="Unit Price (Rp)" required>
+                  <input
+                    className="field font-mono"
+                    type="text"
+                    inputMode="numeric"
+                    ref={newItemPriceField.ref}
+                    value={newItemPriceField.display}
+                    onChange={newItemPriceField.onChange}
+                  />
+                </FormField>
+              </div>
+              <div className="bg-slate-50 rounded-lg px-5 py-4 flex justify-between items-center">
+                <span className="text-base text-slate-500">Subtotal</span>
+                <span className="font-mono font-semibold text-lg">{formatRp(newItemAmount * newItemPrice)}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddItem}
+                disabled={createItem.isPending || !newItemName.value.trim()}
+                className="btn-primary w-full flex items-center justify-center gap-1.5 !py-3 !text-base"
+              >
+                <Plus size={14} /> {createItem.isPending ? 'Adding…' : 'Add Row'}
+              </button>
+            </div>
           )}
         </div>
         {/* Per-invoice, persisted via PaperFormatStore — see its own
@@ -1345,8 +1553,7 @@ export function InvoicePrintPage() {
                   the item groups below it. Clickable like the rows below
                   it, so it can be picked out with a color too. */}
               <tr
-                onClick={() => toggleRowHighlight('company')}
-                className="cursor-pointer print:cursor-default"
+                {...highlightRowHandlers('company')}
                 style={{ background: rowHighlights['company'] }}
               >
                 {/* height here is a MINIMUM, not a fixed/max height, in
@@ -1537,8 +1744,7 @@ export function InvoicePrintPage() {
                     return (
                       <tr
                         key={key}
-                        onClick={() => toggleRowHighlight(key)}
-                        className="cursor-pointer print:cursor-default"
+                        {...highlightRowHandlers(key)}
                         style={{ background: rowHighlights[key] }}
                       >
                         {/* height is a minimum here too (see the identical
@@ -1578,7 +1784,7 @@ export function InvoicePrintPage() {
                       const isLastGapRow = gapIdx === totalGapRows - 1
                       const cellStyle = { border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, background: rowHighlights[key] }
                       return (
-                        <tr key={key} onClick={() => toggleRowHighlight(key)} className="cursor-pointer print:cursor-default">
+                        <tr key={key} {...highlightRowHandlers(key)}>
                           <td style={cellStyle} />
                           <td style={cellStyle} />
                           <td style={cellStyle} />
@@ -1699,8 +1905,7 @@ export function InvoicePrintPage() {
             <tbody ref={totalsRef} style={{ pageBreakInside: 'avoid' }}>
               {/* Total row */}
               <tr
-                onClick={() => toggleRowHighlight('total')}
-                className="cursor-pointer print:cursor-default"
+                {...highlightRowHandlers('total')}
                 style={{ background: rowHighlights['total'] }}
               >
                 {/* Blank spacer over NO/KETERANGAN/SIZE. Top border stays —
@@ -1732,7 +1937,7 @@ export function InvoicePrintPage() {
                   selected — click again with the same swatch to go back
                   to the automatic behavior. */}
               {invoice.down_payment != null && invoice.down_payment > 0 ? (
-                <tr onClick={() => toggleRowHighlight('dp')} className="cursor-pointer print:cursor-default">
+                <tr {...highlightRowHandlers('dp')}>
                   {/* Blank spacer over NO/KETERANGAN/SIZE — same
                       border-style:'hidden' technique as the TOTAL row's
                       spacer above, so no line bleeds through from either
@@ -1788,7 +1993,7 @@ export function InvoicePrintPage() {
               )}
 
               {/* Pelunasan row — same click-to-override behavior as DP above. */}
-              <tr onClick={() => toggleRowHighlight('pelunasan')} className="cursor-pointer print:cursor-default">
+              <tr {...highlightRowHandlers('pelunasan')}>
                 <td style={{ padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', borderTopStyle: 'hidden', borderBottomStyle: 'hidden' }} colSpan={3}>
                   {/* "J/T" (jatuh tempo = due date) — pre-filled from
                       invoice.due_date (see the init effect near the top of
@@ -1863,97 +2068,32 @@ export function InvoicePrintPage() {
               strong={false}
             />
           )}
-          {/* Add-item panel — print:hidden, and deliberately placed
-              directly under the table it adds to rather than up in the
-              toolbar, so it's obvious which table a new row lands in.
-              Only item name is required; size/qty/price default to blank/
-              1/0 the same way a fresh row in ItemsPage's own form would,
-              since a placeholder line is still often useful even before
-              every field is filled in. Laid out the same way
-              OrderDetailPage.tsx's own ItemForm is (FormField-labeled
-              grid, catalogue picker on top, a Subtotal strip before the
-              action button) rather than this panel's previous
-              single-row-of-tiny-inputs shape, so a form the person
-              already knows from adding items there doesn't look like a
-              completely different control here. */}
-          <div className="print:hidden space-y-4" style={{ marginTop: '8px', background: '#f8fafc', borderRadius: '6px', padding: '16px' }}>
-            {catalogue.length > 0 && (
-              <FormField label="Pick from Catalogue (optional)">
-                <div className="relative">
-                  <PackageSearch size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                  <select className="field pl-8" value={catalogueItemId} onChange={e => handlePickCatalogueItem(e.target.value)}>
-                    <option value="">Type manually instead…</option>
-                    {catalogue.map(c => (
-                      <option key={c.id} value={c.id}>{c.item_name}{c.size ? ` (${c.size})` : ''}</option>
-                    ))}
-                  </select>
-                </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  Fills in the name, size, and latest catalogue price below — everything stays editable, or just skip this and type the item directly.
-                </p>
-              </FormField>
-            )}
-            <div className="grid grid-cols-2 gap-3">
-              <FormField label="Item Name" required>
-                <input
-                  ref={newItemName.ref}
-                  value={newItemName.value}
-                  onChange={newItemName.onChange}
-                  placeholder="e.g. APRON"
-                  className="field"
-                />
-              </FormField>
-              <FormField label="Size">
-                <input
-                  ref={newItemSize.ref}
-                  value={newItemSize.value}
-                  onChange={newItemSize.onChange}
-                  placeholder="e.g. S, M, L"
-                  className="field"
-                />
-              </FormField>
-              <FormField label="Qty" required>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={newItemAmount || ''}
-                  onChange={e => {
-                    const digits = e.target.value.replace(/\D/g, '')
-                    setNewItemAmount(digits === '' ? 0 : Math.trunc(Number(digits)))
-                  }}
-                  className="field"
-                />
-              </FormField>
-              <FormField label="Unit Price (Rp)" required>
-                <input
-                  className="field font-mono"
-                  type="text"
-                  inputMode="numeric"
-                  ref={newItemPriceField.ref}
-                  value={newItemPriceField.display}
-                  onChange={newItemPriceField.onChange}
-                />
-              </FormField>
-            </div>
-            <div className="bg-white rounded-lg px-4 py-3 flex justify-between items-center">
-              <span className="text-sm text-slate-500">Subtotal</span>
-              <span className="font-mono font-semibold">{formatRp(newItemAmount * newItemPrice)}</span>
-            </div>
-            <button
-              type="button"
-              onClick={handleAddItem}
-              disabled={createItem.isPending || !newItemName.value.trim()}
-              className="btn-primary flex items-center gap-1.5"
-            >
-              <Plus size={14} /> {createItem.isPending ? 'Adding…' : 'Add Row'}
-            </button>
-          </div>
+          {/* Add Row moved up into the toolbar (next to Highlight) as a
+              dropdown — see the toolbar section near the top of this
+              component. It used to live here, inline under the table,
+              permanently pushing SYARAT & KETENTUAN down the page whenever
+              it was open; now it's grouped with the other toolbox controls
+              instead of being the one editing feature living inside the
+              document body itself. */}
 
-          {/* Notes */}
-          <div ref={notesRef} style={{ marginTop: '24px', fontSize: `${BASE_FONT_PX}px`, pageBreakInside: 'avoid' }}>
+          {/* Notes — kept on the tighter side (marginTop, the list's own
+              lineHeight, and the payment box's marginTop below are each a
+              bit smaller than they'd read most comfortably on their own)
+              specifically so this whole block has a real shot at landing
+              back on page 1 instead of spilling onto an otherwise-empty
+              page 2 by itself. A fixed reduction rather than a measured/
+              dynamic one on purpose: this file already tried shrinking
+              content to force a better fit once before (see the Multi-page
+              policy comment at the top of this file) — that fed its own
+              measurement back into the very layout being measured and
+              oscillated forever. A flat, unconditional value has no
+              measurement to feed back into, so it can't repeat that
+              failure; the tradeoff is it's a fixed amount of reclaimed
+              room, not a guarantee this section always lands on page 1 for
+              every invoice. */}
+          <div ref={notesRef} style={{ marginTop: '18px', fontSize: `${BASE_FONT_PX}px`, pageBreakInside: 'avoid' }}>
             <div style={{ fontWeight: 'bold', textDecoration: 'underline', marginBottom: '4px' }}>SYARAT & KETENTUAN :</div>
-            <ol style={{ margin: 0, paddingLeft: '16px', lineHeight: '1.8' }}>
+            <ol style={{ margin: 0, paddingLeft: '16px', lineHeight: '1.5' }}>
               {notes.map((note, idx) => (
                 // An empty line stays editable on screen (so clearing text
                 // to retype it doesn't make the row vanish mid-edit) but
@@ -1980,6 +2120,7 @@ export function InvoicePrintPage() {
               ))}
             </ol>
             <button
+              ref={addNoteBtnRef}
               type="button"
               onClick={addNote}
               className="print:hidden btn-secondary flex items-center gap-1.5"
@@ -1997,7 +2138,7 @@ export function InvoicePrintPage() {
                 (still shared with KwitansiPrintPage via useRekening — this
                 isn't a second copy of that data, just a different spot to
                 edit and print it from). */}
-            <div style={{ marginTop: '14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '10px 14px' }}>
+            <div style={{ marginTop: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '10px 14px' }}>
               <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>INFORMASI PEMBAYARAN</div>
               <div>Pembayaran via transfer ke rekening a/n :</div>
               <div style={{ marginTop: '2px' }}>

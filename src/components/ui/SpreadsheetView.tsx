@@ -268,18 +268,18 @@ export function SpreadsheetView<T extends { id: string | number }>({
 
   return (
     <div
-      className="w-full overflow-x-auto bg-white rounded-lg shadow border border-slate-200 flex flex-col"
+      className="w-full overflow-x-auto bg-white rounded-xl shadow-card border border-slate-100 flex flex-col"
       style={{ maxHeight }}
     >
       <div ref={scrollRef} className="overflow-y-auto flex-1 min-h-0">
         <table className="w-full text-sm text-left border-collapse" style={{ tableLayout: 'fixed' }}>
           {colGroup}
-          <thead ref={theadRef} className="bg-slate-50 border-b border-slate-200 sticky top-0 z-20">
+          <thead ref={theadRef} className="bg-slate-50 border-b border-slate-100 sticky top-0 z-20">
             <tr>
               {columns.map((col, idx) => (
                 <th
                   key={idx}
-                  className="px-4 py-3 font-semibold text-slate-600 border-r border-slate-200 last:border-0 bg-slate-50 whitespace-nowrap"
+                  className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider border-r border-slate-100 last:border-0 bg-slate-50 whitespace-nowrap"
                 >
                   {col.header}
                 </th>
@@ -294,7 +294,7 @@ export function SpreadsheetView<T extends { id: string | number }>({
                 <React.Fragment key={groupName}>
                   {groupByKey && (
                     <tr
-                      className="bg-slate-100/95 border-b border-slate-200 sticky z-10"
+                      className="bg-slate-100/95 border-b border-slate-100 sticky z-10"
                       style={{ top: headerHeight }}
                     >
                       <td
@@ -348,7 +348,7 @@ export function SpreadsheetView<T extends { id: string | number }>({
                                 e.preventDefault()
                                 moveFocus(String(row.id), idx, d[0], d[1])
                               }}
-                              className="px-2 py-1 break-words focus:outline-none focus:bg-blue-50/50 rounded-sm"
+                              className="px-2 py-1 break-words focus:outline-none focus:bg-navy-50/50 rounded-sm"
                             >
                               {col.format ? col.format(row[col.key], row) : String(row[col.key])}
                             </div>
@@ -389,7 +389,7 @@ export function SpreadsheetView<T extends { id: string | number }>({
                   ))}
 
                   {calculateSubtotal && (
-                    <tr className="bg-blue-50/30 border-b border-slate-200">
+                    <tr className="bg-navy-50/60 border-b border-slate-100">
                       <td colSpan={columns.length - 1} className="px-4 py-2 text-right font-medium text-slate-600">
                         Subtotal for {groupName}:
                       </td>
@@ -410,12 +410,12 @@ export function SpreadsheetView<T extends { id: string | number }>({
           never requires scrolling down to find, and its own table shares
           colGroup with the one above so columns still line up. */}
       {onCreateRow && (
-        <div className="shrink-0 border-t border-slate-200">
+        <div className="shrink-0 border-t border-slate-100">
           <table className="w-full text-sm text-left border-collapse" style={{ tableLayout: 'fixed' }}>
             {colGroup}
             <tbody>
               {blankRows.length > 0 && (
-                <tr className="bg-slate-50/40 border-b border-slate-200">
+                <tr className="bg-slate-50/40 border-b border-slate-100">
                   <td colSpan={colCount} className="px-4 py-1.5 text-xs font-medium text-slate-400 uppercase tracking-wide">
                     New entries — start typing
                   </td>
@@ -441,7 +441,7 @@ export function SpreadsheetView<T extends { id: string | number }>({
                             e.preventDefault()
                             moveFocus(row.__key, idx, d[0], d[1])
                           }}
-                          className="px-2 py-1 text-slate-400 font-mono text-xs italic focus:outline-none focus:bg-blue-50/50 rounded-sm"
+                          className="px-2 py-1 text-slate-400 font-mono text-xs italic focus:outline-none focus:bg-navy-50/50 rounded-sm"
                         >
                           auto — {getNextId()}
                         </div>
@@ -472,7 +472,7 @@ export function SpreadsheetView<T extends { id: string | number }>({
                             e.preventDefault()
                             moveFocus(row.__key, idx, d[0], d[1])
                           }}
-                          className="px-2 py-1 break-words focus:outline-none focus:bg-blue-50/50 rounded-sm"
+                          className="px-2 py-1 break-words focus:outline-none focus:bg-navy-50/50 rounded-sm"
                         >
                           {col.format
                             ? col.format(row[col.key as string], row as unknown as T)
