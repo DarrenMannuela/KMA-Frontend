@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowLeft, BarChart3, Factory, Receipt, ShoppingBag, Tru
 import { formatRp, Spinner, StatCard } from '@/components/ui'
 import { DivergingBarChart } from '@/components/ui/Charts'
 import { YearNavigator } from '@/components/ui/YearNavigator'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { orderHooks, deliveryHooks, productionHooks, operationHooks, invoiceHooks } from '@/hooks'
 import { isInYear, monthIndexOf, shortMonthLabel } from '@/utils/MonthUtils'
 import type { Invoice, ProductionRow, OperationRow } from '@/types'
@@ -28,6 +29,7 @@ interface MonthRow {
 
 export function YearlyReportPage() {
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const [year, setYear] = useState(new Date().getFullYear())
 
   const orderQuery      = orderHooks.useList()
@@ -201,6 +203,61 @@ export function YearlyReportPage() {
         <div className="px-5 py-4 border-b border-slate-100">
           <h3 className="font-semibold text-navy-900 text-sm">Monthly Breakdown</h3>
         </div>
+        {isMobile ? (
+          // Same 8 columns as the desktop table, reflowed one month per
+          // card — a Month/Orders/Paid/Unpaid/Production/Operations/Total/
+          // Net table is dense even contained in its own scroll area (see
+          // OrderDetailPage's item table for that approach elsewhere);
+          // financial figures specifically are the kind of content people
+          // actually want to read line-by-line, not pan sideways for.
+          <div className="divide-y divide-slate-100">
+            {monthRows.map(r => {
+              const net = (r.invoicedPaid + r.invoicedUnpaid) - (r.productionCost + r.operationsCost)
+              const isCurrent = r.month === currentMonth
+              return (
+                <div key={r.month} className={`p-4 ${isCurrent ? 'bg-gold-50/40' : ''}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-navy-900">
+                      {r.label}
+                      {isCurrent && (
+                        <span className="ml-1.5 text-[9px] font-semibold uppercase tracking-wide text-gold-600 align-middle">
+                          Current
+                        </span>
+                      )}
+                    </span>
+                    <span className={`font-mono font-semibold text-sm ${net >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                      {net >= 0 ? '+' : '-'}{formatRp(Math.abs(net))}
+                    </span>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                    <div className="flex justify-between"><dt className="text-slate-400">Orders</dt><dd>{r.orderCount}</dd></div>
+                    <div className="flex justify-between"><dt className="text-slate-400">Paid</dt><dd className="font-mono text-green-700">{formatRp(r.invoicedPaid)}</dd></div>
+                    <div className="flex justify-between"><dt className="text-slate-400">Unpaid</dt><dd className="font-mono text-red-600">{formatRp(r.invoicedUnpaid)}</dd></div>
+                    <div className="flex justify-between"><dt className="text-slate-400">Production</dt><dd className="font-mono">{formatRp(r.productionCost)}</dd></div>
+                    <div className="flex justify-between"><dt className="text-slate-400">Operations</dt><dd className="font-mono">{formatRp(r.operationsCost)}</dd></div>
+                    <div className="flex justify-between"><dt className="text-slate-400">Total Cost</dt><dd className="font-mono font-semibold">{formatRp(r.productionCost + r.operationsCost)}</dd></div>
+                  </dl>
+                </div>
+              )
+            })}
+            <div className="p-4 bg-navy-900 text-white">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold">Total ({year})</span>
+                <span className={`font-mono font-bold text-sm ${netProfitLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {netProfitLoss >= 0 ? '+' : '-'}{formatRp(Math.abs(netProfitLoss))}
+                </span>
+              </div>
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-navy-200">
+                <div className="flex justify-between"><dt>Orders</dt><dd className="text-white">{yearTotals.orderCount}</dd></div>
+                <div className="flex justify-between"><dt>Paid</dt><dd className="font-mono text-white">{formatRp(yearTotals.invoicedPaid)}</dd></div>
+                <div className="flex justify-between"><dt>Unpaid</dt><dd className="font-mono text-white">{formatRp(yearTotals.invoicedUnpaid)}</dd></div>
+                <div className="flex justify-between"><dt>Production</dt><dd className="font-mono text-white">{formatRp(yearTotals.productionCost)}</dd></div>
+                <div className="flex justify-between"><dt>Operations</dt><dd className="font-mono text-white">{formatRp(yearTotals.operationsCost)}</dd></div>
+                <div className="flex justify-between"><dt>Total Cost</dt><dd className="font-mono font-semibold text-white">{formatRp(yearTotals.productionCost + yearTotals.operationsCost)}</dd></div>
+              </dl>
+            </div>
+          </div>
+        ) : (
         <div className="overflow-x-auto">
           <table className="kma-table">
             <thead>
@@ -268,6 +325,7 @@ export function YearlyReportPage() {
             </tfoot>
           </table>
         </div>
+        )}
       </div>
     </div>
   )

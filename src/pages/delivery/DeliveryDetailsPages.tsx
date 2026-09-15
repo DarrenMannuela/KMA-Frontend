@@ -36,13 +36,18 @@ export function DeliveryDetailPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
+      {/* Header — min-w-0 on the middle block lets its title/badge/meta
+          text shrink and wrap instead of forcing its natural width (the
+          same default flex-item min-width:auto behavior fixed app-wide in
+          App.tsx's AppShell, recurring here locally): without it, this row
+          pushed the Print button straight off the right edge of a phone
+          screen instead of wrapping onto its own line. */}
+      <div className="flex items-center gap-3 flex-wrap">
         <button onClick={() => navigate('/delivery')} className="btn-secondary flex items-center gap-1">
           <ArrowLeft size={14} /> Back
         </button>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-bold text-navy-900">{delivery.id}</h1>
             <span className={`badge text-xs ${isDO ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
               {isDO ? 'Delivery Order' : 'Surat Jalan'}

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { Sidebar } from '@/components/layout/Sidebar'
@@ -37,11 +38,27 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 // ProtectedRoute (that would infinite-redirect).
 function AppShell() {
   const location = useLocation()
+  // Only meaningful below md — see Sidebar's own md:translate-x-0, which
+  // keeps it permanently visible above that breakpoint regardless of this.
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
-      <div className="flex-1 flex flex-col ml-[240px] min-h-screen">
-        <Topbar />
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      {/* min-w-0 is load-bearing, not decorative — a flex item's default
+          min-width is "auto" (its content's own min-content size), NOT 0,
+          so without this a flex-1 item ignores the flex container's actual
+          available width and instead demands at least as much as its
+          widest descendant needs (e.g. a wide table three levels down,
+          even one already wrapped in its own overflow-x-auto). That
+          demand propagates straight up through every unclamped flex
+          ancestor to html/body, which is what made entire pages need
+          horizontal scrolling on a phone even though the offending table
+          had its own scroll container — the container just was never
+          actually constrained to a width narrower than its content in the
+          first place. This single min-w-0 is what makes that constraint
+          real for every page under it. */}
+      <div className="flex-1 flex flex-col md:ml-[240px] min-h-screen min-w-0">
+        <Topbar onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-y-auto bg-slate-50">
           {/* Scoped to routed content only, so Sidebar/Topbar stay usable
               if a page crashes — and keyed off the path so clicking to a

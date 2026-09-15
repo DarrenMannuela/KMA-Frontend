@@ -3,6 +3,7 @@ import { Plus, Pencil, Check, X, Copy, Box } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { FormField } from '@/components/ui'
 import { Modal } from '@/components/ui/Modal'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { deliveryHooks, deliveryItemHooks, useOrderRemainingItems } from '@/hooks'
 import { OrderItemSelect } from './DeliveryOrderItemSelect'
 import type { DeliveryItem, CreateDeliveryItemRequest } from '@/types'
@@ -44,6 +45,7 @@ interface DeliveryItemsManagerProps {
 }
 
 export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) {
+  const isMobile = useIsMobile()
   // isError here matters beyond the usual loading/retry case: a silent
   // failure would leave `deliveries` at [], so `selectedDelivery` resolves
   // to undefined and `isDO`/`orderId` silently fall back to "DO with no
@@ -149,7 +151,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="font-semibold text-navy-900 text-sm">
           {isDO ? 'Box Contents' : 'Documents'} ({items.length})
         </h2>
@@ -158,9 +160,94 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
         </button>
       </div>
 
-      {open && (
-        <div className="card p-4 grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50">
-          <div className="col-span-2 md:col-span-4 -mb-1 space-y-2">
+      {/* On mobile this opens as a popup instead of expanding in place —
+          an inline card here pushed the Recap/Box/Documents list further
+          down the page every time it opened, which read as the existing
+          data shifting/disappearing out from under you rather than a form
+          simply appearing. A Modal overlays instead of displacing, so
+          what's already on screen stays exactly where it was. Desktop
+          keeps the original inline panel (unaffected by this complaint,
+          and there's enough width there for the 4-up grid to read fine
+          without a popup). */}
+      {open && isMobile && (
+        <Modal
+          title={isDO ? (duplicatingFrom ? 'Duplicate Item' : 'Add Item') : (duplicatingFrom ? 'Duplicate Document' : 'Add Document')}
+          onClose={() => setOpen(false)}
+        >
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <span className="inline-flex items-center gap-1.5 text-xs bg-navy-50 text-navy-700 border border-navy-100 rounded-full px-2.5 py-1">
+                Adding to <span className="font-mono font-semibold">{deliveryId}</span>
+                {selectedDelivery && (
+                  <span className="text-navy-400 font-normal"> · {isDO ? 'Delivery Order' : 'Surat Jalan'}</span>
+                )}
+              </span>
+              {duplicatingFrom && (
+                <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-700">
+                  Duplicated from <span className="font-semibold">{duplicatingFrom.item_name}</span> — modify as needed.
+                </div>
+              )}
+            </div>
+
+            {isDO && orderId ? (
+              <OrderItemSelect
+                items={remainingItems}
+                value={quickAdd.item_name ? { item_name: quickAdd.item_name, size: quickAdd.size || null } : null}
+                onSelect={match => setQuickAdd(p => ({
+                  ...p,
+                  item_name: match?.item_name ?? '',
+                  size: match?.size ?? '',
+                  amount: match ? Math.min(p.amount || 1, match.remaining) || 1 : p.amount,
+                }))}
+                missing={missing}
+                label="Item Name"
+              />
+            ) : (
+              <FormField label={isDO ? 'Item Name' : 'Document Name'} required>
+                <input
+                  className={`field ${missing ? '!border-red-400 !ring-red-100' : ''}`}
+                  placeholder={isDO ? 'e.g. Kemeja Server' : 'e.g. Invoice, Mock Up'}
+                  value={quickAdd.item_name}
+                  onChange={e => setQuickAdd(p => ({ ...p, item_name: e.target.value.toUpperCase() }))}
+                />
+              </FormField>
+            )}
+
+            {isDO && !orderId && (
+              <FormField label="Size">
+                <input className="field" placeholder="e.g. S, M, L" value={quickAdd.size}
+                  onChange={e => setQuickAdd(p => ({ ...p, size: e.target.value.toUpperCase() }))} />
+              </FormField>
+            )}
+
+            <FormField label="Amount" required>
+              <input className="field" type="number" min={1} max={maxAmount ?? undefined} value={quickAdd.amount || ''}
+                onChange={e => {
+                  const val = Number(e.target.value)
+                  setQuickAdd(p => ({ ...p, amount: maxAmount != null ? Math.min(val, maxAmount) : val }))
+                }} />
+              {maxAmount != null && <p className="text-xs text-slate-400 mt-1">Max {maxAmount} available</p>}
+            </FormField>
+
+            <FormField label={isDO ? 'Box Number' : 'Package Code (Kode Paket)'}>
+              <input className="field" type="number" min={1} value={quickAdd.box_number ?? ''}
+                placeholder="e.g. 1, 2, 3"
+                onChange={e => setQuickAdd(p => ({ ...p, box_number: Number(e.target.value) || null }))} />
+            </FormField>
+
+            <button className="btn-primary w-full" disabled={create.isPending} onClick={handleAdd}>
+              {create.isPending ? 'Adding…' : isDO ? 'Add Item' : 'Add Document'}
+            </button>
+            <p className="text-xs text-slate-400 text-center">
+              Stays open so you can add the next {isDO ? 'item' : 'document'} right away.
+            </p>
+          </div>
+        </Modal>
+      )}
+
+      {open && !isMobile && (
+        <div className="card p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50">
+          <div className="col-span-1 sm:col-span-2 md:col-span-4 -mb-1 space-y-2">
             <p className="text-xs text-slate-400">
               Adding to this delivery — stays open so you can add the next {isDO ? 'item' : 'document'} right away.
             </p>
@@ -260,28 +347,47 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
 
           {isDO && recap.length > 0 && (
             <div className="card border-2 border-navy-100">
-              <div className="flex items-center justify-between px-4 py-2.5 bg-navy-50 border-b border-navy-100">
+              <div className="flex items-center justify-between px-4 py-3 bg-navy-50 border-b border-navy-100 gap-2 flex-wrap">
                 <h3 className="font-semibold text-navy-900 text-sm">Recap — All Boxes</h3>
                 <span className="text-xs text-navy-500">{boxGroups.length} box{boxGroups.length !== 1 ? 'es' : ''} · {recap.reduce((s, r) => s + r.total, 0)} pcs total</span>
               </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-slate-400 uppercase border-b border-slate-100">
-                    <th className="text-left p-3">Item</th>
-                    <th className="text-left p-3">Size</th>
-                    <th className="text-right p-3">Total Qty</th>
-                  </tr>
-                </thead>
-                <tbody>
+              {isMobile ? (
+                // A scrollable 3-column table still meant scrolling
+                // sideways to read a single number (Total Qty) — a plain
+                // label:value card list reads at a glance instead, the
+                // same reasoning as every other mobile-card conversion
+                // this pass (OrderDetailPage's item table, Yearly
+                // Report's monthly breakdown).
+                <div className="divide-y divide-slate-50">
                   {recap.map(r => (
-                    <tr key={`${r.item_name}|${r.size ?? ''}`} className="border-b border-slate-50 last:border-0">
-                      <td className="p-3 font-medium">{r.item_name}</td>
-                      <td className="p-3">{r.size ?? '—'}</td>
-                      <td className="p-3 text-right font-mono font-semibold">{r.total}</td>
-                    </tr>
+                    <div key={`${r.item_name}|${r.size ?? ''}`} className="flex items-center justify-between gap-3 p-4">
+                      <span className="font-medium">{r.item_name}{r.size ? ` · ${r.size}` : ''}</span>
+                      <span className="font-mono font-semibold shrink-0">{r.total}</span>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[420px]">
+                    <thead>
+                      <tr className="text-xs text-slate-400 uppercase border-b border-slate-100">
+                        <th className="text-left p-3">Item</th>
+                        <th className="text-left p-3">Size</th>
+                        <th className="text-right p-3">Total Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recap.map(r => (
+                        <tr key={`${r.item_name}|${r.size ?? ''}`} className="border-b border-slate-50 last:border-0">
+                          <td className="p-3 font-medium">{r.item_name}</td>
+                          <td className="p-3">{r.size ?? '—'}</td>
+                          <td className="p-3 text-right font-mono font-semibold">{r.total}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
@@ -291,7 +397,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
               const badgeColor = boxKey === 'unassigned' ? 'bg-slate-400' : BOX_BADGE_COLORS[i % BOX_BADGE_COLORS.length]
               return (
                 <div key={boxKey} className="rounded-xl border-2 border-slate-200 overflow-hidden">
-                  <div className={`flex items-center justify-between px-4 py-2.5 text-white ${badgeColor}`}>
+                  <div className={`flex items-center justify-between px-4 py-3 text-white gap-2 flex-wrap ${badgeColor}`}>
                     <div className="flex items-center gap-2.5">
                       <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white/20 font-bold text-xs shrink-0">
                         {boxKey === 'unassigned' ? <Box size={14} /> : boxKey}
@@ -302,60 +408,102 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
                     </div>
                     <span className="text-xs text-white/80">{boxItems.length} item{boxItems.length !== 1 ? 's' : ''} · {boxTotal} pcs</span>
                   </div>
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-xs text-slate-400 uppercase border-b border-slate-100 bg-slate-50">
-                        <th className="text-left p-3">Item</th>
-                        <th className="text-left p-3">Size</th>
-                        <th className="text-right p-3">Amount</th>
-                        <th className="text-right p-3">Box</th>
-                        <th className="p-3" />
-                      </tr>
-                    </thead>
-                    <tbody>
+                  {isMobile ? (
+                    <div className="divide-y divide-slate-50">
                       {boxItems.map(item => (
                         <DeliveryItemRow
                           key={item.id}
                           item={item}
                           isDO={isDO}
+                          isMobile
                           orderId={orderId}
                           onFullEdit={setEditingItem}
                           onDuplicate={openDuplicate}
                         />
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  ) : (
+                    // Same overflow-x-auto-on-the-table-only reasoning as
+                    // the Recap table above — this row has 5 columns
+                    // including a 4-button action group, which the outer
+                    // overflow-hidden card would otherwise clip flush at
+                    // the screen edge on mobile (e.g. cutting off the
+                    // Delete button) rather than making it reachable.
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm min-w-[560px]">
+                        <thead>
+                          <tr className="text-xs text-slate-400 uppercase border-b border-slate-100 bg-slate-50">
+                            <th className="text-left p-3">Item</th>
+                            <th className="text-left p-3">Size</th>
+                            <th className="text-right p-3">Amount</th>
+                            <th className="text-right p-3">Box</th>
+                            <th className="p-3" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {boxItems.map(item => (
+                            <DeliveryItemRow
+                              key={item.id}
+                              item={item}
+                              isDO={isDO}
+                              orderId={orderId}
+                              onFullEdit={setEditingItem}
+                              onDuplicate={openDuplicate}
+                            />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )
             })
           ) : items.length > 0 && (
             <div className="card">
-              <div className="flex items-center justify-between p-3 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center justify-between p-3 border-b border-slate-100 bg-slate-50 gap-2 flex-wrap">
                 <h3 className="font-semibold text-navy-900 text-sm">Documents</h3>
                 <span className="text-xs text-slate-400">{items.length} document{items.length !== 1 ? 's' : ''}</span>
               </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-slate-400 uppercase border-b border-slate-100">
-                    <th className="text-left p-3">Document</th>
-                    <th className="text-right p-3">Amount</th>
-                    <th className="text-right p-3">Package</th>
-                    <th className="p-3" />
-                  </tr>
-                </thead>
-                <tbody>
+              {isMobile ? (
+                <div className="divide-y divide-slate-50">
                   {items.map(item => (
                     <DeliveryItemRow
                       key={item.id}
                       item={item}
                       isDO={isDO}
+                      isMobile
                       orderId={orderId}
                       onFullEdit={setEditingItem}
                       onDuplicate={openDuplicate}
                     />
                   ))}
-                </tbody>
-              </table>
+                </div>
+              ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[480px]">
+                  <thead>
+                    <tr className="text-xs text-slate-400 uppercase border-b border-slate-100">
+                      <th className="text-left p-3">Document</th>
+                      <th className="text-right p-3">Amount</th>
+                      <th className="text-right p-3">Package</th>
+                      <th className="p-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map(item => (
+                      <DeliveryItemRow
+                        key={item.id}
+                        item={item}
+                        isDO={isDO}
+                        orderId={orderId}
+                        onFullEdit={setEditingItem}
+                        onDuplicate={openDuplicate}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              )}
             </div>
           )}
         </>
@@ -379,12 +527,14 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
 function DeliveryItemRow({
   item,
   isDO,
+  isMobile = false,
   orderId,
   onFullEdit,
   onDuplicate,
 }: {
   item: DeliveryItem
   isDO: boolean
+  isMobile?: boolean
   orderId: string | null
   onFullEdit: (item: DeliveryItem) => void
   onDuplicate: (item: DeliveryItem) => void
@@ -412,6 +562,47 @@ function DeliveryItemRow({
   }
 
   if (editing) {
+    if (isMobile) {
+      // Labeled fields instead of the table's bare width-20 inputs — with
+      // a whole card row to work with instead of a cramped table cell,
+      // there's no reason not to spell out what each number means instead
+      // of relying on column position (which doesn't exist here anyway).
+      return (
+        <div className="p-4 bg-navy-50/40">
+          <div className="font-medium mb-3">{item.item_name}{isDO && item.size ? ` · ${item.size}` : ''}</div>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <FormField label="Amount">
+              <input
+                type="number" min={1} max={maxAmount ?? undefined} autoFocus
+                className="field"
+                value={amount}
+                onChange={e => {
+                  const val = Number(e.target.value)
+                  setAmount(maxAmount != null ? Math.min(val, maxAmount) : val)
+                }}
+              />
+            </FormField>
+            <FormField label={isDO ? 'Box' : 'Package'}>
+              <input
+                type="number" min={1}
+                className="field"
+                placeholder="—"
+                value={box_number ?? ''}
+                onChange={e => setBoxnumber(Number(e.target.value) || null)}
+              />
+            </FormField>
+          </div>
+          <div className="flex items-center gap-3">
+            <button className="btn-primary btn-sm flex items-center gap-1" disabled={update.isPending} onClick={save}>
+              <Check size={14} /> Save
+            </button>
+            <button className="btn-secondary btn-sm flex items-center gap-1" onClick={cancelEdit}>
+              <X size={14} /> Cancel
+            </button>
+          </div>
+        </div>
+      )
+    }
     return (
       <tr className="border-b border-slate-50 bg-navy-50/40">
         <td className="p-3 font-medium">{item.item_name}</td>
@@ -447,6 +638,42 @@ function DeliveryItemRow({
           </div>
         </td>
       </tr>
+    )
+  }
+
+  if (isMobile) {
+    return (
+      <div className="p-4">
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-medium">{item.item_name}{isDO && item.size ? ` · ${item.size}` : ''}</span>
+          <span className="font-mono font-semibold shrink-0">{item.amount}</span>
+        </div>
+        <div className="text-xs text-slate-400 mt-1">
+          {isDO ? 'Box' : 'Package'}: {item.box_number ?? '—'}
+        </div>
+        {/* gap-4 (not the table row's tighter gap-3) and slightly larger
+            icons/text — four actions side by side is the single most
+            cramped spot in this whole page on a phone, and it's the one
+            row people actually have to tap accurately, not just read. */}
+        <div className="flex items-center gap-4 mt-3 flex-wrap">
+          <button className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1.5" title="Duplicate"
+            onClick={() => onDuplicate(item)}>
+            <Copy size={14} /> Copy
+          </button>
+          <button className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1.5" title="Edit amount / box"
+            onClick={startEdit}>
+            <Pencil size={14} /> Edit
+          </button>
+          <button className="text-slate-400 hover:text-navy-600 text-xs" title="Change item"
+            onClick={() => onFullEdit(item)}>
+            Change item
+          </button>
+          <button className="text-slate-400 hover:text-red-500 text-xs"
+            onClick={() => del.mutate(item.id)}>
+            Delete
+          </button>
+        </div>
+      </div>
     )
   }
 
@@ -520,9 +747,9 @@ function DeliveryOrderForm({ editing, onClose }: { editing: DeliveryItem; onClos
       <FormField label="Delivery">
         <input className="field font-mono bg-slate-50" readOnly value={form.delivery_id} />
       </FormField>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {isDO && orderId ? (
-          <div className="col-span-2">
+          <div className="col-span-1 sm:col-span-2">
             <OrderItemSelect
               items={remainingItems}
               value={{ item_name: form.item_name, size: form.size || null }}

@@ -159,9 +159,16 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
     }))
   }
 
-  // Picking a contact fills Contact Person / Phone Number from it — same
-  // "touched" idea as everything else here, so it never clobbers a value
-  // you've already typed by hand.
+  // Picking a contact fills Contact Person / Phone Number / Address from
+  // it — same "touched" idea as everything else here, so it never clobbers
+  // a value you've already typed by hand. Address too, now: a ClientContact
+  // carries its own address (a specific PIC can have a different site than
+  // the client's general one — see location_label/address on that type),
+  // which used to sit unused here even though "who's this delivery for"
+  // and "where's it going" are usually the same decision. Only overwrites
+  // when the picked contact actually has an address on file, same as
+  // phone_number already does — a contact with no stored address shouldn't
+  // blank out one someone already typed.
   const handleContactChange = (idStr: string) => {
     const newContactId = idStr ? Number(idStr) : null
     const contact = contacts.find(c => c.id === newContactId)
@@ -170,6 +177,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
       client_contact_id: newContactId,
       contact_person: contact ? contact.name : p.contact_person,
       phone_number: contact?.phone_number ? contact.phone_number : p.phone_number,
+      address: contact?.address ? contact.address.toUpperCase() : p.address,
     }))
   }
 
@@ -373,7 +381,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
             ))}
           </select>
           <p className="text-xs text-slate-400 mt-1">
-            Fills in Contact Person and Phone Number below — still editable, or leave unpicked to type them directly.
+            Fills in Contact Person, Phone Number, and Delivery Address (if this contact has one saved) below — still editable, or leave unpicked to type them directly.
           </p>
         </FormField>
       )}
@@ -388,7 +396,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
           value={form.address} onChange={setAddress} />
       </FormField>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {type === 'DO' && (
           <FormField label="PO Number">
             <UppercaseField className="field font-mono" placeholder="P0000011"

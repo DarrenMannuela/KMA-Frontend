@@ -2,6 +2,7 @@ import { ShoppingBag, Truck, Factory, Wrench, Users, TrendingUp, ArrowUpRight, P
 import { useNavigate } from 'react-router-dom'
 import { formatRp, Spinner } from '@/components/ui'
 import { orderHooks, deliveryHooks, productionHooks, operationHooks, invoiceHooks } from '@/hooks'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { format, isPast, differenceInDays } from 'date-fns'
 import { isInMonth } from '@/utils/MonthUtils'
 import { StackedBarChart } from '@/components/ui/Charts'
@@ -112,6 +113,7 @@ function StackedCostRow({ label, value, icon: Icon, sub }: KpiCardProps) {
 
 export function DashboardPage() {
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const orderQuery      = orderHooks.useList()
   const deliveryQuery   = deliveryHooks.useList()
   const productionQuery = productionHooks.useList()
@@ -271,9 +273,44 @@ export function DashboardPage() {
               View all <ArrowUpRight className="w-3 h-3" />
             </a>
           </div>
-          <div className="overflow-x-auto">
-            <table className="kma-table">
-              {recentOrders.length > 0 && (
+          {recentOrders.length === 0 ? (
+            <div className="flex flex-col items-center py-10 text-slate-300">
+              <Package className="w-8 h-8 mb-2 opacity-40" />
+              <p className="text-sm text-slate-400">No orders yet</p>
+              <p className="text-xs text-slate-300 mt-0.5">Orders will appear here once created</p>
+            </div>
+          ) : isMobile ? (
+            // Cards instead of a 5-column table below md — a table that
+            // wide has no room to breathe at phone width even scrolled
+            // (see AR Receivable Breakdown's identical fix below for the
+            // same reasoning), so each row becomes a compact card instead,
+            // matching the Overdue Invoices card list already just to the
+            // right of this on desktop.
+            <div className="divide-y divide-slate-50">
+              {recentOrders.map((o) => {
+                const status = orderInvoiceStatus(o.id)
+                return (
+                  <button
+                    key={o.id}
+                    onClick={() => navigate(`/orders/${encodeURIComponent(o.id)}`)}
+                    className="w-full flex flex-col gap-1 px-5 py-3 text-left hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="id-chip">{o.id}</span>
+                      <span className={`badge ${status.className}`}>{status.label}</span>
+                    </div>
+                    <div className="font-medium text-navy-900 text-sm truncate">{o.company ?? '—'}</div>
+                    <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+                      <span className="font-mono truncate">{o.po_number ?? '—'}</span>
+                      <span className="whitespace-nowrap shrink-0">{o.date ? format(new Date(o.date), 'dd MMM yyyy') : '—'}</span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="kma-table">
                 <thead>
                   <tr>
                     <th>Order ID</th>
@@ -283,41 +320,31 @@ export function DashboardPage() {
                     <th>Status</th>
                   </tr>
                 </thead>
-              )}
-              <tbody>
-                {recentOrders.length === 0 ? (
-                  <tr>
-                    <td colSpan={5}>
-                      <div className="flex flex-col items-center py-10 text-slate-300">
-                        <Package className="w-8 h-8 mb-2 opacity-40" />
-                        <p className="text-sm text-slate-400">No orders yet</p>
-                        <p className="text-xs text-slate-300 mt-0.5">Orders will appear here once created</p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : recentOrders.map((o) => {
-                  const status = orderInvoiceStatus(o.id)
-                  return (
-                    <tr
-                      key={o.id}
-                      className="cursor-pointer hover:bg-slate-50"
-                      onClick={() => navigate(`/orders/${encodeURIComponent(o.id)}`)}
-                    >
-                      <td><span className="id-chip">{o.id}</span></td>
-                      <td className="font-medium text-navy-900">{o.company ?? '—'}</td>
-                      <td className="font-mono text-xs text-slate-500">{o.po_number ?? '—'}</td>
-                      <td className="text-xs text-slate-500 whitespace-nowrap">
-                        {o.date ? format(new Date(o.date), 'dd MMM yyyy') : '—'}
-                      </td>
-                      <td>
-                        <span className={`badge ${status.className}`}>{status.label}</span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                <tbody>
+                  {recentOrders.map((o) => {
+                    const status = orderInvoiceStatus(o.id)
+                    return (
+                      <tr
+                        key={o.id}
+                        className="cursor-pointer hover:bg-slate-50"
+                        onClick={() => navigate(`/orders/${encodeURIComponent(o.id)}`)}
+                      >
+                        <td><span className="id-chip">{o.id}</span></td>
+                        <td className="font-medium text-navy-900">{o.company ?? '—'}</td>
+                        <td className="font-mono text-xs text-slate-500">{o.po_number ?? '—'}</td>
+                        <td className="text-xs text-slate-500 whitespace-nowrap">
+                          {o.date ? format(new Date(o.date), 'dd MMM yyyy') : '—'}
+                        </td>
+                        <td>
+                          <span className={`badge ${status.className}`}>{status.label}</span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* Right column: this month's chart + overdue invoices + quick links */}
@@ -432,9 +459,48 @@ export function DashboardPage() {
             View all <ArrowUpRight className="w-3 h-3" />
           </a>
         </div>
-        <div className="overflow-x-auto">
-          <table className="kma-table">
-            {arBreakdown.length > 0 && (
+        {arBreakdown.length === 0 ? (
+          <div className="flex flex-col items-center py-10 text-slate-300">
+            <Receipt className="w-8 h-8 mb-2 opacity-40" />
+            <p className="text-sm text-slate-400">No outstanding receivables</p>
+            <p className="text-xs text-slate-300 mt-0.5">Everything's paid up</p>
+          </div>
+        ) : isMobile ? (
+          // Cards instead of a 5-column table below md — see Recent
+          // Orders' identical fix above for why. Amount Due sits next to
+          // the client name (the two numbers people scan first — who, and
+          // how much) with Due Date on its own line below, since that pair
+          // together already fills a phone-width line on its own.
+          <div className="divide-y divide-slate-50">
+            {arBreakdown.slice(0, 6).map(inv => {
+              const overdue = !!inv.due_date && isPast(new Date(inv.due_date))
+              return (
+                <button
+                  key={inv.id}
+                  onClick={() => navigate(`/invoice/${encodeURIComponent(inv.id)}`)}
+                  className="w-full flex flex-col gap-1 px-5 py-3 text-left hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="id-chip font-mono">{inv.id}</span>
+                    <span className={`badge ${TYPE_BADGE[inv.type] ?? 'bg-slate-100 text-slate-600'}`}>
+                      {inv.type === 'dp' ? 'Down Payment' : 'Pelunasan'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-navy-900 text-sm truncate">{inv.kepada_yth}</span>
+                    <span className="currency font-semibold text-sm shrink-0">{formatRp(invoiceAmountDue(inv))}</span>
+                  </div>
+                  <div className={`text-xs ${overdue ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
+                    {inv.due_date ? format(new Date(inv.due_date), 'dd MMM yyyy') : '—'}
+                    {overdue && ' (overdue)'}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="kma-table">
               <thead>
                 <tr>
                   <th>Invoice No.</th>
@@ -444,44 +510,34 @@ export function DashboardPage() {
                   <th>Due Date</th>
                 </tr>
               </thead>
-            )}
-            <tbody>
-              {arBreakdown.length === 0 ? (
-                <tr>
-                  <td colSpan={5}>
-                    <div className="flex flex-col items-center py-10 text-slate-300">
-                      <Receipt className="w-8 h-8 mb-2 opacity-40" />
-                      <p className="text-sm text-slate-400">No outstanding receivables</p>
-                      <p className="text-xs text-slate-300 mt-0.5">Everything's paid up</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : arBreakdown.slice(0, 6).map(inv => {
-                const overdue = !!inv.due_date && isPast(new Date(inv.due_date))
-                return (
-                  <tr
-                    key={inv.id}
-                    className="cursor-pointer hover:bg-slate-50"
-                    onClick={() => navigate(`/invoice/${encodeURIComponent(inv.id)}`)}
-                  >
-                    <td><span className="id-chip font-mono">{inv.id}</span></td>
-                    <td className="font-medium text-navy-900">{inv.kepada_yth}</td>
-                    <td>
-                      <span className={`badge ${TYPE_BADGE[inv.type] ?? 'bg-slate-100 text-slate-600'}`}>
-                        {inv.type === 'dp' ? 'Down Payment' : 'Pelunasan'}
-                      </span>
-                    </td>
-                    <td className="currency font-semibold">{formatRp(invoiceAmountDue(inv))}</td>
-                    <td className={`text-xs ${overdue ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
-                      <span className="whitespace-nowrap">{inv.due_date ? format(new Date(inv.due_date), 'dd MMM yyyy') : '—'}</span>
-                      {overdue && ' (overdue)'}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+              <tbody>
+                {arBreakdown.slice(0, 6).map(inv => {
+                  const overdue = !!inv.due_date && isPast(new Date(inv.due_date))
+                  return (
+                    <tr
+                      key={inv.id}
+                      className="cursor-pointer hover:bg-slate-50"
+                      onClick={() => navigate(`/invoice/${encodeURIComponent(inv.id)}`)}
+                    >
+                      <td><span className="id-chip font-mono">{inv.id}</span></td>
+                      <td className="font-medium text-navy-900">{inv.kepada_yth}</td>
+                      <td>
+                        <span className={`badge ${TYPE_BADGE[inv.type] ?? 'bg-slate-100 text-slate-600'}`}>
+                          {inv.type === 'dp' ? 'Down Payment' : 'Pelunasan'}
+                        </span>
+                      </td>
+                      <td className="currency font-semibold">{formatRp(invoiceAmountDue(inv))}</td>
+                      <td className={`text-xs ${overdue ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
+                        <span className="whitespace-nowrap">{inv.due_date ? format(new Date(inv.due_date), 'dd MMM yyyy') : '—'}</span>
+                        {overdue && ' (overdue)'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
     </div>

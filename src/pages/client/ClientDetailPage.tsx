@@ -47,7 +47,7 @@ function ClientContactForm({ clientId, editing, onClose }: { clientId: number; e
         <UppercaseField className="field" placeholder="e.g. Purchasing Manager" value={form.role ?? ''}
           onChange={v => setForm(p => ({ ...p, role: v || null }))} />
       </FormField>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <FormField label="Phone">
           <input className="field" value={form.phone_number ?? ''}
             onChange={e => setForm(p => ({ ...p, phone_number: e.target.value || null }))} />
@@ -183,7 +183,7 @@ function ClientItemForm({ clientId, editing, onClose }: { clientId: number; edit
       {!editing && (
         <div className="border-t border-slate-100 pt-4 space-y-3">
           <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Initial Price (optional)</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <FormField label="Price">
               <input className="field font-mono" inputMode="numeric" placeholder="e.g. 120,000"
                 value={formatThousands(priceDigits)}

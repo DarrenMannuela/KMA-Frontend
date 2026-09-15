@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Plus, FileText, Copy, Pencil, Building2, PackageSearch, ChevronDown, ChevronRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { FormField, formatRp, UppercaseField } from '@/components/ui'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { orderHooks, itemHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
 import { itemsApi, invoicesApi } from '@/api'
 import type { Item, CreateItemRequest } from '@/types'
@@ -155,7 +156,7 @@ function ItemForm({
           </p>
         </FormField>
       )}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <FormField label="Item Name" required>
           <UppercaseField className="field" placeholder="e.g. Kemeja Server" value={form.item_name}
             onChange={v => setForm(p => ({ ...p, item_name: v }))} />
@@ -207,6 +208,7 @@ export function OrderDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const orderId = decodeURIComponent(id ?? '')
+  const isMobile = useIsMobile()
 
   const { data: order, isLoading: orderLoading, isError: orderError, refetch: refetchOrder } = orderHooks.useGet(orderId)
   const {
@@ -364,9 +366,17 @@ export function OrderDetailPage() {
       </div>
 
       <div className="card">
-        <div className="flex items-center justify-between p-4 border-b border-slate-100">
+        {/* flex-wrap on both this row and the button group below — up to
+            four buttons (Add Item, COD/DP/Pelunasan invoice actions) next
+            to a title never all fit on one line at phone width. Without
+            wrapping, they don't just overflow off-screen (this row has no
+            scroll container of its own) — they overlap each other in
+            place, since a non-wrapping flex row still lets each item keep
+            its own natural size and just spill past the container's
+            edge. */}
+        <div className="flex items-center justify-between gap-2 p-4 border-b border-slate-100 flex-wrap">
           <h2 className="font-semibold text-navy-900">Order Items ({orderItems.length})</h2>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button className="btn-primary flex items-center gap-1" onClick={openAdd}>
               <Plus size={14} /> Add Item
             </button>
@@ -394,7 +404,27 @@ export function OrderDetailPage() {
           </div>
         </div>
 
-        {showForm && (
+        {/* On mobile this opens as a popup instead of expanding in place
+            — an inline panel here pushed the whole item list further down
+            the page every time it opened, reading as the existing data
+            shifting/disappearing out from under you rather than a form
+            simply appearing on top. Desktop keeps the original inline
+            panel — plenty of width there and no such complaint. */}
+        {showForm && isMobile && (
+          <Modal
+            title={editing ? 'Edit Item' : duplicating ? 'Duplicate Item' : 'Add Item'}
+            onClose={closeForm}
+          >
+            <ItemForm
+              orderId={orderId}
+              clientId={order.client_id}
+              editing={editing}
+              prefill={duplicating ?? undefined}
+              onClose={closeForm}
+            />
+          </Modal>
+        )}
+        {showForm && !isMobile && (
           <div className="p-4 border-b border-slate-100 bg-slate-50">
             <ItemForm
               orderId={orderId}
@@ -413,8 +443,96 @@ export function OrderDetailPage() {
             list at all times, however many items there are. The header
             row stays sticky within that scroll area so column labels don't
             scroll away with row 1. */}
-        <div className="max-h-[420px] overflow-y-auto">
-          <table className="w-full text-sm">
+        {isMobile ? (
+          <div className="max-h-[420px] overflow-y-auto divide-y divide-slate-50">
+            {orderItems.length === 0 ? (
+              <p className="text-center text-slate-400 py-8">No items yet — add one above</p>
+            ) : itemGroups.map(group => {
+              const rowActions = (item: Item) => (
+                <div className="flex items-center gap-3 mt-2" onClick={e => e.stopPropagation()}>
+                  <button
+                    className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1"
+                    onClick={() => openDuplicate(item)}
+                    title="Duplicate item"
+                  >
+                    <Copy size={12} /> Copy
+                  </button>
+                  <button
+                    className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1"
+                    onClick={() => openEdit(item)}
+                    title="Edit item"
+                  >
+                    <Pencil size={12} /> Edit
+                  </button>
+                  <button
+                    className="text-slate-400 hover:text-red-500 text-xs disabled:opacity-50"
+                    onClick={() => del.mutate(item.id)}
+                    disabled={del.isPending}
+                  >
+                    Delete
+                  </button>
+                </div>
+              )
+
+              if (group.items.length === 1) {
+                const item = group.items[0]
+                return (
+                  <div key={item.id} className="p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium">{item.item_name}{item.size ? ` · ${item.size}` : ''}</span>
+                      <span className="font-mono font-semibold shrink-0">{formatRp(item.sub_total)}</span>
+                    </div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      {item.amount} × {formatRp(item.price)}
+                    </div>
+                    {rowActions(item)}
+                  </div>
+                )
+              }
+
+              const groupQty = group.items.reduce((s, i) => s + i.amount, 0)
+              const groupSubtotal = group.items.reduce((s, i) => s + i.sub_total, 0)
+              const uniquePrices = new Set(group.items.map(i => i.price))
+              const expanded = expandedGroups.has(group.name)
+
+              return (
+                <div key={group.name}>
+                  <button
+                    type="button"
+                    className="w-full text-left p-4 flex items-center justify-between gap-2 hover:bg-slate-50"
+                    onClick={() => toggleGroup(group.name)}
+                  >
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      {expanded ? <ChevronDown size={14} className="text-slate-400 shrink-0" /> : <ChevronRight size={14} className="text-slate-400 shrink-0" />}
+                      <span className="font-medium truncate">{group.name}</span>
+                      <span className="text-xs text-slate-400 shrink-0">({group.items.length} sizes)</span>
+                    </span>
+                    <span className="text-right shrink-0">
+                      <div className="font-mono font-semibold">{formatRp(groupSubtotal)}</div>
+                      <div className="text-xs text-slate-400">
+                        {groupQty} pcs{uniquePrices.size === 1 ? ` · ${formatRp(group.items[0].price)}` : ''}
+                      </div>
+                    </span>
+                  </button>
+                  {expanded && group.items.map(item => (
+                    <div key={item.id} className="px-4 pb-3 pl-9 bg-slate-50/60">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm">{item.size ?? '—'}</span>
+                        <span className="font-mono font-semibold shrink-0">{formatRp(item.sub_total)}</span>
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        {item.amount} × {formatRp(item.price)}
+                      </div>
+                      {rowActions(item)}
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+        <div className="max-h-[420px] overflow-y-auto overflow-x-auto">
+          <table className="w-full text-sm min-w-[560px]">
             <thead>
               <tr className="text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100 sticky top-0 bg-white z-10">
                 <th className="text-left p-4">Item</th>
@@ -540,6 +658,7 @@ export function OrderDetailPage() {
             </tbody>
           </table>
         </div>
+        )}
         {orderItems.length > 0 && (
           <div className="flex items-center justify-between bg-navy-900 text-white p-4">
             <span className="font-semibold">Total</span>

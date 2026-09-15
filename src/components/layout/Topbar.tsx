@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Zap, AlertCircle, ChevronDown, LogOut, User as UserIcon, KeyRound } from 'lucide-react'
+import { Bell, Zap, AlertCircle, ChevronDown, LogOut, User as UserIcon, KeyRound, Menu } from 'lucide-react'
 import { format } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
@@ -123,7 +123,7 @@ function AccountMenu() {
   )
 }
 
-export function Topbar() {
+export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { pathname } = useLocation()
   const title = titleFor(pathname)
 
@@ -143,13 +143,24 @@ export function Topbar() {
 
   return (
     <header className="bg-white border-b border-slate-100 shrink-0">
-      <div className="h-[60px] flex items-center justify-between px-6">
-        <div>
-          <h2 className="font-display font-semibold text-navy-900 text-base">{title}</h2>
-          <p className="text-slate-400 text-xs font-mono">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
+      <div className="h-[60px] flex items-center justify-between px-6 gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Opens the Sidebar's mobile drawer — md:hidden because the
+              sidebar is permanently visible from that breakpoint up, where
+              this button would have nothing to do. */}
+          <button onClick={onMenuClick} className="md:hidden btn-ghost !px-2 shrink-0" title="Open menu">
+            <Menu className="w-4 h-4" />
+          </button>
+          <div className="min-w-0">
+            <h2 className="font-display font-semibold text-navy-900 text-base truncate">{title}</h2>
+            <p className="text-slate-400 text-xs font-mono truncate">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Backend health */}
+        <div className="flex items-center gap-3 shrink-0">
+          {/* Backend health — label hidden below sm so this stays a small
+              dot instead of competing with the title for space on a phone
+              (see the min-w-0/truncate above); the dot's own color already
+              carries the same live/offline/connecting signal on its own. */}
           <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
             isUp === true  ? 'bg-green-50 text-green-700' :
             isUp === false ? 'bg-red-50 text-red-600'    :
@@ -159,7 +170,9 @@ export function Topbar() {
               isUp === true ? 'bg-green-500 animate-pulse' :
               isUp === false ? 'bg-red-500' : 'bg-slate-400'
             }`} />
-            {isUp === true ? 'Backend live' : isUp === false ? 'Backend offline' : 'Connecting…'}
+            <span className="hidden sm:inline">
+              {isUp === true ? 'Backend live' : isUp === false ? 'Backend offline' : 'Connecting…'}
+            </span>
           </div>
 
           <button className="btn-ghost !px-2">

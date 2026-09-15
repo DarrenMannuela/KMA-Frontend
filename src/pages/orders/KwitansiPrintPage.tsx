@@ -6,6 +6,7 @@ import { ArrowLeft, Printer } from 'lucide-react'
 import { format } from 'date-fns'
 import { invoicesApi, ordersApi } from '@/api'
 import { invoiceHooks } from '@/hooks'
+import { useScaleToFit } from '@/hooks/useScaleToFit'
 import { useRekening } from '@/utils/RekeningStore'
 import { numberToWordsID } from '@/utils/NumberToWordsID'
 
@@ -184,6 +185,13 @@ export function KwitansiPrintPage() {
   const { rekening, setRekening } = useRekening()
   const [method, setMethod] = useState<PaymentMethod>('transfer')
 
+  // "Shrink the whole preview to fit the screen" — see useScaleToFit's own
+  // comment for why this is purely visual and leaves the actual print/
+  // export output untouched. Always on (not gated to a mobile breakpoint)
+  // since the scale is capped at 1 and is a no-op on anything already
+  // wide enough — see InvoicePrintPage.tsx's identical comment.
+  const { containerRef: scaleContainerRef, docRef: scaleDocRef, scale, scaledWidth, scaledHeight } = useScaleToFit(true)
+
   const { data: invoice, isLoading, isError, refetch } = useQuery({
     queryKey: ['invoice', invoiceId],
     queryFn: () => invoicesApi.get(invoiceId),
@@ -324,7 +332,7 @@ export function KwitansiPrintPage() {
   return (
     <div className="min-h-screen bg-slate-100">
       {/* Toolbar — hidden when printing */}
-      <div className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3">
+      <div className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap">
         <button onClick={() => navigate(-1)} className="btn-secondary flex items-center gap-1.5 text-sm">
           <ArrowLeft size={14} /> Back
         </button>
@@ -334,9 +342,29 @@ export function KwitansiPrintPage() {
         </button>
       </div>
 
-      {/* Kwitansi document */}
-      <div className="p-8 print:p-0">
-        <div id="kwitansi" className="bg-white mx-auto shadow-lg print:shadow-none" style={PAGE_STYLE}>
+      {/* Kwitansi document — overflow-x-auto is load-bearing, not
+          decorative. See the identical comment in InvoicePrintPage.tsx
+          for the full reasoning: #kwitansi below is a fixed physical-page
+          width, wider than a phone viewport, and without a scroll
+          container here that width propagates up through this
+          unconstrained div and stretches the toolbar above along with
+          it. print:overflow-visible keeps the real printed/exported
+          output on the browser's native paginated layout, unaffected.
+
+          .scale-wrap additionally shrinks the whole preview to fit
+          whatever width is actually available via useScaleToFit — see
+          InvoicePrintPage.tsx's identical comment for why. */}
+      <div className="p-8 print:p-0 overflow-x-auto print:overflow-visible" ref={scaleContainerRef}>
+        <div
+          className="scale-wrap"
+          style={{ width: scaledWidth || undefined, height: scaledHeight || undefined, overflow: 'hidden' }}
+        >
+        <div
+          id="kwitansi"
+          ref={scaleDocRef}
+          className="bg-white mx-auto shadow-lg print:shadow-none"
+          style={{ ...PAGE_STYLE, transform: `scale(${scale})`, transformOrigin: 'top left' }}
+        >
           {/* Header */}
           <div className="flex items-start justify-between mb-7">
             <div className="flex flex-col items-center">
@@ -451,6 +479,7 @@ export function KwitansiPrintPage() {
             </div>
           </div>
         </div>
+        </div>
       </div>
 
       {/* Print styles */}
@@ -460,7 +489,12 @@ export function KwitansiPrintPage() {
           .print\\:hidden { display: none !important; }
           .print\\:shadow-none { box-shadow: none !important; }
           .print\\:p-0 { padding: 0 !important; }
-          #kwitansi { width: 100% !important; margin: 0 !important; }
+          #kwitansi { width: 100% !important; margin: 0 !important; transform: none !important; }
+          /* Undoes useScaleToFit's mobile-only preview shrink (inline
+             style, hence needing !important here) — printing/exporting
+             must always use the real physical size regardless of what
+             the screen preview happened to be scaled to. */
+          .scale-wrap { width: auto !important; height: auto !important; overflow: visible !important; }
           @page { size: A4; margin: 0; }
           aside { display: none !important; }
           header { display: none !important; }

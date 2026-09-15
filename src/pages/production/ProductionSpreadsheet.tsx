@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { SpreadsheetView, type ColumnDef } from '@/components/ui/SpreadsheetView'
+import { MobileEntryList } from '@/components/ui/MobileEntryList'
 import { NewKasBonDateModal } from '@/components/ui/NewKasBonDateModal'
 import { formatRp } from '@/components/ui'
 import { productionHooks, supplierHooks, useFinanceHeaders } from '@/hooks'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { todayISODate, formatDateShort } from '@/utils/MonthUtils'
 import { SI_UNITS } from '@/utils/Units'
 import { suggestNextKasBonId } from '@/utils/KasBonId'
@@ -175,6 +177,14 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
       // on narrow screens, squeezed the name itself into wrapping onto two
       // lines. The dot stays: it's a fast color-scan aid across the whole
       // column, not a repeat of the group header's own text.
+      //
+      // hideOnCard for the same reason, taken further: MobileEntryList's
+      // card face has even less room than a table cell to spend on
+      // something the group header right above it already said in full
+      // (name AND category there). Still editable in the mobile form
+      // (hideOnCard only hides the card face, not the field) — reassigning
+      // a line to a different supplier still works from a phone.
+      hideOnCard: true,
       format: (val: number) => (
         <span className="inline-flex items-center gap-1.5">
           {supplierColor(Number(val)) && (
@@ -219,89 +229,117 @@ export function ProductionSpreadsheet({ data, defaultSupplierId, groupBySupplier
     ? [col.header_id, col.description, col.material_name, col.amount, col.si_unit, col.price, col.total]
     : [col.header_id, col.description, col.material_name, col.supplier_id, col.amount, col.si_unit, col.price, col.total]
 
+  // Grouping by name string would silently merge two different suppliers
+  // that happen to share a name (e.g. two "Sai Textile" records — one
+  // sablon, one embroidery) into a single group. Group by the actual
+  // supplier_id instead; renderGroupHeader below is what turns that id
+  // back into a readable name + category for display.
+  const groupByKey = groupedByHeader ? (row: ProductionRow) => row.header_id : (row: ProductionRow) => String(row.supplier_id)
+  const renderGroupHeader = groupedByHeader
+    ? (_groupName: string, rows: ProductionRow[]) => {
+        const first = rows[0]
+        return (
+          <>
+            <span className="font-mono">{first.header_id}</span>
+            <span className="text-slate-400 font-normal"> — {first.description || 'No description'}</span>
+            <span className="text-slate-400 font-normal"> · {formatDateShort(first.date)}</span>
+          </>
+        )
+      }
+    : (_groupName: string, rows: ProductionRow[]) => {
+        const supplierId = rows[0].supplier_id
+        const category = supplierCategory(supplierId)
+        const color = supplierColor(supplierId)
+        return (
+          <span className="inline-flex items-center gap-1.5">
+            {color && (
+              <span
+                className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                style={{ backgroundColor: color }}
+                aria-hidden="true"
+              />
+            )}
+            {supplierName(supplierId)}
+            {category && (
+              <span className="text-[10px] font-medium uppercase tracking-wide bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
+                {category}
+              </span>
+            )}
+          </span>
+        )
+      }
+  const emptyRowTemplate = () => ({
+    // Same suggestion Quick Add uses (useKasBonIdSuggestion ->
+    // suggestNextKasBonId) — a fresh row starts pre-filled with the
+    // next Kas Bon number instead of blank, but it's still just a
+    // regular editable field, so typing over it works exactly like
+    // overriding Quick Add's suggestion.
+    header_id: suggestNextKasBonId(headers),
+    description: '',
+    supplier_id: defaultSupplierId ?? suppliers[0]?.id ?? 0,
+    material_name: '',
+    // '' rather than a real 0 — required.every(isFilled) below treats
+    // 0 as already "filled" (it's non-empty/non-null), so a numeric
+    // default let a row graduate into a real record via material_name
+    // alone, with price still untouched. Blank makes the required
+    // check actually mean something; EditableCell's number handling
+    // converts it to a real number the moment it's typed, before the
+    // row can ever submit. The cast is a white lie to TypeScript only —
+    // ProductionRow.price is a real `number`, so this blank sentinel
+    // has to be asserted past that; it never reaches onCreateRow as a
+    // string because required.every(isFilled) blocks submission until
+    // it's been typed over with an actual number.
+    price: '' as unknown as number,
+    si_unit: 'yard',
+    amount: 1,
+    date: todayISODate(),
+  })
+  const onUpdateRow = (id: string, body: ProductionRow) => update.mutate({ id: Number(id), body })
+  const onDeleteRow = (id: string) => del.mutate(Number(id))
+  const isMobile = useIsMobile()
+
   return (
     <>
-    <SpreadsheetView<ProductionRow>
-      data={data}
-      maxHeight="78vh"
-      // Grouping by name string would silently merge two different
-      // suppliers that happen to share a name (e.g. two "Sai Textile"
-      // records — one sablon, one embroidery) into a single group. Group
-      // by the actual supplier_id instead; renderGroupHeader below is what
-      // turns that id back into a readable name + category for display.
-      groupByKey={groupedByHeader ? (row => row.header_id) : (row => String(row.supplier_id))}
-      renderGroupHeader={groupedByHeader
-        ? (_groupName, rows) => {
-            const first = rows[0]
-            return (
-              <>
-                <span className="font-mono">{first.header_id}</span>
-                <span className="text-slate-400 font-normal"> — {first.description || 'No description'}</span>
-                <span className="text-slate-400 font-normal"> · {formatDateShort(first.date)}</span>
-              </>
-            )
-          }
-        : (_groupName, rows) => {
-            const supplierId = rows[0].supplier_id
-            const category = supplierCategory(supplierId)
-            const color = supplierColor(supplierId)
-            return (
-              <span className="inline-flex items-center gap-1.5">
-                {color && (
-                  <span
-                    className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ backgroundColor: color }}
-                    aria-hidden="true"
-                  />
-                )}
-                {supplierName(supplierId)}
-                {category && (
-                  <span className="text-[10px] font-medium uppercase tracking-wide bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
-                    {category}
-                  </span>
-                )}
-              </span>
-            )
-          }}
-      calculateSubtotal={row => row.price * row.amount}
-      keyColumn="id"
-      triggerColumn="material_name"
-      emptyRowTemplate={() => ({
-        // Same suggestion Quick Add uses (useKasBonIdSuggestion ->
-        // suggestNextKasBonId) — a fresh row starts pre-filled with the
-        // next Kas Bon number instead of blank, but it's still just a
-        // regular editable field, so typing over it works exactly like
-        // overriding Quick Add's suggestion.
-        header_id: suggestNextKasBonId(headers),
-        description: '',
-        supplier_id: defaultSupplierId ?? suppliers[0]?.id ?? 0,
-        material_name: '',
-        // '' rather than a real 0 — required.every(isFilled) below treats
-        // 0 as already "filled" (it's non-empty/non-null), so a numeric
-        // default let a row graduate into a real record via material_name
-        // alone, with price still untouched. Blank makes the required
-        // check actually mean something; EditableCell's number handling
-        // converts it to a real number the moment it's typed, before the
-        // row can ever submit. The cast is a white lie to TypeScript only —
-        // ProductionRow.price is a real `number`, so this blank sentinel
-        // has to be asserted past that; it never reaches onCreateRow as a
-        // string because required.every(isFilled) blocks submission until
-        // it's been typed over with an actual number.
-        price: '' as unknown as number,
-        si_unit: 'yard',
-        amount: 1,
-        date: todayISODate(),
-      })}
-      // material_name alone used to be enough to submit a row — price
-      // could still be sitting at its numeric default and slip through
-      // uncaught. Requiring both keeps a row staged in "New entries"
-      // until there's an actual price on it.
-      requiredColumns={['material_name', 'price']}
-      onCreateRow={handleCreateRow}
-      onUpdateRow={(id, body) => update.mutate({ id: Number(id), body })}
-      onDeleteRow={(id) => del.mutate(Number(id))}
-      columns={columns}
-    />
+    {isMobile ? (
+      <MobileEntryList<ProductionRow>
+        data={data}
+        groupByKey={groupByKey}
+        renderGroupHeader={renderGroupHeader}
+        calculateSubtotal={row => row.price * row.amount}
+        keyColumn="id"
+        emptyRowTemplate={emptyRowTemplate}
+        // material_name alone used to be enough to submit a row — price
+        // could still be sitting at its numeric default and slip through
+        // uncaught. Requiring both keeps the form from submitting until
+        // there's an actual price on it.
+        requiredColumns={['material_name', 'price']}
+        onCreateRow={handleCreateRow}
+        onUpdateRow={onUpdateRow}
+        onDeleteRow={onDeleteRow}
+        columns={columns}
+        addLabel="Add Row"
+      />
+    ) : (
+      <SpreadsheetView<ProductionRow>
+        data={data}
+        maxHeight="78vh"
+        groupByKey={groupByKey}
+        renderGroupHeader={renderGroupHeader}
+        calculateSubtotal={row => row.price * row.amount}
+        keyColumn="id"
+        triggerColumn="material_name"
+        emptyRowTemplate={emptyRowTemplate}
+        // material_name alone used to be enough to submit a row — price
+        // could still be sitting at its numeric default and slip through
+        // uncaught. Requiring both keeps a row staged in "New entries"
+        // until there's an actual price on it.
+        requiredColumns={['material_name', 'price']}
+        onCreateRow={handleCreateRow}
+        onUpdateRow={onUpdateRow}
+        onDeleteRow={onDeleteRow}
+        columns={columns}
+      />
+    )}
     {pendingNewKasBon && (
       <NewKasBonDateModal
         headerId={pendingNewKasBon.payload.header_id}

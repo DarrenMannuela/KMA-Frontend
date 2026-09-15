@@ -1,6 +1,8 @@
 import { SpreadsheetView, type ColumnDef } from '@/components/ui/SpreadsheetView'
+import { MobileEntryList } from '@/components/ui/MobileEntryList'
 import { formatRp } from '@/components/ui'
 import { clientItemPriceHooks, type ClientItemPriceRow } from '@/hooks'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { formatDateShort } from '@/utils/MonthUtils'
 import type { ClientItem } from '@/types'
 
@@ -45,6 +47,11 @@ export function ClientItemPriceSpreadsheet({ data, items }: ClientItemPriceSprea
     ...(items.length > 1 ? [{
       key: 'client_item_id' as const, header: 'Item', type: 'select' as const, editable: true,
       options: itemOptions,
+      // Same reasoning as Production's Supplier column: renderGroupHeader
+      // below already shows this exact item's name once per group, so
+      // MobileEntryList shouldn't repeat it on every card underneath.
+      // Still editable in the mobile form.
+      hideOnCard: true,
       format: (val: number) => <span className="font-medium text-navy-900">{itemLabel(Number(val))}</span>,
     }] : []),
     {
@@ -61,32 +68,48 @@ export function ClientItemPriceSpreadsheet({ data, items }: ClientItemPriceSprea
     },
   ]
 
-  return (
+  const groupByKey = (row: ClientItemPriceRow) => String(row.client_item_id)
+  const renderGroupHeader = (_groupName: string, rows: ClientItemPriceRow[]) => (
+    <span className="font-medium">{itemLabel(rows[0].client_item_id)}</span>
+  )
+  const onUpdateRow = (id: string, body: ClientItemPriceRow) => {
+    // Strip the denormalized item_name/size that ride along on the row
+    // for display — only real ClientItemPrice fields go over the wire.
+    const { item_name, size, ...rest } = body as Partial<ClientItemPriceRow>
+    update.mutate({
+      id: Number(id),
+      // Falls back to null, not the raw (possibly '') value — clearing
+      // the date via EditableCell leaves rest.effective_date as '',
+      // and `rest.effective_date : rest.effective_date` would send
+      // that '' straight to the API. Every other place that writes
+      // this same field (ClientItemForm, ItemPriceHikeCalculator)
+      // falls back to null for "no date", so this matches that
+      // instead of introducing a second, inconsistent "empty" value.
+      body: { ...rest, effective_date: rest.effective_date ? new Date(rest.effective_date).toISOString() : null },
+    })
+  }
+  const onDeleteRow = (id: string) => del.mutate(Number(id))
+  const isMobile = useIsMobile()
+
+  return isMobile ? (
+    <MobileEntryList<ClientItemPriceRow>
+      data={data}
+      groupByKey={groupByKey}
+      renderGroupHeader={renderGroupHeader}
+      keyColumn="id"
+      onUpdateRow={onUpdateRow}
+      onDeleteRow={onDeleteRow}
+      columns={columns}
+    />
+  ) : (
     <SpreadsheetView<ClientItemPriceRow>
       data={data}
       maxHeight="60vh"
-      groupByKey={row => String(row.client_item_id)}
-      renderGroupHeader={(_groupName, rows) => (
-        <span className="font-medium">{itemLabel(rows[0].client_item_id)}</span>
-      )}
+      groupByKey={groupByKey}
+      renderGroupHeader={renderGroupHeader}
       keyColumn="id"
-      onUpdateRow={(id, body) => {
-        // Strip the denormalized item_name/size that ride along on the row
-        // for display — only real ClientItemPrice fields go over the wire.
-        const { item_name, size, ...rest } = body as Partial<ClientItemPriceRow>
-        update.mutate({
-          id: Number(id),
-          // Falls back to null, not the raw (possibly '') value — clearing
-          // the date via EditableCell leaves rest.effective_date as '',
-          // and `rest.effective_date : rest.effective_date` would send
-          // that '' straight to the API. Every other place that writes
-          // this same field (ClientItemForm, ItemPriceHikeCalculator)
-          // falls back to null for "no date", so this matches that
-          // instead of introducing a second, inconsistent "empty" value.
-          body: { ...rest, effective_date: rest.effective_date ? new Date(rest.effective_date).toISOString() : null },
-        })
-      }}
-      onDeleteRow={(id) => del.mutate(Number(id))}
+      onUpdateRow={onUpdateRow}
+      onDeleteRow={onDeleteRow}
       columns={columns}
     />
   )

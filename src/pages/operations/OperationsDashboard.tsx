@@ -162,8 +162,8 @@ export function OperationsDashboard({ onOpenSheet, selectedCategory, cursor, onC
       </div>
 
       {quickAddOpen && (
-        <div className="card p-4 grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50">
-          <div className="col-span-2 md:col-span-4 flex items-center justify-between -mb-1">
+        <div className="card p-4 grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50">
+          <div className="col-span-1 md:col-span-4 flex items-center justify-between -mb-1">
             <p className="text-xs text-slate-400">Same Kas Bon ID stays filled in so you can add another cost line.</p>
             <button onClick={handleNewKasBon} className="text-xs text-navy-600 hover:underline shrink-0">
               New Kas Bon
@@ -172,7 +172,7 @@ export function OperationsDashboard({ onOpenSheet, selectedCategory, cursor, onC
 
           {/* Sticky reminder of which Kas Bon new lines are landing on. */}
           {quickAdd.header_id && (
-            <div className="col-span-2 md:col-span-4 -mb-1">
+            <div className="col-span-1 md:col-span-4 -mb-1">
               <span className="inline-flex items-center gap-1.5 text-xs bg-navy-50 text-navy-700 border border-navy-100 rounded-full px-2.5 py-1">
                 Adding to <span className="font-mono font-semibold">{quickAdd.header_id}</span>
                 {quickAdd.category && <span className="text-navy-400">— {quickAdd.category}</span>}

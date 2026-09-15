@@ -200,7 +200,7 @@ function AddUserForm({ onCreated }: { onCreated: (u: AdminUser) => void }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 mb-4 grid grid-cols-2 gap-4">
+    <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
         <label className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Name</label>
         <input
@@ -217,7 +217,7 @@ function AddUserForm({ onCreated }: { onCreated: (u: AdminUser) => void }) {
           placeholder="name@company.com"
         />
       </div>
-      <div className="col-span-2">
+      <div className="col-span-1 sm:col-span-2">
         <label className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Role</label>
         <select
           value={role} onChange={e => setRole(e.target.value as 'admin' | 'staff')}
@@ -234,16 +234,16 @@ function AddUserForm({ onCreated }: { onCreated: (u: AdminUser) => void }) {
           on the auth service). Nothing usable to type in here on
           purpose, so there's nothing left for an admin to accidentally
           mishandle by copy-pasting it somewhere insecure. */}
-      <p className="col-span-2 text-xs text-slate-400 -mt-2">
+      <p className="col-span-1 sm:col-span-2 text-xs text-slate-400 -mt-2">
         They'll get an email with a link to set their own password. The link expires after a couple of days.
       </p>
 
-      {error && <p className="col-span-2 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+      {error && <p className="col-span-1 sm:col-span-2 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
       <button
         type="submit"
         disabled={submitting}
-        className="col-span-2 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-navy-900 text-white text-sm font-semibold hover:bg-navy-800 transition-colors disabled:opacity-60"
+        className="col-span-1 sm:col-span-2 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-navy-900 text-white text-sm font-semibold hover:bg-navy-800 transition-colors disabled:opacity-60"
       >
         {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
         {submitting ? 'Sending invite…' : 'Add user'}

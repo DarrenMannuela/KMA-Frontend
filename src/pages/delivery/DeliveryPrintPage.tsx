@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { format } from 'date-fns'
 import { deliveryApi, deliveryItemApi } from '@/api'
+import { useScaleToFit } from '@/hooks/useScaleToFit'
 import type { Delivery, DeliveryItem } from '@/types'
 
 // Matches the company's paper DO/SJ template: letterhead, a
@@ -91,6 +92,16 @@ export function DeliveryPrintPage() {
 
   const grandTotal = rekapBoxes.reduce((s, b) => s + b.subtotal, 0)
 
+  // "Shrink the whole preview to fit the screen" — see useScaleToFit's own
+  // comment for why this is purely visual and leaves the actual print/
+  // export output untouched. Always on (not gated to a mobile breakpoint)
+  // since the scale is capped at 1 and is a no-op on anything already
+  // wide enough — see InvoicePrintPage.tsx's identical comment. Called
+  // unconditionally (rules-of-hooks) even though the loading/error
+  // returns below fire most renders before the scaled markup near the
+  // bottom is ever reached.
+  const { containerRef: scaleContainerRef, docRef: scaleDocRef, scale, scaledWidth, scaledHeight } = useScaleToFit(true)
+
   if (isLoading || itemsLoading) return <div className="p-8 text-slate-400">Loading…</div>
   // Same distinction made in KwitansiPrintPage/InvoicePrintPage/
   // OrderDetailPage: a failed fetch (network drop, 500, etc.) previously
@@ -126,7 +137,7 @@ export function DeliveryPrintPage() {
   return (
     <div className="min-h-screen bg-slate-100">
       {/* Toolbar — hidden when printing */}
-      <div className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3">
+      <div className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap">
         <button onClick={() => navigate(-1)} className="btn-secondary flex items-center gap-1.5 text-sm">
           <ArrowLeft size={14} /> Back
         </button>
@@ -139,7 +150,44 @@ export function DeliveryPrintPage() {
         </button>
       </div>
 
-      <div className="p-8 print:p-0">
+      {/* Delivery document — overflow-x-auto is load-bearing, not
+          decorative. Same reasoning as InvoicePrintPage.tsx's identical
+          comment: the printed sheet below is a fixed physical-page width,
+          wider than a phone viewport, and without a scroll container here
+          that width would propagate up and stretch the toolbar above
+          along with it. print:overflow-visible keeps the real printed/
+          exported output on the browser's native paginated layout,
+          unaffected.
+
+          .scale-wrap additionally shrinks the whole stack of sheets down
+          to fit whatever width is actually available, as one block, via
+          useScaleToFit — see InvoicePrintPage.tsx's identical comment for
+          why. One scale wrapper around every sheet (rather than one per
+          sheet) keeps
+          their relative spacing/proportions intact, since every sheet
+          shares the same physical width regardless of how many stack up
+          for a given delivery. */}
+      <div className="p-8 print:p-0 overflow-x-auto print:overflow-visible" ref={scaleContainerRef}>
+        <div
+          className="scale-wrap"
+          style={{ width: scaledWidth || undefined, height: scaledHeight || undefined, overflow: 'hidden' }}
+        >
+        <div
+          ref={scaleDocRef}
+          // display:inline-block is load-bearing: unlike InvoicePrintPage/
+          // KwitansiPrintPage (where the scaled ref sits directly on the
+          // fixed-width document itself), this div is a plain wrapper
+          // AROUND each 210mm-wide .delivery-sheet — as an ordinary block
+          // box with no width of its own, it would stretch to fill ITS
+          // parent (.scale-wrap) instead of shrink-wrapping to its actual
+          // 794px-wide children, which made useScaleToFit measure its
+          // available-width-sized box instead of the document's true
+          // width and conclude no scaling was needed at all. inline-block
+          // makes it shrink-to-fit its widest child instead, the same way
+          // #invoice-page-wrap/#kwitansi's own explicit width already did
+          // for those two pages.
+          style={{ display: 'inline-block', transform: `scale(${scale})`, transformOrigin: 'top left' }}
+        >
         {sheets.map((pair, i) => (
           <DeliverySheetPage
             key={pair.map(p => p.boxLabel ?? 'flat').join('+')}
@@ -154,6 +202,8 @@ export function DeliveryPrintPage() {
         {showRekapPage && (
           <RekapSheet delivery={delivery} boxes={rekapBoxes} grandTotal={grandTotal} />
         )}
+        </div>
+        </div>
       </div>
 
       {/* Print styles */}
@@ -164,6 +214,12 @@ export function DeliveryPrintPage() {
           .print\\:shadow-none { box-shadow: none !important; }
           .print\\:p-0 { padding: 0 !important; }
           .delivery-sheet { width: 100% !important; margin: 0 !important; }
+          /* Undoes useScaleToFit's mobile-only preview shrink (inline
+             style, hence needing !important here) — printing/exporting
+             must always use the real physical size regardless of what
+             the screen preview happened to be scaled to. */
+          .scale-wrap { width: auto !important; height: auto !important; overflow: visible !important; }
+          .scale-wrap > div { transform: none !important; display: block !important; }
           .print-page { page-break-after: always; }
           .print-page:last-child { page-break-after: auto; }
           @page { size: A4; margin: 0; }

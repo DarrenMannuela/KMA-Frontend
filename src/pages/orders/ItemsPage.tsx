@@ -81,7 +81,7 @@ function ItemForm({ editing, onClose }: { editing: Item | null; onClose: () => v
           {orders.map(o => <option key={o.id} value={o.id}>{o.id} — {o.company}</option>)}
         </select>
       </FormField>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <FormField label="Item Name" required>
           <UppercaseField className="field" placeholder="e.g. Apron" value={form.item_name}
             onChange={v => setForm(p => ({ ...p, item_name: v }))} />
@@ -130,7 +130,16 @@ function ItemForm({ editing, onClose }: { editing: Item | null; onClose: () => v
 
 export function ItemsPage() {
   const { data, isLoading, isError, refetch } = itemHooks.useList()
+  // Order.company is the display name to use here (not a Client lookup by
+  // client_id) — it's already the denormalized name that's correct whether
+  // this order is linked to a real Client record or just has a typed-in
+  // company, exactly the same convention OrdersPage/InvoiceListPage/etc.
+  // already read it under. Items only carry order_id, not client_id, so
+  // this is the one hop needed to get from an item to a client name at all.
+  const { data: orders = [] } = orderHooks.useList()
   const del = itemHooks.useDelete()
+
+  const clientNameByOrderId = new Map(orders.map(o => [o.id, o.company]))
 
   return (
     <CrudPage<Item>
@@ -144,7 +153,13 @@ export function ItemsPage() {
       columns={[
         { header: 'ID',        key: 'id' },
         { header: 'Order ID',  key: 'order_id', render: r => <span className="font-mono text-xs text-slate-500">{r.order_id}</span> },
-        { header: 'Item',      key: 'item_name', render: r => <span className="font-medium">{r.item_name}</span> },
+        // A synthetic key ('client', not a real Item field) — needed since
+        // Column.key doubles as this column's React list key, and reusing
+        // 'order_id' (the field this actually reads) would collide with
+        // the real Order ID column above. Never read back as row['client']
+        // since render is always provided here.
+        { header: 'Client',    key: 'client',   render: r => clientNameByOrderId.get(r.order_id) ?? '—' },
+        { header: 'Item',      key: 'item_name', primary: true, render: r => <span className="font-medium">{r.item_name}</span> },
         { header: 'Size',      key: 'size',      render: r => r.size ? <span className="badge-slate">{r.size}</span> : '—' },
         { header: 'Qty',       key: 'amount' },
         { header: 'Price',     key: 'price',     render: r => <span className="currency">{formatRp(r.price)}</span> },

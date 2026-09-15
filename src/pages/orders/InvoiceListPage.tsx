@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { FileText, Eye, Receipt } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
+import toast from 'react-hot-toast'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { formatRp } from '@/components/ui'
 import { invoiceHooks } from '@/hooks'
@@ -54,7 +55,37 @@ export function InvoiceListPage() {
     const body = nextStatus === 'paid' && !row.paid_date
       ? { status: nextStatus, paid_date: new Date().toISOString() }
       : { status: nextStatus }
-    update.mutate({ id: row.id, body })
+    update.mutate({ id: row.id, body }, {
+      // Marking Unpaid → Paid is the one direction worth a safety net: the
+      // badge toggles on a single click with no confirmation, so a
+      // mis-click is easy — and unlike the reverse, this one immediately
+      // defaults the row right out of view (statusFilter above defaults to
+      // Unpaid), so "just click the badge again" isn't actually available
+      // without first realizing the row vanished and switching the filter
+      // to find it again. An inline Undo sidesteps all of that: revert
+      // right where the mistake happened. Deliberately a direct mutate
+      // here rather than calling toggleStatus(row) again — `row` is a
+      // stale closure still holding the PRE-toggle status, so re-running
+      // this function's own nextStatus logic against it would compute
+      // 'paid' a second time instead of reverting.
+      onSuccess: () => {
+        if (nextStatus !== 'paid') return
+        toast((t) => (
+          <span className="flex items-center gap-3">
+            Marked as paid.
+            <button
+              className="font-semibold text-navy-300 hover:text-white underline underline-offset-2"
+              onClick={() => {
+                toast.dismiss(t.id)
+                update.mutate({ id: row.id, body: { status: 'unpaid' } })
+              }}
+            >
+              Undo
+            </button>
+          </span>
+        ))
+      },
+    })
   }
 
   return (

@@ -90,7 +90,7 @@ export function SuppliersPage() {
       searchKeys={['supplier_name', 'supplier_category']}
       columns={[
         { header: 'ID',       key: 'id' },
-        { header: 'Name',     key: 'supplier_name',     render: r => <span className="font-medium text-navy-900">{r.supplier_name}</span> },
+        { header: 'Name',     key: 'supplier_name',     primary: true, render: r => <span className="font-medium text-navy-900">{r.supplier_name}</span> },
         { header: 'Category', key: 'supplier_category', render: r => (
           <span className={`badge ${CATEGORY_BADGE[r.supplier_category] ?? 'badge-slate'}`}>
             {CATEGORY_LABELS[r.supplier_category] ?? r.supplier_category}

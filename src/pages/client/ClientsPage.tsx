@@ -69,7 +69,7 @@ export function ClientsPage() {
       searchKeys={['client_name', 'address']}
       columns={[
         { header: 'ID', key: 'id' },
-        { header: 'Client Name', key: 'client_name', render: r => <span className="font-medium text-navy-900">{r.client_name}</span> },
+        { header: 'Client Name', key: 'client_name', primary: true, render: r => <span className="font-medium text-navy-900">{r.client_name}</span> },
         { header: 'Address', key: 'address', render: r => <span className="text-slate-500">{r.address ?? '—'}</span> },
         // Not a real field — an actions-only column that just needs a key
         // CrudPage can use for React's list reconciliation. Deliberately

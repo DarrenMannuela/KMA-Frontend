@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { SpreadsheetView, type ColumnDef } from '@/components/ui/SpreadsheetView'
+import { MobileEntryList } from '@/components/ui/MobileEntryList'
 import { NewKasBonDateModal } from '@/components/ui/NewKasBonDateModal'
 import { formatRp } from '@/components/ui'
 import { operationHooks, useFinanceHeaders } from '@/hooks'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { todayISODate } from '@/utils/MonthUtils'
 import { suggestNextKasBonId } from '@/utils/KasBonId'
 import type { OperationRow, CreateOperationRowRequest } from '@/types'
@@ -114,7 +116,14 @@ export function OperationsSpreadsheet({ data }: OperationsSpreadsheetProps) {
 
   const columns: ColumnDef<OperationRow>[] = [
     { key: 'header_id', header: 'ID', type: 'text', editable: true, width: '110px', placeholder: 'e.g. 01/KB/26', suggestions: headerIdSuggestions, uppercase: true },
-    { key: 'category', header: 'Category', type: 'text', editable: true, placeholder: 'e.g. Transport, Utilities…', suggestions: categorySuggestions, uppercase: true },
+    // hideOnCard: true — this is what the sheet is grouped by (see
+    // groupByKey below), so MobileEntryList's group header already shows
+    // it once per group; repeating it on every card underneath is the
+    // same redundant-with-its-own-group-header pattern already fixed for
+    // Production's Supplier column (see that file's own hideOnCard
+    // comment). Still editable in the mobile form — hideOnCard only hides
+    // the card face, not the field.
+    { key: 'category', header: 'Category', type: 'text', editable: true, placeholder: 'e.g. Transport, Utilities…', suggestions: categorySuggestions, uppercase: true, hideOnCard: true },
     { key: 'item_description', header: 'Description', type: 'text', editable: true, placeholder: 'e.g. Ojek to supplier, Token listrik…', uppercase: true },
     {
       key: 'price', header: 'Amount', type: 'number', editable: true,
@@ -122,56 +131,85 @@ export function OperationsSpreadsheet({ data }: OperationsSpreadsheetProps) {
     },
   ]
 
+  const groupByKey = (row: OperationRow) => row.category || 'Uncategorized'
+  const renderGroupHeader = (groupName: string, rows: OperationRow[]) => (
+    <>
+      <span>{groupName}</span>
+      <span className="text-slate-400 font-normal"> · Rp {rows.reduce((s, r) => s + r.price, 0).toLocaleString('id-ID')}</span>
+    </>
+  )
+  // Same suggestion Quick Add uses (useKasBonIdSuggestion ->
+  // suggestNextKasBonId) — a fresh row starts pre-filled with the next
+  // Kas Bon number instead of blank, but it's still a regular editable
+  // field, so typing over it works exactly like overriding Quick Add's
+  // suggestion.
+  //
+  // price is '' rather than a real 0 for the same reason category is
+  // blank — required.every(isFilled) below treats 0 as already
+  // "filled" (it's non-empty/non-null), so a numeric default would
+  // let a row graduate via item_description alone, with price never
+  // actually touched. EditableCell's number handling converts it to
+  // a real number the moment it's typed, before the row can submit.
+  // The cast is a white lie to TypeScript only — OperationRow.price
+  // is a real `number`, so this blank sentinel has to be asserted
+  // past that; it never reaches onCreateRow as a string because
+  // required.every(isFilled) blocks submission until it's typed over.
+  const emptyRowTemplate = () => ({
+    header_id: suggestNextKasBonId(headers),
+    description: '',
+    category: '',
+    item_description: '',
+    price: '' as unknown as number,
+    date: todayISODate(),
+  })
+  const onUpdateRow = (id: string, body: OperationRow) => update.mutate({ id: Number(id), body })
+  const onDeleteRow = (id: string) => del.mutate(Number(id))
+  const isMobile = useIsMobile()
+
   return (
     <>
-      <SpreadsheetView<OperationRow>
-        data={data}
-        maxHeight="78vh"
-        keyColumn="id"
-        triggerColumn="item_description"
-        groupByKey={row => row.category || 'Uncategorized'}
-        renderGroupHeader={(groupName, rows) => (
-          <>
-            <span>{groupName}</span>
-            <span className="text-slate-400 font-normal"> · Rp {rows.reduce((s, r) => s + r.price, 0).toLocaleString('id-ID')}</span>
-          </>
-        )}
-        calculateSubtotal={row => row.price}
-        // Same suggestion Quick Add uses (useKasBonIdSuggestion ->
-        // suggestNextKasBonId) — a fresh row starts pre-filled with the next
-        // Kas Bon number instead of blank, but it's still a regular editable
-        // field, so typing over it works exactly like overriding Quick Add's
-        // suggestion.
-        //
-        // price is '' rather than a real 0 for the same reason category is
-        // blank — required.every(isFilled) below treats 0 as already
-        // "filled" (it's non-empty/non-null), so a numeric default would
-        // let a row graduate via item_description alone, with price never
-        // actually touched. EditableCell's number handling converts it to
-        // a real number the moment it's typed, before the row can submit.
-        // The cast is a white lie to TypeScript only — OperationRow.price
-        // is a real `number`, so this blank sentinel has to be asserted
-        // past that; it never reaches onCreateRow as a string because
-        // required.every(isFilled) blocks submission until it's typed over.
-        emptyRowTemplate={() => ({
-          header_id: suggestNextKasBonId(headers),
-          description: '',
-          category: '',
-          item_description: '',
-          price: '' as unknown as number,
-          date: todayISODate(),
-        })}
-        // item_description alone used to be enough to submit a row —
-        // Category (what the spend-by-category bars group and filter by)
-        // and Price could still be at their blank/zero defaults and slip
-        // through uncaught. Requiring all three keeps a row staged in "New
-        // entries" until it actually has both.
-        requiredColumns={['item_description', 'category', 'price']}
-        onCreateRow={handleCreateRow}
-        onUpdateRow={(id, body) => update.mutate({ id: Number(id), body })}
-        onDeleteRow={(id) => del.mutate(Number(id))}
-        columns={columns}
-      />
+      {isMobile ? (
+        <MobileEntryList<OperationRow>
+          data={data}
+          keyColumn="id"
+          groupByKey={groupByKey}
+          renderGroupHeader={renderGroupHeader}
+          calculateSubtotal={row => row.price}
+          emptyRowTemplate={emptyRowTemplate}
+          // item_description alone used to be enough to submit a row —
+          // Category (what the spend-by-category bars group and filter by)
+          // and Price could still be at their blank/zero defaults and slip
+          // through uncaught. Requiring all three keeps the form from
+          // submitting until it actually has both.
+          requiredColumns={['item_description', 'category', 'price']}
+          onCreateRow={handleCreateRow}
+          onUpdateRow={onUpdateRow}
+          onDeleteRow={onDeleteRow}
+          columns={columns}
+          addLabel="Add Entry"
+        />
+      ) : (
+        <SpreadsheetView<OperationRow>
+          data={data}
+          maxHeight="78vh"
+          keyColumn="id"
+          triggerColumn="item_description"
+          groupByKey={groupByKey}
+          renderGroupHeader={renderGroupHeader}
+          calculateSubtotal={row => row.price}
+          emptyRowTemplate={emptyRowTemplate}
+          // item_description alone used to be enough to submit a row —
+          // Category (what the spend-by-category bars group and filter by)
+          // and Price could still be at their blank/zero defaults and slip
+          // through uncaught. Requiring all three keeps a row staged in "New
+          // entries" until it actually has both.
+          requiredColumns={['item_description', 'category', 'price']}
+          onCreateRow={handleCreateRow}
+          onUpdateRow={onUpdateRow}
+          onDeleteRow={onDeleteRow}
+          columns={columns}
+        />
+      )}
       {pendingNewKasBon && (
         <NewKasBonDateModal
           headerId={pendingNewKasBon.payload.header_id}

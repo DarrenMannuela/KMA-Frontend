@@ -24,6 +24,18 @@ export interface ColumnDef<T> {
   suggestions?: string[]
   /** Force text input to uppercase as it's typed (e.g. Kas Bon IDs). Only relevant for type="text". */
   uppercase?: boolean
+  /** MobileEntryList only (SpreadsheetView ignores this) — omit this
+   *  column from a card's own face, while still including it as a field
+   *  in the create/edit form. For a column whose value is ALREADY shown
+   *  once in the group header above every card in that group (e.g.
+   *  Production's Supplier column when grouped by supplier — see
+   *  ProductionSpreadsheet's own renderGroupHeader) — repeating it on
+   *  every single card underneath would be the exact same redundant-
+   *  right-next-to-itself pattern already fixed on the desktop table's
+   *  Supplier column, just worse on a card face where space is tighter.
+   *  Still worth keeping editable in the form so reassigning it (e.g.
+   *  moving a line to a different supplier) still works on mobile. */
+  hideOnCard?: boolean
 }
 
 interface SpreadsheetViewProps<T> {

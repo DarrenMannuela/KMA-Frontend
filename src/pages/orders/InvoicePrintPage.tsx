@@ -7,6 +7,7 @@ import { invoicesApi, ordersApi, itemsApi } from '@/api'
 import { formatRp, FormField } from '@/components/ui'
 import { useRekening } from '@/utils/RekeningStore'
 import { itemHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
+import { useScaleToFit } from '@/hooks/useScaleToFit'
 import { usePaperFormat, PAPER_FORMATS, type PaperFormat } from '@/utils/PaperFormatStore'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
 import type { Invoice, Item, Order } from '@/types'
@@ -579,6 +580,18 @@ export function InvoicePrintPage() {
   const { widthMm: pageWidthMm, heightMm: pageHeightMm } = PAPER_FORMATS[paperFormat]
   const pageHeightPx = pageHeightMm * MM_TO_PX
 
+  // "Shrink the whole preview to fit the screen" — see useScaleToFit's own
+  // comment for why this is purely visual and leaves the actual print/
+  // export output untouched. Always on rather than mobile-only: the scale
+  // is capped at 1 (never scales UP), so on anything wide enough to
+  // already fit the real page size — desktop, a tablet, a resized browser
+  // window — it's a no-op and looks exactly as before. Gating this behind
+  // a mobile breakpoint would leave a in-between width (narrower than the
+  // breakpoint's cutoff but still narrower than the document itself, e.g.
+  // many tablets) falling through to the old bare-scroll behavior for no
+  // real reason.
+  const { containerRef: scaleContainerRef, docRef: scaleDocRef, scale, scaledWidth, scaledHeight } = useScaleToFit(true)
+
   const { data: order } = useQuery({
     queryKey: ['order', invoice?.order_id],
     queryFn: () => ordersApi.get(invoice!.order_id),
@@ -1084,8 +1097,15 @@ export function InvoicePrintPage() {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      {/* Toolbar — hidden when printing */}
-      <div className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3">
+      {/* Toolbar — hidden when printing. flex-wrap so this wraps onto
+          multiple lines on a narrow screen instead of overflowing/
+          overlapping — this toolbar has a lot of controls (paper format,
+          Highlight, Add Row, Kwitansi, Print) that never all fit on one
+          line at phone width, unlike on desktop. Only actually takes
+          effect once the toolbar's own width is capped to the viewport —
+          see the overflow-x-auto added to the document wrapper below for
+          why that wasn't already true. */}
+      <div className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap">
         {/* Always the invoice list, not navigate(-1) — this page is
             commonly reached cold (a typed URL, a reopened tab, a
             bookmark), where there's no useful in-app history to go back
@@ -1228,7 +1248,7 @@ export function InvoicePrintPage() {
                   </p>
                 </FormField>
               )}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField label="Item Name" required>
                   <input
                     ref={newItemName.ref}
@@ -1350,9 +1370,51 @@ export function InvoicePrintPage() {
         </div>
       )}
 
-      {/* Invoice document */}
-      <div className="p-8 print:p-0">
-        <div id="invoice-page-wrap" style={{ width: `${pageWidthMm}mm`, position: 'relative' }} className="mx-auto">
+      {/* Invoice document — overflow-x-auto is load-bearing, not
+          decorative. #invoice-page-wrap below is a fixed physical-page
+          width (e.g. 210mm ≈ 794px for A4), which on a phone is wider
+          than the viewport. Without a scroll container to absorb that,
+          this div (a plain block box with no width of its own) grows to
+          fit its child, and — since its parent (this whole page's outer
+          div) has no width constraint either — that oversized width
+          propagates all the way up and stretches the TOOLBAR above into
+          the same width too, which is what made the toolbar's buttons
+          spread out across a wide row that needed horizontal scrolling
+          to even reach, instead of wrapping within the actual screen
+          width the way the flex-wrap added above expects. print:
+          overflow-visible turns this off for the actual printed/exported
+          output, where there's no viewport to scroll within and the
+          browser's native paginated layout is what actually matters (see
+          the Multi-page policy comment at the top of this file).
+
+          The inner .scale-wrap additionally shrinks the whole preview down
+          to fit whatever width is actually available via useScaleToFit (a
+          plain visual transform — see that hook's comment) instead of
+          leaving it at real physical size behind a bare horizontal scroll,
+          which read as messy/cluttered on a phone: you'd land on a page
+          that was mostly off-screen with no visual cue there was more to
+          the right. This scroll container is kept regardless (rather than
+          removed now that it's rarely needed) since scale is capped at 1
+          — a format that's STILL wider than the viewport even after full
+          shrink (shouldn't happen in practice, since 1 is the theoretical
+          max any format needs) falls back to scrolling exactly as
+          before. */}
+      <div className="p-8 print:p-0 overflow-x-auto print:overflow-visible" ref={scaleContainerRef}>
+        <div
+          className="scale-wrap"
+          style={{ width: scaledWidth || undefined, height: scaledHeight || undefined, overflow: 'hidden' }}
+        >
+        <div
+          id="invoice-page-wrap"
+          ref={scaleDocRef}
+          style={{
+            width: `${pageWidthMm}mm`,
+            position: 'relative',
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+          }}
+          className="mx-auto"
+        >
           {/* Page 1 never gets a break marker of its own — those only ever
               mark the START of a page AFTER the first (see the manual/
               predicted markers inside the item table below) — so it's the
@@ -2259,6 +2321,7 @@ export function InvoicePrintPage() {
               what that does and doesn't fix. */}
           </div>
         </div>
+        </div>
       </div>
 
       {/* Print styles */}
@@ -2283,6 +2346,12 @@ export function InvoicePrintPage() {
           .print\\:shadow-none { box-shadow: none !important; }
           .print\\:p-0 { padding: 0 !important; }
           .continuation-note { display: table-row !important; }
+          /* Undoes useScaleToFit's mobile-only preview shrink (inline
+             style, hence needing !important here) — printing/exporting
+             must always use the real physical size regardless of what
+             the screen preview happened to be scaled to. */
+          .scale-wrap { width: auto !important; height: auto !important; overflow: visible !important; }
+          #invoice-page-wrap { transform: none !important; }
 
           /* @page margin was tried twice here before (20mm/20mm/15mm/20mm,
              all four sides at once) as the theoretically-correct way to

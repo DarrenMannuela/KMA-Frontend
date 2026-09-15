@@ -198,7 +198,7 @@ function ItemPriceHikeCalculator({ item, prices }: { item: ClientItem; prices: C
   return (
     <div className="card p-4 mb-4">
       <h3 className="text-sm font-semibold text-slate-700 mb-3">Price Hike Calculator</h3>
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 items-end">
         <FormField label="Last Price">
           <input className="field font-mono bg-slate-50 text-slate-500 cursor-not-allowed" readOnly
             value={last ? `${formatRp(last.price)} (${last.year})` : 'No history yet'} />

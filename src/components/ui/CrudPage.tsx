@@ -3,11 +3,21 @@ import { Plus, Pencil, Trash2, Search, AlertTriangle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog, Spinner, EmptyState } from '@/components/ui'
+import { useIsMobile } from '@/hooks/useIsMobile'
 
 export interface Column<T> {
   header: string
   key: keyof T | string
   render?: (row: T) => React.ReactNode
+  /** MobileEntryList-style mobile cards only (desktop table ignores this)
+   *  — use this column's value as the card's own title line instead of
+   *  defaulting to the first column. Matters when the first column is a
+   *  bare id/number (e.g. Items' row id, Suppliers' id) that reads as an
+   *  unhelpful, meaningless heading on its own — mark the column people
+   *  would actually scan by instead (an item name, a supplier name). Only
+   *  one column should set this; if none do, the first column is still
+   *  the fallback, unchanged from before this existed. */
+  primary?: boolean
 }
 
 interface CrudPageProps<T extends { id: string | number }> {
@@ -89,6 +99,12 @@ export function CrudPage<T extends { id: string | number }>({
     setEditing(row); setModalOpen(true)
   }
   const closeModal = () => { setModalOpen(false); setEditing(null) }
+  const isMobile = useIsMobile()
+  // Which column's value becomes a mobile card's own title line — see
+  // Column.primary's own comment for why a page would mark one explicitly
+  // (a bare id/number as the first column reads as a meaningless heading
+  // otherwise) rather than always defaulting to the first column.
+  const titleKey = columns.find(c => c.primary)?.key ?? columns[0]?.key
 
   return (
     <div className="p-6">
@@ -142,6 +158,52 @@ export function CrudPage<T extends { id: string | number }>({
           </div>
         ) : filtered.length === 0 ? (
           <EmptyState icon={Icon} title={`No ${title.toLowerCase()} yet`} subtitle="Click Add New to create one" />
+        ) : isMobile ? (
+          // Cards instead of an N-column table below md — an arbitrary
+          // column set (this component is shared by Orders/Items/Invoices/
+          // Clients/Suppliers, each with its own columns) has no room to
+          // breathe as a table at phone width; even contained to its own
+          // scroll box (the desktop branch below), reading it means
+          // swiping sideways cell by cell. Same fix already applied to
+          // MobileEntryList/SpreadsheetView and the Dashboard's two
+          // tables — titleKey's column (see its own comment above) reads
+          // as the card's own title line, everything else becomes a
+          // label:value line. Actions move from a dedicated table column
+          // to a row of icons under the content — the same handlers
+          // (openEdit/setConfirmRow/rowActions), just laid out for touch
+          // instead of a hover-revealed table cell.
+          <div className="divide-y divide-slate-100">
+            {filtered.map(row => (
+              <div key={row.id} className="px-5 py-3">
+                <div className="space-y-0.5">
+                  {columns.map((c) => {
+                    const rendered = c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—')
+                    if (c.key === titleKey) {
+                      return <div key={String(c.key)} className="text-sm font-medium text-navy-900">{rendered}</div>
+                    }
+                    return (
+                      <div key={String(c.key)} className="flex items-baseline gap-1.5 text-sm">
+                        <span className="text-slate-400 text-xs shrink-0">{c.header}:</span>
+                        <span className="text-slate-700 truncate">{rendered}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="flex items-center justify-end gap-1 mt-1.5">
+                  {rowActions && rowActions(row)}
+                  <button className="btn-ghost btn-sm !px-2" onClick={() => openEdit(row)}>
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    className="btn-ghost btn-sm !px-1.5 hover:!text-red-600"
+                    onClick={() => setConfirmRow(row)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="overflow-x-auto">
 

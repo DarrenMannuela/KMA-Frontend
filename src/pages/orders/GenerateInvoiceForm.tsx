@@ -197,6 +197,16 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
   // Picking a contact fills Untuk/Telp/Email directly — an explicit user
   // action, so it overwrites those fields outright (same convention as
   // DeliveryPages' handleContactChange) rather than only filling blanks.
+  // Alamat too, now: a ClientContact carries its own address (a specific
+  // PIC can have a different site/office than the client's general
+  // address — see location_label/address on that type) which used to sit
+  // unused here — the form only ever offered the client's own address (via
+  // the effect above and its own "reset to client's address" button), even
+  // though the whole point of picking a specific contact is often "this
+  // shipment/invoice is for THIS person's location." Falls back to
+  // whatever's already in the field when the contact has no address of its
+  // own, same as Telp/Email already do — picking a contact with no stored
+  // address shouldn't blank out a real one someone already typed.
   const handleContactChange = (idStr: string) => {
     const id = idStr ? Number(idStr) : ''
     setContactId(id)
@@ -207,6 +217,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
       untuk: contact.name,
       telp: contact.phone_number ?? p.telp,
       email: contact.email ?? p.email,
+      alamat: contact.address ? contact.address.toUpperCase() : p.alamat,
     }))
   }
 
@@ -378,7 +389,17 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      {/* grid-cols-1 below sm on every one of these grids — a hardcoded
+          grid-cols-2/3 doesn't shrink with its own field content the way
+          a flex row would; at the phone width this modal actually renders
+          at (see OrderDetailPage.tsx's Modal wrap), a fixed 2 or 3 columns
+          left each field around 100-150px wide regardless of what it
+          held, squeezing things as plain as a date picker down to where
+          the day/month/year barely fit. Single-column below sm gives
+          every field the full modal width; sm+ (a wider phone in
+          landscape, tablet, or desktop) has room to actually spend on
+          multiple columns. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <FormField label="Invoice No." required>
           <div className="flex items-center gap-2">
             <UppercaseField className="field font-mono" placeholder="076/KMA/26"
@@ -488,7 +509,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
                 ))}
               </select>
               <p className="text-xs text-slate-400 mt-1">
-                Fills in Untuk, Telp, and Email below — still editable, or leave unpicked to type them directly.
+                Fills in Untuk, Telp, Email, and Alamat (if this contact has one saved) below — still editable, or leave unpicked to type them directly.
               </p>
             </FormField>
           )}
@@ -516,7 +537,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
               </button>
             )}
           </FormField>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FormField label="Email">
               <input className="field" type="email" value={form.email ?? ''} onChange={set('email')} />
             </FormField>
@@ -530,7 +551,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
 
       <div className="border-t border-slate-100 pt-4">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Production Info</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <FormField label="Start Produksi">
             <UppercaseField className="field" value={form.start_produksi ?? ''}
               onChange={v => setForm(p => ({ ...p, start_produksi: v }))} />
@@ -544,7 +565,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
 
       <div className="border-t border-slate-100 pt-4">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Financials</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <FormField label="Total (Rp)">
             <input className="field font-mono" type="text" inputMode="numeric"
               ref={totalField.ref} value={totalField.display} onChange={totalField.onChange} />
@@ -583,7 +604,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
 
       <div className="border-t border-slate-100 pt-4">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Dates</p>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <FormField label="Tanggal Invoice">
             <input className="field" type="date" value={form.tanggal} onChange={set('tanggal')} />
           </FormField>
