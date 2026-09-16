@@ -3,3 +3,11 @@ dist
 .env
 .env.local
 *.local
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# OS
+.DS_Store

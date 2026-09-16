@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Plus, Pencil, Check, X, Copy, Box } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { FormField } from '@/components/ui'
+import { ConfirmDialog, FormField } from '@/components/ui'
 import { Modal } from '@/components/ui/Modal'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { deliveryHooks, deliveryItemHooks, useOrderRemainingItems } from '@/hooks'
@@ -27,6 +27,17 @@ const emptyQuickAddItem = () => ({ item_name: '', size: '', amount: 1, box_numbe
 // source of truth, this is purely a scan-ability aid.
 const BOX_BADGE_COLORS = [
   'bg-navy-900', 'bg-blue-700', 'bg-teal-700', 'bg-purple-700', 'bg-amber-700', 'bg-rose-700',
+]
+// Same six colors, tint-on-white instead of solid-fill-with-white-text —
+// used only on mobile (see the badgeColor/badgeColorMobile split below).
+// A solid dark bar repeated once per box read as the single heaviest
+// element on the whole page once there were several boxes stacked on a
+// phone screen; a light tint with colored text keeps the same at-a-glance
+// distinctness the color-per-box scheme is for for without that weight.
+// Desktop keeps the original solid bars.
+const BOX_BADGE_COLORS_LIGHT = [
+  'bg-navy-50 text-navy-700', 'bg-blue-50 text-blue-700', 'bg-teal-50 text-teal-700',
+  'bg-purple-50 text-purple-700', 'bg-amber-50 text-amber-700', 'bg-rose-50 text-rose-700',
 ]
 
 // Reserves a fixed-height line under every field, whether or not it has
@@ -57,12 +68,16 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
   const { data: allItems = [], isLoading, isError: isItemsError, refetch } = deliveryItemHooks.useList()
   const isError = isDeliveriesError || isItemsError
   const create = deliveryItemHooks.useCreate()
+  const del = deliveryItemHooks.useDelete()
 
   const [open, setOpen] = useState(false)
   const [quickAdd, setQuickAdd] = useState(emptyQuickAddItem())
   const [missing, setMissing] = useState(false)
   const [duplicatingFrom, setDuplicatingFrom] = useState<DeliveryItem | null>(null)
   const [editingItem, setEditingItem] = useState<DeliveryItem | null>(null)
+  // Confirm-before-delete for every item row — see DeliveryItemRow's own
+  // onRequestDelete comment for why this lives here instead of per-row.
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<DeliveryItem | null>(null)
 
   const selectedDelivery = deliveries.find(d => d.id === deliveryId)
   const isDO = (selectedDelivery?.type ?? 'DO') === 'DO'
@@ -346,7 +361,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
           )}
 
           {isDO && recap.length > 0 && (
-            <div className="card border-2 border-navy-100">
+            <div className={`card ${isMobile ? 'border-navy-100' : 'border-2 border-navy-100'}`}>
               <div className="flex items-center justify-between px-4 py-3 bg-navy-50 border-b border-navy-100 gap-2 flex-wrap">
                 <h3 className="font-semibold text-navy-900 text-sm">Recap — All Boxes</h3>
                 <span className="text-xs text-navy-500">{boxGroups.length} box{boxGroups.length !== 1 ? 'es' : ''} · {recap.reduce((s, r) => s + r.total, 0)} pcs total</span>
@@ -395,19 +410,34 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
             boxGroups.map(([boxKey, boxItems], i) => {
               const boxTotal = boxItems.reduce((s, it) => s + it.amount, 0)
               const badgeColor = boxKey === 'unassigned' ? 'bg-slate-400' : BOX_BADGE_COLORS[i % BOX_BADGE_COLORS.length]
+              const badgeColorLight = boxKey === 'unassigned' ? 'bg-slate-100 text-slate-600' : BOX_BADGE_COLORS_LIGHT[i % BOX_BADGE_COLORS_LIGHT.length]
               return (
-                <div key={boxKey} className="rounded-xl border-2 border-slate-200 overflow-hidden">
-                  <div className={`flex items-center justify-between px-4 py-3 text-white gap-2 flex-wrap ${badgeColor}`}>
-                    <div className="flex items-center gap-2.5">
-                      <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white/20 font-bold text-xs shrink-0">
-                        {boxKey === 'unassigned' ? <Box size={14} /> : boxKey}
-                      </span>
-                      <h3 className="font-semibold text-sm">
-                        {boxKey === 'unassigned' ? 'No Box Assigned' : `Box ${boxKey}`}
-                      </h3>
+                <div key={boxKey} className={`rounded-xl overflow-hidden ${isMobile ? 'border border-slate-200' : 'border-2 border-slate-200'}`}>
+                  {isMobile ? (
+                    <div className={`flex items-center justify-between px-4 py-3 gap-2 flex-wrap ${badgeColorLight}`}>
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white/60 font-bold text-xs shrink-0">
+                          {boxKey === 'unassigned' ? <Box size={14} /> : boxKey}
+                        </span>
+                        <h3 className="font-semibold text-sm">
+                          {boxKey === 'unassigned' ? 'No Box Assigned' : `Box ${boxKey}`}
+                        </h3>
+                      </div>
+                      <span className="text-xs opacity-70">{boxItems.length} item{boxItems.length !== 1 ? 's' : ''} · {boxTotal} pcs</span>
                     </div>
-                    <span className="text-xs text-white/80">{boxItems.length} item{boxItems.length !== 1 ? 's' : ''} · {boxTotal} pcs</span>
-                  </div>
+                  ) : (
+                    <div className={`flex items-center justify-between px-4 py-3 text-white gap-2 flex-wrap ${badgeColor}`}>
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white/20 font-bold text-xs shrink-0">
+                          {boxKey === 'unassigned' ? <Box size={14} /> : boxKey}
+                        </span>
+                        <h3 className="font-semibold text-sm">
+                          {boxKey === 'unassigned' ? 'No Box Assigned' : `Box ${boxKey}`}
+                        </h3>
+                      </div>
+                      <span className="text-xs text-white/80">{boxItems.length} item{boxItems.length !== 1 ? 's' : ''} · {boxTotal} pcs</span>
+                    </div>
+                  )}
                   {isMobile ? (
                     <div className="divide-y divide-slate-50">
                       {boxItems.map(item => (
@@ -419,6 +449,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
                           orderId={orderId}
                           onFullEdit={setEditingItem}
                           onDuplicate={openDuplicate}
+                          onRequestDelete={setConfirmDeleteItem}
                         />
                       ))}
                     </div>
@@ -449,6 +480,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
                               orderId={orderId}
                               onFullEdit={setEditingItem}
                               onDuplicate={openDuplicate}
+                              onRequestDelete={setConfirmDeleteItem}
                             />
                           ))}
                         </tbody>
@@ -475,6 +507,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
                       orderId={orderId}
                       onFullEdit={setEditingItem}
                       onDuplicate={openDuplicate}
+                      onRequestDelete={setConfirmDeleteItem}
                     />
                   ))}
                 </div>
@@ -498,6 +531,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
                         orderId={orderId}
                         onFullEdit={setEditingItem}
                         onDuplicate={openDuplicate}
+                        onRequestDelete={setConfirmDeleteItem}
                       />
                     ))}
                   </tbody>
@@ -513,6 +547,14 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
         <Modal title="Change Item" onClose={() => setEditingItem(null)}>
           <DeliveryOrderForm editing={editingItem} onClose={() => setEditingItem(null)} />
         </Modal>
+      )}
+
+      {confirmDeleteItem && (
+        <ConfirmDialog
+          message={`Delete "${confirmDeleteItem.item_name}${confirmDeleteItem.size ? ` (${confirmDeleteItem.size})` : ''}" from this ${isDO ? 'delivery' : 'document list'}?`}
+          onConfirm={() => { del.mutate(confirmDeleteItem.id); setConfirmDeleteItem(null) }}
+          onCancel={() => setConfirmDeleteItem(null)}
+        />
       )}
     </div>
   )
@@ -531,6 +573,7 @@ function DeliveryItemRow({
   orderId,
   onFullEdit,
   onDuplicate,
+  onRequestDelete,
 }: {
   item: DeliveryItem
   isDO: boolean
@@ -538,9 +581,19 @@ function DeliveryItemRow({
   orderId: string | null
   onFullEdit: (item: DeliveryItem) => void
   onDuplicate: (item: DeliveryItem) => void
+  // Confirmation + the actual delete mutation both live in the parent
+  // list, not here — same reason CrudPage's row actions call up to a
+  // shared onDelete rather than each row owning its own confirm dialog:
+  // ConfirmDialog is `position:fixed` and renders correctly regardless of
+  // where in the DOM it's mounted, but this row IS a <tr> in the desktop
+  // branch, and a raw <div> can't legally sit next to <tr> inside
+  // <tbody> — a per-row dialog here would work in practice (React
+  // doesn't parse-and-correct HTML the way a browser parsing a string
+  // would) but trips React DOM's validateDOMNesting dev warning for no
+  // reason when hoisting it one level up avoids the question entirely.
+  onRequestDelete: (item: DeliveryItem) => void
 }) {
   const update = deliveryItemHooks.useUpdate()
-  const del = deliveryItemHooks.useDelete()
   const [editing, setEditing] = useState(false)
   const [amount, setAmount] = useState(item.amount)
   const [box_number, setBoxnumber] = useState(item.box_number)
@@ -669,7 +722,7 @@ function DeliveryItemRow({
             Change item
           </button>
           <button className="text-slate-400 hover:text-red-500 text-xs"
-            onClick={() => del.mutate(item.id)}>
+            onClick={() => onRequestDelete(item)}>
             Delete
           </button>
         </div>
@@ -698,7 +751,7 @@ function DeliveryItemRow({
             Change item
           </button>
           <button className="text-slate-400 hover:text-red-500 text-xs"
-            onClick={() => del.mutate(item.id)}>
+            onClick={() => onRequestDelete(item)}>
             Delete
           </button>
         </div>

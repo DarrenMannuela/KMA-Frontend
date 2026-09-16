@@ -5,8 +5,10 @@ import { ArrowLeft, Printer, Receipt, Plus, PackageSearch, X, Highlighter } from
 import { format } from 'date-fns'
 import { invoicesApi, ordersApi, itemsApi } from '@/api'
 import { formatRp, FormField } from '@/components/ui'
+import { Modal } from '@/components/ui/Modal'
 import { useRekening } from '@/utils/RekeningStore'
 import { itemHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { useScaleToFit } from '@/hooks/useScaleToFit'
 import { usePaperFormat, PAPER_FORMATS, type PaperFormat } from '@/utils/PaperFormatStore'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
@@ -591,6 +593,17 @@ export function InvoicePrintPage() {
   // many tablets) falling through to the old bare-scroll behavior for no
   // real reason.
   const { containerRef: scaleContainerRef, docRef: scaleDocRef, scale, scaledWidth, scaledHeight } = useScaleToFit(true)
+
+  // Unlike the document scale above, the Add Row panel below genuinely
+  // needs a mobile/desktop fork, not just a capped scale: it's a
+  // position:absolute dropdown with a hardcoded w-[28rem] (448px),
+  // anchored to the toggle button's own right edge — on a 390px phone
+  // that's wider than the entire viewport regardless of what's inside it,
+  // and shrinking its width alone wouldn't fix it either, since anchoring
+  // to right-0 off a button that isn't itself pinned to the screen edge
+  // can still push the panel's LEFT edge past x=0. A centered Modal
+  // sidesteps the anchoring problem entirely instead of fighting it.
+  const isMobile = useIsMobile()
 
   const { data: order } = useQuery({
     queryKey: ['order', invoice?.order_id],
@@ -1216,7 +1229,84 @@ export function InvoicePrintPage() {
           >
             <Plus size={13} /> Add Row
           </button>
-          {showAddItemPanel && (
+          {showAddItemPanel && isMobile && (
+            <Modal title="Add Row" onClose={() => setShowAddItemPanel(false)}>
+              <div className="space-y-5">
+                {catalogue.length > 0 && (
+                  <FormField label="Pick from Catalogue (optional)">
+                    <div className="relative">
+                      <PackageSearch size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      <select className="field pl-8" value={catalogueItemId} onChange={e => handlePickCatalogueItem(e.target.value)}>
+                        <option value="">Type manually instead…</option>
+                        {catalogue.map(c => (
+                          <option key={c.id} value={c.id}>{c.item_name}{c.size ? ` (${c.size})` : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Fills in the name, size, and latest catalogue price below — everything stays editable, or just skip this and type the item directly.
+                    </p>
+                  </FormField>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField label="Item Name" required>
+                    <input
+                      ref={newItemName.ref}
+                      value={newItemName.value}
+                      onChange={newItemName.onChange}
+                      placeholder="e.g. APRON"
+                      className="field"
+                    />
+                  </FormField>
+                  <FormField label="Size">
+                    <input
+                      ref={newItemSize.ref}
+                      value={newItemSize.value}
+                      onChange={newItemSize.onChange}
+                      placeholder="e.g. S, M, L"
+                      className="field"
+                    />
+                  </FormField>
+                  <FormField label="Qty" required>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={newItemAmount || ''}
+                      onChange={e => {
+                        const digits = e.target.value.replace(/\D/g, '')
+                        setNewItemAmount(digits === '' ? 0 : Math.trunc(Number(digits)))
+                      }}
+                      className="field"
+                    />
+                  </FormField>
+                  <FormField label="Unit Price (Rp)" required>
+                    <input
+                      className="field font-mono"
+                      type="text"
+                      inputMode="numeric"
+                      ref={newItemPriceField.ref}
+                      value={newItemPriceField.display}
+                      onChange={newItemPriceField.onChange}
+                    />
+                  </FormField>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-5 py-4 flex justify-between items-center">
+                  <span className="text-base text-slate-500">Subtotal</span>
+                  <span className="font-mono font-semibold text-lg">{formatRp(newItemAmount * newItemPrice)}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddItem}
+                  disabled={createItem.isPending || !newItemName.value.trim()}
+                  className="btn-primary w-full flex items-center justify-center gap-1.5 !py-3 !text-base"
+                >
+                  <Plus size={14} /> {createItem.isPending ? 'Adding…' : 'Add Row'}
+                </button>
+              </div>
+            </Modal>
+          )}
+          {showAddItemPanel && !isMobile && (
             <div
               onClick={e => e.stopPropagation()}
               className="absolute right-0 mt-2 w-[28rem] space-y-5 bg-white border border-slate-200 rounded-lg shadow-lg p-6 z-20"

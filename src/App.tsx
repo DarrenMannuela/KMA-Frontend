@@ -1,35 +1,65 @@
-import { useState } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Topbar } from '@/components/layout/Topbar'
-import { DashboardPage } from '@/pages/DashboardPage'
-import { OrdersPage } from '@/pages/orders/OrdersPage'
-import { ItemsPage } from '@/pages/orders/ItemsPage'
-import { InvoicePrintPage } from '@/pages/orders/InvoicePrintPage'
-import { DeliveryPage } from '@/pages/delivery/DeliveryPages'
-import { DeliveryDetailPage } from '@/pages/delivery/DeliveryDetailsPages'
-import { DeliveryPrintPage } from '@/pages/delivery/DeliveryPrintPage'
-import { ProductionPage } from '@/pages/production/ProductionPage'
-import { SuppliersPage } from '@/pages/suppliers/SuppliersPage'
-import { OperationsPage } from '@/pages/operations/OperationsPage'
-import { OrderDetailPage } from '@/pages/orders/OrderDetailPage'
-import { InvoiceListPage } from '@/pages/orders/InvoiceListPage'
-import { KwitansiPrintPage} from '@/pages/orders/KwitansiPrintPage'
-import { ClientsPage } from '@/pages/client/ClientsPage'
-import { ClientDetailPage } from '@/pages/client/ClientDetailPage'
-import { ClientItemDetailPage } from '@/pages/client/ClientItemDetailPage'
-import { YearlyReportPage } from '@/pages/reports/YearlyReportPage'
-import { LoginPage } from '@/pages/auth/LoginPage'
-import { SetPasswordPage } from '@/pages/auth/SetPasswordPage'
-import { ChangePasswordPage } from '@/pages/auth/ChangePasswordPage'
-import { UsersPage } from '@/pages/users/UsersPage'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { AdminRoute } from '@/components/auth/AdminRoute'
 import { MustChangePasswordRoute } from '@/components/auth/MustChangePasswordRoute'
 import { RedirectDirectAccess } from '@/components/auth/RedirectDirectAccess'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+
+// Every page is loaded on demand instead of all at once — this used to be
+// one ~600KB bundle shipped in full to anyone opening the dashboard, print
+// pages/admin/reports included, even though a given visit only ever
+// touches a handful of routes. React.lazy + the two Suspense boundaries
+// below turn each of these into its own chunk, fetched the first time its
+// route is actually visited. Purely a loading-strategy change — nothing
+// about how any of these pages behave is different.
+const DashboardPage = lazy(() => import('@/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
+const OrdersPage = lazy(() => import('@/pages/orders/OrdersPage').then(m => ({ default: m.OrdersPage })))
+const ItemsPage = lazy(() => import('@/pages/orders/ItemsPage').then(m => ({ default: m.ItemsPage })))
+const InvoicePrintPage = lazy(() => import('@/pages/orders/InvoicePrintPage').then(m => ({ default: m.InvoicePrintPage })))
+const DeliveryPage = lazy(() => import('@/pages/delivery/DeliveryPages').then(m => ({ default: m.DeliveryPage })))
+const DeliveryDetailPage = lazy(() => import('@/pages/delivery/DeliveryDetailsPages').then(m => ({ default: m.DeliveryDetailPage })))
+const DeliveryPrintPage = lazy(() => import('@/pages/delivery/DeliveryPrintPage').then(m => ({ default: m.DeliveryPrintPage })))
+const ProductionPage = lazy(() => import('@/pages/production/ProductionPage').then(m => ({ default: m.ProductionPage })))
+const SuppliersPage = lazy(() => import('@/pages/suppliers/SuppliersPage').then(m => ({ default: m.SuppliersPage })))
+const OperationsPage = lazy(() => import('@/pages/operations/OperationsPage').then(m => ({ default: m.OperationsPage })))
+const OrderDetailPage = lazy(() => import('@/pages/orders/OrderDetailPage').then(m => ({ default: m.OrderDetailPage })))
+const InvoiceListPage = lazy(() => import('@/pages/orders/InvoiceListPage').then(m => ({ default: m.InvoiceListPage })))
+const KwitansiPrintPage = lazy(() => import('@/pages/orders/KwitansiPrintPage').then(m => ({ default: m.KwitansiPrintPage })))
+const ClientsPage = lazy(() => import('@/pages/client/ClientsPage').then(m => ({ default: m.ClientsPage })))
+const ClientDetailPage = lazy(() => import('@/pages/client/ClientDetailPage').then(m => ({ default: m.ClientDetailPage })))
+const ClientItemDetailPage = lazy(() => import('@/pages/client/ClientItemDetailPage').then(m => ({ default: m.ClientItemDetailPage })))
+const YearlyReportPage = lazy(() => import('@/pages/reports/YearlyReportPage').then(m => ({ default: m.YearlyReportPage })))
+const LoginPage = lazy(() => import('@/pages/auth/LoginPage').then(m => ({ default: m.LoginPage })))
+const SetPasswordPage = lazy(() => import('@/pages/auth/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })))
+const ChangePasswordPage = lazy(() => import('@/pages/auth/ChangePasswordPage').then(m => ({ default: m.ChangePasswordPage })))
+const UsersPage = lazy(() => import('@/pages/users/UsersPage').then(m => ({ default: m.UsersPage })))
+
+// Full-page variant for the top-level Routes (login, print pages, the
+// AppShell route itself) — nothing else is on screen yet at that point,
+// same visual language as ProtectedRoute's own loading state.
+function FullPageSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-slate-50">
+      <div className="w-8 h-8 rounded-full border-2 border-navy-200 border-t-navy-900 animate-spin" />
+    </div>
+  )
+}
+
+// Scoped variant for routes inside AppShell — Sidebar/Topbar stay put
+// while just the routed content area shows this, instead of the whole
+// screen blanking out on every in-app navigation.
+function ContentSpinner() {
+  return (
+    <div className="flex items-center justify-center py-24">
+      <div className="w-8 h-8 rounded-full border-2 border-navy-200 border-t-navy-900 animate-spin" />
+    </div>
+  )
+}
 
 // Print pages stay outside the Sidebar/Topbar chrome (unchanged from
 // before) — they're meant to be a clean printable page, not the app
@@ -66,6 +96,7 @@ function AppShell() {
               the fallback until a manual reload (see ErrorBoundary's own
               resetKeys comment). */}
           <ErrorBoundary resetKeys={[location.pathname]}>
+          <Suspense fallback={<ContentSpinner />}>
           <Routes>
             <Route path="/"                     element={<DashboardPage />} />
             <Route path="/orders"               element={<OrdersPage />} />
@@ -83,6 +114,7 @@ function AppShell() {
             <Route path="/reports/yearly"                   element={<YearlyReportPage />} />
             <Route path="/admin/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
           </Routes>
+          </Suspense>
           </ErrorBoundary>
         </main>
       </div>
@@ -94,6 +126,7 @@ export default function App() {
   return (
     <AuthProvider>
       <>
+        <Suspense fallback={<FullPageSpinner />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
 
@@ -139,6 +172,7 @@ export default function App() {
             }
           />
         </Routes>
+        </Suspense>
 
         <Toaster
           position="bottom-right"

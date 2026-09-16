@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Plus, X, UserX, UserCheck, Circle, Loader2, AlertTriangle } from 'lucide-react'
+import { Plus, UserX, UserCheck, Circle, Loader2, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { usersApi, UsersApiError } from '@/api/usersApi'
 import type { AdminUser } from '@/api/usersApi'
 import { ConfirmDialog } from '@/components/ui'
+import { Modal } from '@/components/ui/Modal'
+import { useIsMobile } from '@/hooks/useIsMobile'
 
 export function UsersPage() {
+  const isMobile = useIsMobile()
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
   // Distinct from "loaded fine, there just aren't any users" — see
@@ -74,21 +77,29 @@ export function UsersPage() {
           <p className="text-sm text-slate-400">Staff accounts are provisioned here — there's no self-signup.</p>
         </div>
         <button
-          onClick={() => setShowForm(v => !v)}
+          onClick={() => setShowForm(true)}
           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-navy-900 text-white text-sm font-semibold hover:bg-navy-800 transition-colors"
         >
-          {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          {showForm ? 'Cancel' : 'Add user'}
+          <Plus className="w-4 h-4" />
+          Add user
         </button>
       </div>
 
+      {/* Always a popup rather than mobile-only — this is a short, rarely-
+          used admin form, unlike the item-heavy Add flows elsewhere in
+          the app that keep an inline desktop panel because they're
+          reached constantly while looking at the data they're adding to.
+          One consistent behavior is simpler here and matches every plain
+          CrudPage-based Add form already in the app. */}
       {showForm && (
-        <AddUserForm
-          onCreated={(u) => {
-            setUsers(prev => [...prev, u])
-            setShowForm(false)
-          }}
-        />
+        <Modal title="Add User" onClose={() => setShowForm(false)}>
+          <AddUserForm
+            onCreated={(u) => {
+              setUsers(prev => [...prev, u])
+              setShowForm(false)
+            }}
+          />
+        </Modal>
       )}
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-card overflow-hidden">
@@ -105,6 +116,54 @@ export function UsersPage() {
           </div>
         ) : users.length === 0 ? (
           <p className="text-center text-sm text-slate-400 py-12">No users yet.</p>
+        ) : isMobile ? (
+          // The plain 5-column table's outer card uses overflow-hidden for
+          // its rounded corners (same as every other card in this app) —
+          // without a scroll container of its own, a too-wide row just got
+          // silently clipped instead of scrollable, cutting off the
+          // Deactivate/Reactivate button with no visible sign anything was
+          // missing. A card per user sidesteps that instead of adding yet
+          // another overflow-x-auto-on-the-table-only wrapper, since a
+          // single admin looking up one account at a time reads better as
+          // a card than a cramped scrollable row anyway.
+          <div className="divide-y divide-slate-50">
+            {users.map(u => (
+              <div key={u.id} className="p-4">
+                <div className="font-medium text-navy-900">{u.name}</div>
+                <div className="text-sm text-slate-500 break-all">{u.email}</div>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                    u.role === 'admin' ? 'bg-gold-50 text-gold-700' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {u.role}
+                  </span>
+                  <span className={`flex items-center gap-1.5 text-xs font-medium ${u.active ? 'text-green-700' : 'text-slate-400'}`}>
+                    <Circle className={`w-2 h-2 ${u.active ? 'fill-green-400 text-green-400' : 'fill-slate-300 text-slate-300'}`} />
+                    {u.active ? 'Active' : 'Deactivated'}
+                  </span>
+                </div>
+                {u.active ? (
+                  <button
+                    onClick={() => setConfirmDeactivate(u)}
+                    disabled={pendingId === u.id}
+                    className="flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50 mt-3"
+                  >
+                    <UserX className="w-3.5 h-3.5" />
+                    Deactivate
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleReactivate(u)}
+                    disabled={pendingId === u.id}
+                    className="flex items-center gap-1.5 text-xs font-medium text-green-700 hover:text-green-800 disabled:opacity-50 mt-3"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    Reactivate
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
@@ -200,7 +259,7 @@ function AddUserForm({ onCreated }: { onCreated: (u: AdminUser) => void }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
         <label className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Name</label>
         <input

@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Plus, FileText, Copy, Pencil, Building2, PackageSearch, ChevronDown, ChevronRight } from 'lucide-react'
 import { format } from 'date-fns'
-import { FormField, formatRp, UppercaseField } from '@/components/ui'
+import { ConfirmDialog, FormField, formatRp, UppercaseField } from '@/components/ui'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { orderHooks, itemHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
 import { itemsApi, invoicesApi } from '@/api'
@@ -251,6 +251,14 @@ export function OrderDetailPage() {
   const [editing, setEditing] = useState<Item | null>(null)
   const [duplicating, setDuplicating] = useState<Item | null>(null)
   const [invoiceFormType, setInvoiceFormType] = useState<'dp' | 'pelunasan' | 'cod' | null>(null)
+  // Deleting an item used to fire on a single tap with no way back — the
+  // only destructive action on this page (and one of very few in the
+  // whole app) that skipped the confirm step every list-row delete
+  // elsewhere already has. One shared dialog here rather than one per row
+  // for the same reason DeliveryItemsManager's does: some of the rows
+  // that trigger it are real <tr> elements, and a raw confirm div can't
+  // legally sit next to a <tr> inside <tbody>.
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<Item | null>(null)
 
   // Arriving here from InvoiceListPage's pencil icon carries which invoice
   // type to edit in navigation state — open that form immediately, then
@@ -466,7 +474,7 @@ export function OrderDetailPage() {
                   </button>
                   <button
                     className="text-slate-400 hover:text-red-500 text-xs disabled:opacity-50"
-                    onClick={() => del.mutate(item.id)}
+                    onClick={() => setConfirmDeleteItem(item)}
                     disabled={del.isPending}
                   >
                     Delete
@@ -577,7 +585,7 @@ export function OrderDetailPage() {
                           </button>
                           <button
                             className="text-slate-400 hover:text-red-500 text-xs disabled:opacity-50"
-                            onClick={() => del.mutate(item.id)}
+                            onClick={() => setConfirmDeleteItem(item)}
                             disabled={del.isPending}
                           >
                             Delete
@@ -643,7 +651,7 @@ export function OrderDetailPage() {
                             </button>
                             <button
                               className="text-slate-400 hover:text-red-500 text-xs disabled:opacity-50"
-                              onClick={() => del.mutate(item.id)}
+                              onClick={() => setConfirmDeleteItem(item)}
                               disabled={del.isPending}
                             >
                               Delete
@@ -693,6 +701,14 @@ export function OrderDetailPage() {
             onClose={() => setInvoiceFormType(null)}
           />
         </Modal>
+      )}
+
+      {confirmDeleteItem && (
+        <ConfirmDialog
+          message={`Delete "${confirmDeleteItem.item_name}${confirmDeleteItem.size ? ` (${confirmDeleteItem.size})` : ''}" from this order?`}
+          onConfirm={() => { del.mutate(confirmDeleteItem.id); setConfirmDeleteItem(null) }}
+          onCancel={() => setConfirmDeleteItem(null)}
+        />
       )}
     </div>
   )

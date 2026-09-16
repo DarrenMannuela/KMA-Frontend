@@ -1,6 +1,7 @@
 import { useRef, useLayoutEffect } from 'react'
 import { Loader2, AlertTriangle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { useIsMobile } from '@/hooks/useIsMobile'
 
 // ─── Spinner ──────────────────────────────────────────────────────────────────
 export function Spinner({ className = '' }: { className?: string }) {
@@ -37,6 +38,39 @@ export function ConfirmDialog({ message, onConfirm, onCancel, confirmLabel = 'De
   // confirm() that looks nothing like the rest of the app.
   confirmLabel?: string
 }) {
+  const isMobile = useIsMobile()
+
+  // Same bottom-sheet-vs-centered-dialog split as Modal — see its own
+  // comment. Buttons stack full-width here rather than the desktop's
+  // side-by-side pair: this is the one dialog in the app guarding an
+  // irreversible action, so its two buttons are also the single most
+  // consequential tap target anywhere in the mobile UI — full-width
+  // stacking gives each one the most room to be hit correctly, and
+  // ordering Cancel above Delete keeps the safe choice as the more
+  // natural first reach.
+  if (isMobile) {
+    return (
+      <div
+        className="fixed inset-0 z-[60] flex items-end bg-navy-950/30 backdrop-blur-sm fade-in"
+        onClick={e => e.target === e.currentTarget && onCancel()}
+      >
+        <div className="bg-white w-full rounded-t-3xl shadow-2xl slide-up">
+          <div className="pt-2.5 pb-1 flex justify-center">
+            <div className="w-9 h-1 rounded-full bg-slate-200" />
+          </div>
+          <div className="flex gap-3 px-5 pt-2 pb-5">
+            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            <p className="text-sm text-slate-700">{message}</p>
+          </div>
+          <div className="flex flex-col gap-2 px-5 pb-6">
+            <button className="btn-secondary w-full" onClick={onCancel}>Cancel</button>
+            <button className="btn-danger w-full" onClick={onConfirm}>{confirmLabel}</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-navy-950/50 backdrop-blur-sm fade-in"
