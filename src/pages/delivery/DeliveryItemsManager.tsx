@@ -28,17 +28,6 @@ const emptyQuickAddItem = () => ({ item_name: '', size: '', amount: 1, box_numbe
 const BOX_BADGE_COLORS = [
   'bg-navy-900', 'bg-blue-700', 'bg-teal-700', 'bg-purple-700', 'bg-amber-700', 'bg-rose-700',
 ]
-// Same six colors, tint-on-white instead of solid-fill-with-white-text —
-// used only on mobile (see the badgeColor/badgeColorMobile split below).
-// A solid dark bar repeated once per box read as the single heaviest
-// element on the whole page once there were several boxes stacked on a
-// phone screen; a light tint with colored text keeps the same at-a-glance
-// distinctness the color-per-box scheme is for for without that weight.
-// Desktop keeps the original solid bars.
-const BOX_BADGE_COLORS_LIGHT = [
-  'bg-navy-50 text-navy-700', 'bg-blue-50 text-blue-700', 'bg-teal-50 text-teal-700',
-  'bg-purple-50 text-purple-700', 'bg-amber-50 text-amber-700', 'bg-rose-50 text-rose-700',
-]
 
 // Reserves a fixed-height line under every field, whether or not it has
 // hint text this render. Grid rows stretch to their tallest cell — without
@@ -361,7 +350,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
           )}
 
           {isDO && recap.length > 0 && (
-            <div className={`card ${isMobile ? 'border-navy-100' : 'border-2 border-navy-100'}`}>
+            <div className="card border-2 border-navy-100">
               <div className="flex items-center justify-between px-4 py-3 bg-navy-50 border-b border-navy-100 gap-2 flex-wrap">
                 <h3 className="font-semibold text-navy-900 text-sm">Recap — All Boxes</h3>
                 <span className="text-xs text-navy-500">{boxGroups.length} box{boxGroups.length !== 1 ? 'es' : ''} · {recap.reduce((s, r) => s + r.total, 0)} pcs total</span>
@@ -410,34 +399,19 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
             boxGroups.map(([boxKey, boxItems], i) => {
               const boxTotal = boxItems.reduce((s, it) => s + it.amount, 0)
               const badgeColor = boxKey === 'unassigned' ? 'bg-slate-400' : BOX_BADGE_COLORS[i % BOX_BADGE_COLORS.length]
-              const badgeColorLight = boxKey === 'unassigned' ? 'bg-slate-100 text-slate-600' : BOX_BADGE_COLORS_LIGHT[i % BOX_BADGE_COLORS_LIGHT.length]
               return (
-                <div key={boxKey} className={`rounded-xl overflow-hidden ${isMobile ? 'border border-slate-200' : 'border-2 border-slate-200'}`}>
-                  {isMobile ? (
-                    <div className={`flex items-center justify-between px-4 py-3 gap-2 flex-wrap ${badgeColorLight}`}>
-                      <div className="flex items-center gap-2.5">
-                        <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white/60 font-bold text-xs shrink-0">
-                          {boxKey === 'unassigned' ? <Box size={14} /> : boxKey}
-                        </span>
-                        <h3 className="font-semibold text-sm">
-                          {boxKey === 'unassigned' ? 'No Box Assigned' : `Box ${boxKey}`}
-                        </h3>
-                      </div>
-                      <span className="text-xs opacity-70">{boxItems.length} item{boxItems.length !== 1 ? 's' : ''} · {boxTotal} pcs</span>
+                <div key={boxKey} className="rounded-xl border-2 border-slate-200 overflow-hidden">
+                  <div className={`flex items-center justify-between px-4 py-3 text-white gap-2 flex-wrap ${badgeColor}`}>
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white/20 font-bold text-xs shrink-0">
+                        {boxKey === 'unassigned' ? <Box size={14} /> : boxKey}
+                      </span>
+                      <h3 className="font-semibold text-sm">
+                        {boxKey === 'unassigned' ? 'No Box Assigned' : `Box ${boxKey}`}
+                      </h3>
                     </div>
-                  ) : (
-                    <div className={`flex items-center justify-between px-4 py-3 text-white gap-2 flex-wrap ${badgeColor}`}>
-                      <div className="flex items-center gap-2.5">
-                        <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white/20 font-bold text-xs shrink-0">
-                          {boxKey === 'unassigned' ? <Box size={14} /> : boxKey}
-                        </span>
-                        <h3 className="font-semibold text-sm">
-                          {boxKey === 'unassigned' ? 'No Box Assigned' : `Box ${boxKey}`}
-                        </h3>
-                      </div>
-                      <span className="text-xs text-white/80">{boxItems.length} item{boxItems.length !== 1 ? 's' : ''} · {boxTotal} pcs</span>
-                    </div>
-                  )}
+                    <span className="text-xs text-white/80">{boxItems.length} item{boxItems.length !== 1 ? 's' : ''} · {boxTotal} pcs</span>
+                  </div>
                   {isMobile ? (
                     <div className="divide-y divide-slate-50">
                       {boxItems.map(item => (
