@@ -78,7 +78,7 @@ export function UsersPage() {
         </div>
         <button
           onClick={() => setShowForm(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-navy-900 text-white text-sm font-semibold hover:bg-navy-800 transition-colors"
+          className="btn-primary text-sm"
         >
           <Plus className="w-4 h-4" />
           Add user
@@ -302,7 +302,7 @@ function AddUserForm({ onCreated }: { onCreated: (u: AdminUser) => void }) {
       <button
         type="submit"
         disabled={submitting}
-        className="col-span-1 sm:col-span-2 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-navy-900 text-white text-sm font-semibold hover:bg-navy-800 transition-colors disabled:opacity-60"
+        className="btn-primary col-span-1 sm:col-span-2 justify-center text-sm"
       >
         {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
         {submitting ? 'Sending invite…' : 'Add user'}

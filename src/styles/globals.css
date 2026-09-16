@@ -87,6 +87,29 @@
   .currency {
     @apply font-mono text-sm tabular-nums;
   }
+
+  /* ── Mobile palette ──────────────────────────────────────────────────
+     Same brand colors, different balance: desktop's primary action color
+     is solid navy-900, which reads fine as one accent among many larger
+     UI elements (a wide sidebar, big data tables) but became the single
+     heaviest, darkest thing on a phone screen, repeated on every "Add"/
+     "Save" button on every page. Gold already exists in the palette as a
+     secondary/highlight color (see .btn-gold above) — promoting it to
+     mobile's primary action color instead swaps that heaviest recurring
+     element for something warmer and lighter, while staying entirely
+     within the existing brand palette rather than introducing a new hue.
+     Desktop is untouched; this only takes effect below the same `md`
+     breakpoint every other mobile/desktop split in this app already
+     uses. Kept inside this same @layer (rather than a bare @media block)
+     so it stays subject to normal cascade order against .card/.btn-
+     primary's own definitions above instead of jumping to the unlayered
+     tier, which would outrank even the *utilities* layer — silently
+     overpowering a deliberate one-off override like the Recap card's
+     `border-navy-100` anywhere it's combined with .card. */
+  @media (max-width: 767px) {
+    .btn-primary { @apply bg-gold-500 text-navy-950 hover:bg-gold-400; }
+    .card { @apply rounded-2xl shadow-none border-slate-200; }
+  }
 }
 
 /* Batik-inspired sidebar geometric accent */
@@ -117,9 +140,18 @@
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+/* Mobile bottom sheet (Modal's mobile variant — see Modal.tsx) slides up
+   from off-screen rather than fading+nudging in place like the desktop
+   centered dialog does — the native-app pattern the sheet is meant to
+   read as. */
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
 
 .fade-up  { animation: fadeUp  0.25s ease both; }
 .fade-in  { animation: fadeIn  0.2s  ease both; }
+.slide-up { animation: slideUp 0.28s cubic-bezier(0.32, 0.72, 0, 1) both; }
 .delay-1  { animation-delay: 0.05s; }
 .delay-2  { animation-delay: 0.10s; }
 .delay-3  { animation-delay: 0.15s; }

@@ -154,7 +154,16 @@ export function ClientPriceListPrint({ client, items, pricesByItem, onClose }: C
           ) : rows.length === 0 ? (
             <p className="text-center text-slate-400 text-sm py-8">No items checked above — pick at least one to print.</p>
           ) : (
-            <table className="w-full text-sm">
+            // overflow-x-auto: 5 columns (photo/name/previous/current/date)
+            // of dense data is the kind of thing that can force this wider
+            // than a phone screen before wrapping ever kicks in — scoping
+            // the scroll to just the table keeps that contained instead of
+            // the whole overlay needing to pan sideways. print:overflow-
+            // visible leaves the actual printed output on its native
+            // paginated layout, same reasoning as every other print
+            // surface in this app.
+            <div className="overflow-x-auto print:overflow-visible">
+            <table className="w-full text-sm min-w-[480px] print:min-w-0">
               <thead>
                 <tr className="border-b-2 border-navy-900">
                   <th className="text-left  py-2 font-semibold text-navy-900 w-14"></th>
@@ -192,6 +201,7 @@ export function ClientPriceListPrint({ client, items, pricesByItem, onClose }: C
                 })}
               </tbody>
             </table>
+            </div>
           )}
 
           <p className="text-xs text-slate-400 mt-8">
