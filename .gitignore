@@ -1,8 +1,26 @@
 node_modules
 dist
-.env
-.env.local
 *.local
+
+# ── Secrets ──────────────────────────────────────────────────────────
+# Nothing secret belongs in the frontend at all (everything in it is
+# sent to every browser), but keep these out in case one is ever made.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.jks
+*.keystore
+.netrc
+.npmrc
+
+# Logs (npm-debug.log and the like)
+*.log
 
 # Editor
 .vscode/*
