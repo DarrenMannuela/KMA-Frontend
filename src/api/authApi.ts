@@ -99,7 +99,7 @@ authHttp.interceptors.response.use(
 // The CSRF cookie is deliberately NOT HttpOnly (see the auth service's
 // csrf middleware) — this is the one place the frontend is supposed to
 // read a cookie directly, to echo it back as a header.
-function readCsrfCookie(): string | null {
+export function readCsrfCookie(): string | null {
   const match = document.cookie.match(/(?:^|;\s*)kma_csrf=([^;]+)/)
   return match ? decodeURIComponent(match[1]) : null
 }

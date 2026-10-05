@@ -84,6 +84,15 @@ Start the three stacks in order: KMA (it creates `kma_network`), KMA-Auth, then 
 
 Display labels and colors for these live in `src/constants/supplierCategories.ts` — reuse that shared constant rather than redefining labels/colors locally (see `SuppliersPage.tsx` for the intended pattern).
 
+## Closing KMA logs you out
+
+Closing the last KMA tab or window — or the browser, or the installed app — signs you out: the next time KMA is opened, it's the login screen. A reload doesn't, and neither does closing one KMA tab while another is still open. It's in `src/utils/tabSession.ts` (with `POST /closing` on the auth service):
+
+- **On closing**, a tab tells the auth service, and the session ends 20 seconds later unless something uses it again. A reload does, at once; so do other KMA tabs that are still open, which hear about the close over a `BroadcastChannel`.
+- **On opening**, a tab works out whether KMA was closed in between: its `sessionStorage` mark survives a reload but not a close; a new tab asks the other KMA tabs whether one is open; and since browsers that reopen their tabs on start bring `sessionStorage` back too, open tabs note the time in `localStorage` every 30s, and a mark more than 2 minutes stale counts as closed. If KMA was closed, any leftover session is ended on the server (for closes that went unreported, like a phone app swiped away) and the login screen shows.
+
+Limits: a browser that reopens its tabs within 2 minutes of being closed keeps you signed in; and a KMA tab the browser has frozen in the background (phones, battery saver) can't answer, so opening a second KMA tab then signs out both.
+
 ## Install it as an app (phone or computer)
 
 KMA can be installed like an app, with its own icon, opening full screen without the browser's address bar (`public/manifest.webmanifest`, icons in `public/icons/` made from `public/Logo.png`). Open the HTTPS address the tailnet serves it on (`https://<mac-name>.<tailnet>.ts.net`), then:

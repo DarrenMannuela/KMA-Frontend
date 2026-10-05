@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import { authApi, AuthApiError } from '@/api/authApi'
+import { endClosedSession, forgetTab, markTabSignedIn, visitIsStillOpen } from '@/utils/tabSession'
 import {AuthUser} from '@/types'
 
 interface AuthContextValue {
@@ -32,11 +33,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // On first load (and again on retryMe), ask the auth service whether
   // the browser already holds a valid session cookie (e.g. the page was
   // refreshed) rather than assuming a logged-out state.
+  //
+  // Unless KMA was closed since this browser last used it: then whatever
+  // session is left over is ended, and it's the login screen (see
+  // utils/tabSession.ts — closing KMA logs you out).
   useEffect(() => {
     let cancelled = false
     setStatus('loading')
-    authApi
-      .me()
+    visitIsStillOpen()
+      .then(async (stillOpen) => {
+        if (stillOpen) return authApi.me()
+        await endClosedSession()
+        throw new AuthApiError('KMA was closed: sign in again', 401)
+      })
       .then(({ user }) => {
         if (!cancelled) {
           setUser(user)
@@ -61,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const { user } = await authApi.login(email, password)
+    markTabSignedIn()
     setUser(user)
     setStatus('authenticated')
   }, [])
@@ -71,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // normal login does, just via a different backend call.
   const acceptInvite = useCallback(async (token: string, newPassword: string) => {
     const { user } = await authApi.acceptInvite(token, newPassword)
+    markTabSignedIn()
     setUser(user)
     setStatus('authenticated')
   }, [])
@@ -81,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       // Clear local state even if the network call fails — the user
       // clicked logout and expects to land back at the login screen.
+      forgetTab()
       setUser(null)
       setStatus('unauthenticated')
     }
