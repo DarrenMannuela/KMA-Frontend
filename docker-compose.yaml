@@ -6,7 +6,24 @@ services:
     container_name: kma_frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      # KMA_WEB_BIND=127.0.0.1 in .env keeps the app off the local
+      # network (Wi-Fi), reachable only from this Mac — and through
+      # `tailscale serve`, which connects from this Mac too. Empty: every
+      # network the Mac is on, as before.
+      - "${KMA_WEB_BIND:-0.0.0.0}:80:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # Logs rotate: 5 files of 10 MB, so months of running never fill the
+    # disk (Docker's default keeps every line forever).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     networks:
       - kma_network
 

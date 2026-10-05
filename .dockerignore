@@ -1,0 +1,8 @@
+# Kept out of the image build: secrets, and things the build makes itself.
+.env
+.env.*
+node_modules
+dist
+.git
+.DS_Store
+*.log
