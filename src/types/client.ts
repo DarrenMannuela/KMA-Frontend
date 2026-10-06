@@ -34,9 +34,7 @@ export interface ClientItem {
 }
 
 // ─── Matches dto/ClientItemPrice.go ────────────────────────────────────────
-// One year's price for one catalogue item. (client_item_id, year) is
-// unique — re-submitting a year corrects it in place rather than adding a
-// second row, so this is always the full, deduped year-by-year history.
+// One year's price for one catalogue item; (client_item_id, year) is unique.
 export interface ClientItemPrice {
   id: number
   client_item_id: number

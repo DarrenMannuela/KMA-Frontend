@@ -13,19 +13,10 @@ interface ClientPriceListPrintProps {
   onClose: () => void
 }
 
-// Full-catalogue price list for one client — the printed sign/handout used
-// to announce a price change once material costs push a year's price up.
-// Shows each item's latest price next to the year before it, so a hike is
-// legible at a glance instead of needing to cross-reference two documents.
-// Uses the visibility trick below rather than a dedicated print route,
-// since the app has no /clients/:id/print route wired up yet.
+// A client's price list to hand out when prices go up: each item's latest
+// price next to the one before.
 
-// Same broken-image fallback ItemPhotoPanel (ClientItemDetailPage) and
-// ClientItemPhotoCell (ClientDetailPage) both use — a stale/broken
-// photo_path shouldn't leave a broken-image glyph sitting on a printed
-// price list. Needs its own component (not just inline `useState` in the
-// row map) since each row's failure is independent — one broken photo
-// shouldn't affect any other row's `imgFailed` state.
+// Hides a broken photo instead of printing a broken-image icon; one per row.
 function PrintPhotoCell({ item }: { item: ClientItem }) {
   const [imgFailed, setImgFailed] = useState(false)
   if (!item.photo_path || imgFailed) {
@@ -47,11 +38,8 @@ export function ClientPriceListPrint({ client, items, pricesByItem, onClose }: C
   const allRows = useMemo(() => {
     return items
       .map((item): Row => {
-        // Chronological (oldest first) so the last two entries are
-        // "previous" and "latest" — see sortPricesByRecency for why the
-        // effective_date tie-break matters (a mid-year price revision
-        // can otherwise get printed as "Previous" with the older price
-        // shown as "Current", inverted from reality).
+        // Oldest first, so the last two are previous and latest (see
+        // sortPricesByRecency for same-year revisions).
         const history = sortPricesByRecency(pricesByItem[item.id] ?? [], 'asc')
         return { item, latest: history[history.length - 1], previous: history[history.length - 2] }
       })
@@ -59,20 +47,8 @@ export function ClientPriceListPrint({ client, items, pricesByItem, onClose }: C
       .sort((a, b) => a.item.item_name.localeCompare(b.item.item_name))
   }, [items, pricesByItem])
 
-  // Which items actually go on THIS printed list — a client's full
-  // catalogue often includes things they aren't currently ordering, so
-  // this narrows the handout to just what's relevant for them right now.
-  // Starts with everything checked (matches the old "always full
-  // catalogue" behavior); uncheck down to just what's being quoted.
-  //
-  // Re-synced whenever `allRows` changes rather than seeded once at mount:
-  // the parent (ClientDetailPage) fetches item prices via a separate,
-  // independent query, so this dialog can mount with `allRows` still
-  // empty and only get its real rows a moment later. A one-time lazy
-  // `useState` initializer would have locked `selected` in at empty in
-  // that case, permanently breaking "starts with everything checked" —
-  // this effect keeps auto-selecting new rows as they arrive, right up
-  // until the user manually touches a checkbox themselves.
+  // Which items go on this list; all at first. Prices load separately, so new
+  // rows keep being selected until the user changes a checkbox.
   const [selected, setSelected] = useState<Set<number>>(() => new Set(allRows.map(r => r.item.id)))
   const [touched, setTouched] = useState(false)
   useEffect(() => {
@@ -154,14 +130,7 @@ export function ClientPriceListPrint({ client, items, pricesByItem, onClose }: C
           ) : rows.length === 0 ? (
             <p className="text-center text-slate-400 text-sm py-8">No items checked above — pick at least one to print.</p>
           ) : (
-            // overflow-x-auto: 5 columns (photo/name/previous/current/date)
-            // of dense data is the kind of thing that can force this wider
-            // than a phone screen before wrapping ever kicks in — scoping
-            // the scroll to just the table keeps that contained instead of
-            // the whole overlay needing to pan sideways. print:overflow-
-            // visible leaves the actual printed output on its native
-            // paginated layout, same reasoning as every other print
-            // surface in this app.
+            // Only the table scrolls on a narrow screen; printing is unaffected.
             <div className="overflow-x-auto print:overflow-visible">
             <table className="w-full text-sm min-w-[480px] print:min-w-0">
               <thead>

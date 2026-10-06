@@ -13,19 +13,12 @@ export interface AdminUser {
 // by the same auth service, so they should surface failures the same way.
 export { AuthApiError as UsersApiError }
 
-// Paths are relative to authHttp's baseURL ('/auth/api/v1/auth'), so
-// these resolve to /auth/api/v1/auth/users, .../users/:id/deactivate,
-// etc. — matching main.go's route registration exactly, and picking up
-// the correct CSRF cookie (kma_csrf) and error normalization for free
-// via authHttp's interceptors.
+// Paths are under authHttp's base URL: /auth/api/v1/auth/users and so on.
 export const usersApi = {
   list: () =>
     authHttp.get<{ users: AdminUser[] }>('/users').then(r => r.data),
 
-  // No password field — the auth service generates a locked password
-  // itself and emails the new user a one-time "set your password" link
-  // (see CreateUser/AcceptInvite in the auth service). Nothing for an
-  // admin to type or relay out of band anymore.
+  // No password: the auth service emails the new user a link to set one.
   create: (payload: { email: string; name: string; role: 'admin' | 'staff' }) =>
     authHttp.post<{ user: AdminUser }>('/users', payload).then(r => r.data),
 

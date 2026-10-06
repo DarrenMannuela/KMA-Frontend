@@ -1,19 +1,15 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import { authApi, AuthApiError } from '@/api/authApi'
+import { endClosedSession, forgetTab, markTabSignedIn, visitIsStillOpen } from '@/utils/tabSession'
 import {AuthUser} from '@/types'
 
 interface AuthContextValue {
   user: AuthUser | null
-  // 'error' is distinct from 'unauthenticated': a clean 401 from /me means
-  // the session really is invalid/expired, but a network drop, timeout, or
-  // 5xx from the auth service means the session's validity was never
-  // actually checked. Folding both into 'unauthenticated' used to bounce
-  // every route guard to /login on a transient blip (flaky wifi on first
-  // load) indistinguishably from a genuinely expired session — see
-  // retryMe below and the route guards' own 'error' branches.
+  // 'error': the session couldn't be checked (network, 5xx), unlike
+  // 'unauthenticated' (a real 401). Route guards offer Retry instead of /login.
   status: 'loading' | 'authenticated' | 'unauthenticated' | 'error'
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string, takeOver?: boolean) => Promise<void>
   acceptInvite: (token: string, newPassword: string) => Promise<void>
   logout: () => Promise<void>
   retryMe: () => void
@@ -29,14 +25,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // fetch-and-branch logic outside the effect.
   const [attempt, setAttempt] = useState(0)
 
-  // On first load (and again on retryMe), ask the auth service whether
-  // the browser already holds a valid session cookie (e.g. the page was
-  // refreshed) rather than assuming a logged-out state.
+  // On load (and retryMe), ask whether the browser still holds a valid session,
+  // unless KMA was closed since: then the leftover session is ended (see
+  // utils/tabSession.ts).
   useEffect(() => {
     let cancelled = false
     setStatus('loading')
-    authApi
-      .me()
+    visitIsStillOpen()
+      .then(async (stillOpen) => {
+        if (stillOpen) return authApi.me()
+        await endClosedSession()
+        throw new AuthApiError('KMA was closed: sign in again', 401)
+      })
       .then(({ user }) => {
         if (!cancelled) {
           setUser(user)
@@ -46,10 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch((err) => {
         if (cancelled) return
         setUser(null)
-        // A real 401 means "checked, and you're not logged in." Anything
-        // else (no status at all, or a 5xx) means the check itself
-        // failed — that's not the same thing and shouldn't send someone
-        // to /login as if it were.
+        // Only a 401 means logged out; anything else means the check failed.
         setStatus(err instanceof AuthApiError && err.status === 401 ? 'unauthenticated' : 'error')
       })
     return () => {
@@ -59,18 +56,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const retryMe = useCallback(() => setAttempt(a => a + 1), [])
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { user } = await authApi.login(email, password)
+  const login = useCallback(async (email: string, password: string, takeOver = false) => {
+    const { user } = await authApi.login(email, password, takeOver)
+    markTabSignedIn()
     setUser(user)
     setStatus('authenticated')
   }, [])
 
-  // Same shape as login — the backend hands back a real session on a
-  // successful invite acceptance (see AcceptInvite's comment in
-  // user_handler.go), so this applies to local state exactly the way a
-  // normal login does, just via a different backend call.
+  // Accepting an invite signs the user in, like login.
   const acceptInvite = useCallback(async (token: string, newPassword: string) => {
     const { user } = await authApi.acceptInvite(token, newPassword)
+    markTabSignedIn()
     setUser(user)
     setStatus('authenticated')
   }, [])
@@ -81,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       // Clear local state even if the network call fails — the user
       // clicked logout and expects to land back at the login screen.
+      forgetTab()
       setUser(null)
       setStatus('unauthenticated')
     }
@@ -98,5 +95,3 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth must be used within an AuthProvider')
   return ctx
 }
-
-export { AuthApiError }

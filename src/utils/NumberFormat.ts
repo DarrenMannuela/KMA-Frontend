@@ -1,10 +1,5 @@
-/**
- * Helpers for comma-grouped number inputs (e.g. "10,000" instead of "10000")
- * while keeping the underlying state a plain digit string — same reasoning
- * as the raw-string price/qty fields elsewhere: converting to Number on
- * every keystroke breaks backspacing to blank, and here it'd also fight the
- * comma insertion while typing.
- */
+/** Helpers for thousands-grouped number inputs ("10,000"), keeping the state a
+ *  plain digit string so the field can be emptied while typing. */
 
 /** Strips everything but digits — turns a comma-formatted display value back
  *  into the raw string that should actually be kept in state. */

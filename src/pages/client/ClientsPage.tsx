@@ -71,13 +71,7 @@ export function ClientsPage() {
         { header: 'ID', key: 'id' },
         { header: 'Client Name', key: 'client_name', primary: true, render: r => <span className="font-medium text-navy-900">{r.client_name}</span> },
         { header: 'Address', key: 'address', render: r => <span className="text-slate-500">{r.address ?? '—'}</span> },
-        // Not a real field — an actions-only column that just needs a key
-        // CrudPage can use for React's list reconciliation. Deliberately
-        // NOT 'id': CrudPage's <td>/<th> keys are just String(c.key), with
-        // no per-column index folded in the way SpreadsheetView's are — so
-        // reusing 'id' here would put two elements with key="id" in the
-        // same row (the plain ID column above it uses that key too),
-        // which is a real duplicate-key case, not just a lint warning.
+        // An actions column; its key must differ from the ID column's.
         { header: '', key: 'catalogue_link', render: r => (
           <button
             onClick={(e) => { e.stopPropagation(); navigate(`/clients/${r.id}`) }}

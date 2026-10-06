@@ -6,24 +6,12 @@ import { supplierHooks } from '@/hooks'
 import { CATEGORY_LABELS } from '@/constants/supplierCategories'
 import type { Supplier, CreateSupplierRequest, SupplierCategory } from '@/types'
 
-// Exact enum values from kma.yaml, in the order the <select> below should
-// list them — labels themselves come from the shared CATEGORY_LABELS
-// (supplierCategories.ts) rather than being redefined here. This page used
-// to spell out its own longer labels ("Merchandise Supplier") that didn't
-// match the short ones CATEGORY_LABELS renders everywhere else the same
-// category shows up (Production's dropdown, group headers, the Supplier
-// column) — same category, two different names depending on which screen
-// you were on.
+// The category values in display order; labels from CATEGORY_LABELS.
 const SUPPLIER_CATEGORIES: SupplierCategory[] = [
   'sablon', 'embroidery', 'merchandise_supplier', 'uniform_supplier', 'general_supplier',
 ]
 
-// Same hue per category as CATEGORY_COLORS (supplierCategories.ts) — those
-// are hex values for a small solid dot elsewhere (Production's supplier
-// bars/rows), not usable directly as Tailwind classes for a light-bg/dark-
-// text badge pill here, but picked to match: amber/teal/violet/rose/slate
-// either way, so the same category reads as the same color family on this
-// page as everywhere else, just rendered as a badge instead of a dot.
+// Badge colors in the same families as CATEGORY_COLORS.
 const CATEGORY_BADGE: Record<SupplierCategory, string> = {
   sablon:                'bg-amber-50 text-amber-700',
   embroidery:            'bg-teal-50 text-teal-700',

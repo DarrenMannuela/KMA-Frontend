@@ -19,11 +19,7 @@ export function DeliveryDetailPage() {
   const isDO = delivery?.type === 'DO'
 
   if (deliveryLoading) return <div className="p-8 text-slate-400">Loading…</div>
-  // Same distinction made in OrderDetailPage/InvoicePrintPage/
-  // KwitansiPrintPage: a failed fetch (network drop, 500, etc.) previously
-  // looked identical to a genuinely missing delivery — "Delivery not
-  // found." — sending people searching for a bad link instead of just
-  // retrying the request that failed.
+  // A failed fetch shows Retry, not "Delivery not found".
   if (deliveryError) {
     return (
       <div className="p-8 text-center">
@@ -36,12 +32,7 @@ export function DeliveryDetailPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header — min-w-0 on the middle block lets its title/badge/meta
-          text shrink and wrap instead of forcing its natural width (the
-          same default flex-item min-width:auto behavior fixed app-wide in
-          App.tsx's AppShell, recurring here locally): without it, this row
-          pushed the Print button straight off the right edge of a phone
-          screen instead of wrapping onto its own line. */}
+      {/* min-w-0 lets the title shrink and wrap so Print stays on screen. */}
       <div className="flex items-center gap-3 flex-wrap">
         <button onClick={() => navigate('/delivery')} className="btn-secondary flex items-center gap-1">
           <ArrowLeft size={14} /> Back

@@ -6,19 +6,12 @@ interface ModalProps {
   title: string
   onClose: () => void
   children: React.ReactNode
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg' | 'xl'
 }
 
-const sizes = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' }
+const sizes = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-5xl' }
 
-// On mobile this renders as a bottom sheet (slides up, anchored to the
-// screen's bottom edge, rounded top corners only) instead of a centered
-// dialog — the native-mobile-app pattern, and reachable with a thumb
-// without having to stretch to the middle of the screen the way a
-// centered popup demands. Every existing <Modal> call site gets this for
-// free since they all render through here — nothing about the call sites
-// themselves needed to change. Desktop is untouched: same centered
-// dialog as before, at every size.
+// A bottom sheet on phones, a centered dialog on desktop.
 export function Modal({ title, onClose, children, size = 'md' }: ModalProps) {
   const isMobile = useIsMobile()
 
@@ -35,11 +28,7 @@ export function Modal({ title, onClose, children, size = 'md' }: ModalProps) {
         onClick={e => e.target === e.currentTarget && onClose()}
       >
         <div className="bg-white w-full rounded-t-3xl shadow-2xl slide-up flex flex-col max-h-[88vh]">
-          {/* Purely a visual affordance (no swipe-to-dismiss gesture wired
-              up) — signals "this sheet" the way a native one would, so it
-              doesn't read as a dialog that got stuck to the bottom edge
-              by accident. Tap-the-backdrop and the explicit X below both
-              still work as the real close actions. */}
+          {/* The grab handle is only a visual cue; the backdrop and X close it. */}
           <div className="shrink-0 pt-2.5 pb-1 flex justify-center">
             <div className="w-9 h-1 rounded-full bg-slate-200" />
           </div>

@@ -6,13 +6,8 @@ import toast from 'react-hot-toast'
 import { AuthApiError } from '@/api/authApi'
 import { useAuth } from '@/contexts/AuthContext'
 
-// Where an admin-created account's emailed invite link lands
-// ("…/set-password?token=…" — see CreateUser/AcceptInvite in the auth
-// service). Deliberately a top-level PUBLIC route in App.tsx, same as
-// /login and for the same reason: whoever's here has no session yet —
-// that's the entire point of the link — so wrapping this in
-// ProtectedRoute would just bounce them straight to /login before they
-// ever see the form.
+// Where an invite link lands ("…/set-password?token=…"). Public: there's no
+// session yet.
 export function SetPasswordPage() {
   const navigate = useNavigate()
   const { acceptInvite } = useAuth()
@@ -44,10 +39,7 @@ export function SetPasswordPage() {
       // another trip through /login.
       navigate('/', { replace: true })
     } catch (err) {
-      // Mirrors the backend's own non-disclosure choice (see
-      // AcceptInvite's comment on reporting expired/used/invalid
-      // identically) — surfaced here as-is rather than trying to guess
-      // which case it was.
+      // The backend doesn't say whether the link expired, was used or is invalid.
       const message = err instanceof AuthApiError ? err.message : 'Could not set password'
       setError(message)
     } finally {
@@ -55,10 +47,7 @@ export function SetPasswordPage() {
     }
   }
 
-  // No token in the URL at all — someone navigated here directly
-  // rather than via the emailed link. Distinct from an expired/used
-  // token (which the backend reports, after a submit attempt) since
-  // there's nothing to even submit here.
+  // Opened without a token, not from the emailed link.
   if (!token) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">

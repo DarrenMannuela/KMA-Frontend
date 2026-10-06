@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState } from 'react'
-import { Routes, Route, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Topbar } from '@/components/layout/Topbar'
@@ -10,13 +10,7 @@ import { MustChangePasswordRoute } from '@/components/auth/MustChangePasswordRou
 import { RedirectDirectAccess } from '@/components/auth/RedirectDirectAccess'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 
-// Every page is loaded on demand instead of all at once — this used to be
-// one ~600KB bundle shipped in full to anyone opening the dashboard, print
-// pages/admin/reports included, even though a given visit only ever
-// touches a handful of routes. React.lazy + the two Suspense boundaries
-// below turn each of these into its own chunk, fetched the first time its
-// route is actually visited. Purely a loading-strategy change — nothing
-// about how any of these pages behave is different.
+// Each page is its own chunk, loaded the first time its route is visited.
 const DashboardPage = lazy(() => import('@/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const OrdersPage = lazy(() => import('@/pages/orders/OrdersPage').then(m => ({ default: m.OrdersPage })))
 const ItemsPage = lazy(() => import('@/pages/orders/ItemsPage').then(m => ({ default: m.ItemsPage })))
@@ -33,7 +27,7 @@ const KwitansiPrintPage = lazy(() => import('@/pages/orders/KwitansiPrintPage').
 const ClientsPage = lazy(() => import('@/pages/client/ClientsPage').then(m => ({ default: m.ClientsPage })))
 const ClientDetailPage = lazy(() => import('@/pages/client/ClientDetailPage').then(m => ({ default: m.ClientDetailPage })))
 const ClientItemDetailPage = lazy(() => import('@/pages/client/ClientItemDetailPage').then(m => ({ default: m.ClientItemDetailPage })))
-const YearlyReportPage = lazy(() => import('@/pages/reports/YearlyReportPage').then(m => ({ default: m.YearlyReportPage })))
+const FinancePage = lazy(() => import('@/pages/finance/FinancePage').then(m => ({ default: m.FinancePage })))
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage').then(m => ({ default: m.LoginPage })))
 const SetPasswordPage = lazy(() => import('@/pages/auth/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })))
 const ChangePasswordPage = lazy(() => import('@/pages/auth/ChangePasswordPage').then(m => ({ default: m.ChangePasswordPage })))
@@ -61,11 +55,7 @@ function ContentSpinner() {
   )
 }
 
-// Print pages stay outside the Sidebar/Topbar chrome (unchanged from
-// before) — they're meant to be a clean printable page, not the app
-// shell. Login is the same: it gets its own centered layout, not the
-// dashboard shell, and it's the one route that must NOT be wrapped in
-// ProtectedRoute (that would infinite-redirect).
+// Print pages and login render outside the sidebar/topbar shell.
 function AppShell() {
   const location = useLocation()
   // Only meaningful below md — see Sidebar's own md:translate-x-0, which
@@ -74,27 +64,12 @@ function AppShell() {
   return (
     <div className="flex min-h-screen">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      {/* min-w-0 is load-bearing, not decorative — a flex item's default
-          min-width is "auto" (its content's own min-content size), NOT 0,
-          so without this a flex-1 item ignores the flex container's actual
-          available width and instead demands at least as much as its
-          widest descendant needs (e.g. a wide table three levels down,
-          even one already wrapped in its own overflow-x-auto). That
-          demand propagates straight up through every unclamped flex
-          ancestor to html/body, which is what made entire pages need
-          horizontal scrolling on a phone even though the offending table
-          had its own scroll container — the container just was never
-          actually constrained to a width narrower than its content in the
-          first place. This single min-w-0 is what makes that constraint
-          real for every page under it. */}
+      {/* min-w-0 lets this flex item shrink below its content's width, so wide
+         tables scroll inside their own containers instead of the whole page. */}
       <div className="flex-1 flex flex-col md:ml-[240px] min-h-screen min-w-0">
         <Topbar onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-y-auto bg-slate-50">
-          {/* Scoped to routed content only, so Sidebar/Topbar stay usable
-              if a page crashes — and keyed off the path so clicking to a
-              different page recovers on its own instead of being stuck on
-              the fallback until a manual reload (see ErrorBoundary's own
-              resetKeys comment). */}
+          {/* Only routed content is behind the boundary; it resets on navigation. */}
           <ErrorBoundary resetKeys={[location.pathname]}>
           <Suspense fallback={<ContentSpinner />}>
           <Routes>
@@ -111,7 +86,8 @@ function AppShell() {
             <Route path="/clients"                        element={<ClientsPage />} />
             <Route path="/clients/:id"                    element={<ClientDetailPage />} />
             <Route path="/clients/:clientId/items/:itemId" element={<ClientItemDetailPage />} />
-            <Route path="/reports/yearly"                   element={<YearlyReportPage />} />
+            <Route path="/finance"                        element={<FinancePage />} />
+            <Route path="/reports/yearly"                 element={<Navigate to="/finance" replace />} />
             <Route path="/admin/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
           </Routes>
           </Suspense>
@@ -130,37 +106,20 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
 
-          {/* Where an invited user's emailed link lands. Public for the
-              same reason /login is: no session exists yet at this
-              point — wrapping it in ProtectedRoute would redirect it
-              straight to /login before the form ever renders. */}
+          {/* An invited user's link lands here, before any session exists. */}
           <Route path="/set-password" element={<SetPasswordPage />} />
 
-          {/* Reached from MustChangePasswordRoute below (or directly, by
-              a user who bookmarks it). Deliberately only wrapped in
-              ProtectedRoute — NOT in MustChangePasswordRoute itself, or
-              a user who still needs to change their password would be
-              redirected right back here in a loop. */}
+          {/* Not inside MustChangePasswordRoute, which redirects here. */}
           <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
 
-          {/* Print routes: no sidebar/topbar chrome, but still require
-              a session — someone printing an invoice is still a
-              logged-in staff member. RedirectDirectAccess sends a
-              cold/direct hit on one of these (typed URL, reopened tab,
-              refresh) to the dashboard instead — see its own comment for
-              why and for the refresh trade-off. Nested inside
-              ProtectedRoute so an unauthenticated direct hit still goes
-              to /login first, same as before. */}
+          {/* Print routes: logged in, no app chrome. A direct hit (typed URL, refresh)
+             goes to the dashboard instead; see RedirectDirectAccess. */}
           <Route path="/invoice/:id" element={<ProtectedRoute><RedirectDirectAccess><InvoicePrintPage /></RedirectDirectAccess></ProtectedRoute>} />
           <Route path="/invoice/:id/kwitansi" element={<ProtectedRoute><RedirectDirectAccess><KwitansiPrintPage /></RedirectDirectAccess></ProtectedRoute>} />
           <Route path="/delivery/:id/print" element={<ProtectedRoute><RedirectDirectAccess><DeliveryPrintPage /></RedirectDirectAccess></ProtectedRoute>} />
 
-          {/* Everything else lives behind the app shell, and the whole
-              shell is gated by one ProtectedRoute rather than wrapping
-              each inner <Route> individually. MustChangePasswordRoute
-              sits just inside that: anyone with a still-temporary
-              password gets bounced to /change-password before they can
-              reach any page in the shell. */}
+          {/* Everything else is behind one ProtectedRoute; a temporary password must be
+             changed first. */}
           <Route
             path="/*"
             element={

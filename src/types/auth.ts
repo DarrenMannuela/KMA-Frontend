@@ -1,7 +1,4 @@
-// ─── Matches auth-service's dto/User.go (publicUser() shape) ────────────────
-// The auth service is a separate backend and owns the full User record
-// (password hash, lockout fields, etc.) — this is just the public subset it
-// actually returns to the frontend via /me and /login.
+// ─── Matches the auth service's public user (from /me and /login) ───────────
 export interface AuthUser {
   id: number
   email: string

@@ -32,22 +32,12 @@ export function ConfirmDialog({ message, onConfirm, onCancel, confirmLabel = 'De
   message: string
   onConfirm: () => void
   onCancel: () => void
-  // Most callers are a delete, hence the default — but the same "are you
-  // sure" treatment is worth reusing for any other one-way action (e.g.
-  // deactivating a user) rather than falling back to a plain browser
-  // confirm() that looks nothing like the rest of the app.
+  // Defaults to a delete, but any one-way action can use it.
   confirmLabel?: string
 }) {
   const isMobile = useIsMobile()
 
-  // Same bottom-sheet-vs-centered-dialog split as Modal — see its own
-  // comment. Buttons stack full-width here rather than the desktop's
-  // side-by-side pair: this is the one dialog in the app guarding an
-  // irreversible action, so its two buttons are also the single most
-  // consequential tap target anywhere in the mobile UI — full-width
-  // stacking gives each one the most room to be hit correctly, and
-  // ordering Cancel above Delete keeps the safe choice as the more
-  // natural first reach.
+  // Bottom sheet on phones, buttons full width with Cancel first.
   if (isMobile) {
     return (
       <div
@@ -90,47 +80,6 @@ export function ConfirmDialog({ message, onConfirm, onCancel, confirmLabel = 'De
   )
 }
 
-// ─── StatCard ─────────────────────────────────────────────────────────────────
-// Same sizing helper as DashboardPage's KpiCard — kept as a separate copy
-// rather than a shared import since the two live in different modules and
-// this is small enough not to be worth a shared util for.
-function statValueSizeClass(value: string | number): string {
-  const len = String(value).length
-  if (len > 16) return 'text-sm'
-  if (len > 12) return 'text-base'
-  if (len > 9)  return 'text-xl'
-  return 'text-2xl'
-}
-
-export function StatCard({ label, value, sub, icon: Icon, accent = false }: {
-  label: string
-  value: string | number
-  sub?: string
-  icon: LucideIcon
-  accent?: boolean
-}) {
-  return (
-    <div className={`card p-5 fade-up min-w-0 ${accent ? 'bg-navy-900 border-navy-800' : ''}`}>
-      <div className="flex items-start justify-between mb-3">
-        <p className={`text-xs font-medium uppercase tracking-wider ${accent ? 'text-navy-300' : 'text-slate-400'}`}>
-          {label}
-        </p>
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${accent ? 'bg-navy-800' : 'bg-slate-100'}`}>
-          <Icon className={`w-4 h-4 ${accent ? 'text-gold-400' : 'text-slate-500'}`} />
-        </div>
-      </div>
-      {/* No break-words — at a still-too-large font it broke mid-digit
-          ("18.400.0" / "00") instead of at the space after "Rp". Sizing
-          the font down first, and letting normal wrapping fall back to
-          the "Rp" / number space only, keeps any wrap clean. */}
-      <p className={`font-semibold tabular-nums ${statValueSizeClass(value)} ${accent ? 'text-white' : 'text-navy-900'}`}>
-        {value}
-      </p>
-      {sub && <p className={`text-xs mt-1 ${accent ? 'text-navy-400' : 'text-slate-400'}`}>{sub}</p>}
-    </div>
-  )
-}
-
 // ─── FormField wrapper ────────────────────────────────────────────────────────
 export function FormField({ label, children, required }: {
   label: string
@@ -148,25 +97,9 @@ export function FormField({ label, children, required }: {
 }
 
 // ─── UppercaseField ────────────────────────────────────────────────────────
-// Drop-in replacement for a plain <input>/<textarea> that force-uppercases
-// as you type — the convention used all over this app (Item Name, Company,
-// Address, Kas Bon ID, Supplier Name, etc.). Forcing .toUpperCase() on
-// every keystroke re-renders the field with a new string each time, which
-// resets the caret to the end unless something restores it — invisible
-// while typing at the end of the field, but breaks the moment you click
-// into the middle of existing text and type: the caret jumps to the end
-// after every character. This restores the caret position after every
-// change — same fix as EditableCell.tsx's inline-cell editor uses, just
-// packaged as a real component so every page shares one fix instead of
-// each hand-rolling its own onChange={e => setX(e.target.value.toUpperCase())}.
-//
-// Usage (input, the default):
-//   <UppercaseField className="field" value={form.item_name}
-//     onChange={v => setForm(p => ({ ...p, item_name: v }))} />
-//
-// Usage (textarea, e.g. Address/Notes/Description):
-//   <UppercaseField as="textarea" rows={2} className="field resize-none"
-//     value={form.address} onChange={v => setForm(p => ({ ...p, address: v }))} />
+// An <input> (or as="textarea") that uppercases as you type, keeping the
+// caret where it was. The app's convention for names, addresses and IDs.
+//   <UppercaseField className="field" value={v} onChange={setV} />
 type UppercaseFieldElement = HTMLInputElement | HTMLTextAreaElement
 
 type UppercaseInputProps = {

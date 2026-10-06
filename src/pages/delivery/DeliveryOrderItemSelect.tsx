@@ -1,11 +1,7 @@
 import { FormField } from '@/components/ui'
 import type { OrderRemainingItem } from '@/hooks'
 
-// Presentational only — the parent calls useOrderRemainingItems(orderId,
-// excludeItemId) itself and passes the result in. Keeping the query out of
-// this component means the parent can also read the matching item's
-// `remaining` count directly (to cap the Amount field) without a second
-// lookup.
+// Presentational: the parent fetches the remaining items and passes them in.
 interface OrderItemSelectProps {
   items: OrderRemainingItem[]
   value: { item_name: string; size: string | null } | null

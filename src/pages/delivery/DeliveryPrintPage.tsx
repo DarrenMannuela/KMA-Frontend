@@ -7,23 +7,11 @@ import { deliveryApi, deliveryItemApi } from '@/api'
 import { useScaleToFit } from '@/hooks/useScaleToFit'
 import type { Delivery, DeliveryItem } from '@/types'
 
-// Matches the company's paper DO/SJ template: letterhead, a
-// TANGGAL/NAMA/UNTUK/HP/ALAMAT/PO field grid, then for DO one bordered
-// "KODE BOX NN" table per box (NO/DETAILS/SIZE/QTY-PCS with a TOTAL ITEMS
-// footer row) — grouped by item name, same as the in-app box view, no
-// separate category field. SJ has no box concept, so it's a flat document
-// list instead.
-//
-// Two box slips share one physical A4 sheet (stacked, split by a dashed cut
-// line) instead of one slip per page — a single box's content is short, so
-// one-per-page was mostly whitespace. A lone slip (the normal case for a
-// SJ, which has no box split most of the time) fills at least half the
-// sheet on its own — enough that the printout doesn't read as an
-// almost-empty page — with the signature block anchored to the bottom of
-// that half rather than sitting right under a three-line item list. The
-// final Rekap page is its own full sheet, grouped by box with a per-box
-// subtotal and one grand total across the whole delivery, so it can be
-// checked against the order box-by-box instead of just as one flat list.
+// The company's paper DO/SJ: letterhead, the field grid, then (DO) one
+// "KODE BOX" table per box, grouped by item name; SJ lists its documents.
+// Two slips share an A4 sheet split by a cut line; a lone slip takes at least
+// half the sheet. The last page is the Rekap, per box with subtotals and a
+// grand total.
 export function DeliveryPrintPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -35,14 +23,8 @@ export function DeliveryPrintPage() {
     enabled: !!deliveryId,
   })
 
-  // Kept as a separate query from `delivery` above (loaded off the shared
-  // /delivery-item list rather than a nested field), but its own
-  // isLoading/isError feed the SAME gate below — this is the primary
-  // content of a document a customer signs for at the point of delivery,
-  // so if just this request fails while `delivery` itself succeeds, it
-  // must not be allowed to silently print as an empty "no items" slip
-  // (see the isError branch's own comment for the identical bug this
-  // already fixed for the header fetch).
+  // Its own query, but in the same loading/error gate: a slip the customer signs
+  // must never print empty because this request failed.
   const { data: items = [], isLoading: itemsLoading, isError: itemsError, refetch: refetchItems } = useQuery({
     queryKey: ['delivery-items', deliveryId],
     queryFn: () => deliveryItemApi.list().then(all => all.filter((i: DeliveryItem) => i.delivery_id === deliveryId)),
@@ -51,10 +33,8 @@ export function DeliveryPrintPage() {
 
   const isDO = delivery?.type === 'DO'
 
-  // Same grouping as the on-screen box view — items with no box number
-  // land in a trailing group instead of vanishing from the printout. Now
-  // applies to SJ too: "KODE PAKET" on a Surat Jalan is the same
-  // box_number field as DO's "KODE BOX", just labeled differently.
+  // As the on-screen box view; items without a box go in a last group. SJ's
+  // "KODE PAKET" is the same box_number.
   const boxGroups = useMemo(() => {
     const map = new Map<string, DeliveryItem[]>()
     items.forEach(item => {
@@ -69,10 +49,7 @@ export function DeliveryPrintPage() {
     })
   }, [items])
 
-  // Rekap now mirrors the box structure instead of flattening straight to
-  // one item/size list: each box gets its own DETAILS/SIZE/QTY block with a
-  // subtotal, so the printed recap can be checked against each box as
-  // packed, then one grand total across every box at the bottom.
+  // The recap per box, with subtotals, so it can be checked box by box.
   const rekapBoxes = useMemo(() => {
     return boxGroups.map(([boxLabel, boxItems]) => {
       const map = new Map<string, { item_name: string; size: string | null; total: number }>()
@@ -92,25 +69,12 @@ export function DeliveryPrintPage() {
 
   const grandTotal = rekapBoxes.reduce((s, b) => s + b.subtotal, 0)
 
-  // "Shrink the whole preview to fit the screen" — see useScaleToFit's own
-  // comment for why this is purely visual and leaves the actual print/
-  // export output untouched. Always on (not gated to a mobile breakpoint)
-  // since the scale is capped at 1 and is a no-op on anything already
-  // wide enough — see InvoicePrintPage.tsx's identical comment. Called
-  // unconditionally (rules-of-hooks) even though the loading/error
-  // returns below fire most renders before the scaled markup near the
-  // bottom is ever reached.
+  // Shrinks the preview to fit the screen; printing is unaffected. Called before
+  // the early returns (rules of hooks).
   const { containerRef: scaleContainerRef, docRef: scaleDocRef, scale, scaledWidth, scaledHeight } = useScaleToFit(true)
 
   if (isLoading || itemsLoading) return <div className="p-8 text-slate-400">Loading…</div>
-  // Same distinction made in KwitansiPrintPage/InvoicePrintPage/
-  // OrderDetailPage: a failed fetch (network drop, 500, etc.) previously
-  // looked identical to a genuinely missing delivery — "Delivery not
-  // found." — sending people searching for a bad link instead of just
-  // retrying the request that failed. Covers the items query too now (see
-  // its own comment above) — either one failing blocks the print view the
-  // same way, rather than letting a failed items fetch through to print as
-  // a false "no items" slip.
+  // A failed fetch (delivery or items) shows Retry, never an empty slip.
   if (isError || itemsError) {
     return (
       <div className="p-8 text-center">
@@ -123,11 +87,7 @@ export function DeliveryPrintPage() {
 
   const slips = boxGroups.map(([boxLabel, boxItems]) => ({ boxLabel: boxLabel === 'unassigned' ? null : boxLabel, items: boxItems }))
 
-  // Pair slips up two-per-sheet. An odd one out (or a SJ, which almost
-  // always has just one "package") prints alone — DeliverySheetPage only
-  // stretch-fills the page when there's an actual pair to split evenly;
-  // a lone slip sits at its natural height instead of pushing the
-  // signature block all the way to the bottom of an otherwise-empty page.
+  // Two slips per sheet; an odd one out prints alone at its natural height.
   const sheets: (typeof slips)[] = []
   for (let i = 0; i < slips.length; i += 2) sheets.push(slips.slice(i, i + 2))
 
@@ -150,23 +110,9 @@ export function DeliveryPrintPage() {
         </button>
       </div>
 
-      {/* Delivery document — overflow-x-auto is load-bearing, not
-          decorative. Same reasoning as InvoicePrintPage.tsx's identical
-          comment: the printed sheet below is a fixed physical-page width,
-          wider than a phone viewport, and without a scroll container here
-          that width would propagate up and stretch the toolbar above
-          along with it. print:overflow-visible keeps the real printed/
-          exported output on the browser's native paginated layout,
-          unaffected.
-
-          .scale-wrap additionally shrinks the whole stack of sheets down
-          to fit whatever width is actually available, as one block, via
-          useScaleToFit — see InvoicePrintPage.tsx's identical comment for
-          why. One scale wrapper around every sheet (rather than one per
-          sheet) keeps
-          their relative spacing/proportions intact, since every sheet
-          shares the same physical width regardless of how many stack up
-          for a given delivery. */}
+      {/* The sheets are a fixed physical width: they scroll (and are scaled to fit,
+         as one block) here so they don't widen the toolbar. Printing uses the
+         real size. */}
       <div className="p-8 print:p-0 overflow-x-auto print:overflow-visible" ref={scaleContainerRef}>
         <div
           className="scale-wrap"
@@ -174,18 +120,8 @@ export function DeliveryPrintPage() {
         >
         <div
           ref={scaleDocRef}
-          // display:inline-block is load-bearing: unlike InvoicePrintPage/
-          // KwitansiPrintPage (where the scaled ref sits directly on the
-          // fixed-width document itself), this div is a plain wrapper
-          // AROUND each 210mm-wide .delivery-sheet — as an ordinary block
-          // box with no width of its own, it would stretch to fill ITS
-          // parent (.scale-wrap) instead of shrink-wrapping to its actual
-          // 794px-wide children, which made useScaleToFit measure its
-          // available-width-sized box instead of the document's true
-          // width and conclude no scaling was needed at all. inline-block
-          // makes it shrink-to-fit its widest child instead, the same way
-          // #invoice-page-wrap/#kwitansi's own explicit width already did
-          // for those two pages.
+          // inline-block so this wrapper shrinks to the 210mm sheets inside it, which is
+          // what useScaleToFit needs to measure.
           style={{ display: 'inline-block', transform: `scale(${scale})`, transformOrigin: 'top left' }}
         >
         {sheets.map((pair, i) => (
@@ -214,10 +150,7 @@ export function DeliveryPrintPage() {
           .print\\:shadow-none { box-shadow: none !important; }
           .print\\:p-0 { padding: 0 !important; }
           .delivery-sheet { width: 100% !important; margin: 0 !important; }
-          /* Undoes useScaleToFit's mobile-only preview shrink (inline
-             style, hence needing !important here) — printing/exporting
-             must always use the real physical size regardless of what
-             the screen preview happened to be scaled to. */
+          /* Undo the on-screen scaling when printing. */
           .scale-wrap { width: auto !important; height: auto !important; overflow: visible !important; }
           .scale-wrap > div { transform: none !important; display: block !important; }
           .print-page { page-break-after: always; }
@@ -233,14 +166,8 @@ export function DeliveryPrintPage() {
   )
 }
 
-// One physical A4 sheet holding up to two box slips, stacked and split by a
-// dashed cut line — replaces the old one-slip-per-page layout, which left
-// most of the sheet blank for a box with just a handful of items. An
-// actual pair splits the full sheet height evenly. A lone slip (no second
-// one to pair with — the normal case for a SJ) fills at least half the
-// sheet instead: enough to not look like a mostly-blank page, but without
-// stretching a short item list all the way to the bottom of a full A4 and
-// leaving a huge gap above the signature.
+// One A4 sheet with up to two slips split by a dashed cut line. A pair splits
+// the height evenly; a lone slip fills at least half.
 function DeliverySheetPage({
   delivery,
   isDO,
@@ -268,10 +195,7 @@ function DeliverySheetPage({
             style={{
               padding: '10mm 15mm',
               borderBottom: i === 0 && paired ? '1px dashed #999' : undefined,
-              // Lone slip (not sharing the sheet with a second box/package):
-              // reserve at least half the A4 sheet so a short SJ item list
-              // doesn't leave the page looking almost empty. A paired slip
-              // already gets its half via flex-1 on the parent.
+              // A lone slip takes at least half the sheet.
               minHeight: paired ? undefined : '148.5mm',
             }}
           >
@@ -346,11 +270,7 @@ function DeliverySlipContent({
         </div>
       ) : (
         <div style={{ marginBottom: '10px', fontSize: '10.5px' }}>
-          {/* "TANGGAL S/J" here, not "TANGGAL D/O" — this branch only ever
-              renders for a Surat Jalan (isDO is false), and the DO-specific
-              label got copy-pasted into this branch unchanged. Matches the
-              same D/O-vs-S/J naming already used for the header title and
-              boxLabelText just below. */}
+          {/* This branch is only for a Surat Jalan. */}
           <Field label="TANGGAL S/J" value={delivery.date ? format(new Date(delivery.date), 'd MMM yyyy').toUpperCase() : '—'} />
           <Field label="NAMA" value={delivery.company ?? '—'} />
           <Field
@@ -415,10 +335,7 @@ function DeliverySlipContent({
         </>
       )}
 
-      {/* Signatures — anchored to the bottom of whatever space this slip
-          has (its half of a paired sheet, or its half-page minHeight when
-          solo) via marginTop:auto, so a short item list doesn't leave the
-          signature stranded right under it. */}
+      {/* Signatures sit at the bottom of the slip's space (marginTop: auto). */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'auto', paddingTop: '18px', fontSize: '10.5px' }}>
         <div>
           <div>DI KIRIM OLEH :</div>

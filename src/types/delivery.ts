@@ -18,11 +18,7 @@ export interface Delivery {
   phone_number: string | null
   contact_person: string | null
   date: string
-  // A DO's items are constrained by what was actually ordered — this ties
-  // the delivery back to the Order whose Items define the item/size
-  // catalog and the quantities available to split across boxes. SJ
-  // deliveries (documents) aren't tied to an order's item quantities, so
-  // this stays null for them.
+  // A DO is tied to the order whose items it splits into boxes; SJ has none.
   order_id: string | null
 }
 

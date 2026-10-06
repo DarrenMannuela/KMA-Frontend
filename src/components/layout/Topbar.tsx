@@ -6,10 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 import { useAuth } from '@/contexts/AuthContext'
 
-// The stub/live route banners below mention main.go and "wire the handler"
-// — that's a message for whoever's building the backend, not for a real
-// KMA staff member using the app day to day. Gate them the same way as the
-// Sidebar's status dots so they vanish in a production build automatically.
+// The stub/live route banners are for development builds only.
 const SHOW_DEV_STATUS = import.meta.env.DEV
 
 const TITLES: Record<string, string> = {
@@ -24,16 +21,11 @@ const TITLES: Record<string, string> = {
   '/production':      'Production',
   '/suppliers':       'Suppliers',
   '/operations':      'Operations',
-  '/reports/yearly':  'Yearly Report',
+  '/finance':         'Finance',
   '/admin/users':     'Users',
 }
 
-// Longest-matching-prefix lookup, not an exact-string one — a dynamic
-// detail route (/orders/:id, /clients/:id, /delivery/:id, …) has no entry
-// of its own above and previously fell straight through to the generic
-// "KMA" fallback the moment you were one level deep in any section, while
-// every top-level list page showed a proper title. Falls back to a
-// section's own title for any sub-route under it instead.
+// Longest matching prefix, so detail routes (/orders/:id) get their section's title.
 function titleFor(pathname: string): string {
   let best: string | null = null
   for (const path of Object.keys(TITLES)) {
@@ -47,7 +39,7 @@ function titleFor(pathname: string): string {
 // Routes that are fully wired to real DB handlers in main.go
 const LIVE_ROUTES = new Set(['/suppliers', '/orders', '/items', '/invoice',
   '/delivery', '/delivery-orders', '/surat-jalan',
-  '/production', '/operations', '/clients',])
+  '/production', '/operations', '/clients', '/finance',])
 
 // Routes still returning stub JSON
 const STUB_ROUTES = new Set()
@@ -127,10 +119,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { pathname } = useLocation()
   const title = titleFor(pathname)
 
-  // Ping the dedicated health endpoint — deliberately not an
-  // auth-gated route like /api/v1/supplier, so this reflects whether
-  // the backend process is actually up, not whether the current
-  // session happens to be valid right now.
+  // The unauthenticated health endpoint: is the backend up at all.
   const { data: isUp } = useQuery({
     queryKey: ['health'],
     queryFn: () => axios.get('/api/v1/healthz').then(() => true).catch(() => false),
@@ -153,14 +142,15 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           </button>
           <div className="min-w-0">
             <h2 className="font-display font-semibold text-navy-900 text-base truncate">{title}</h2>
-            <p className="text-slate-400 text-xs font-mono truncate">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
+            <p className="text-slate-400 text-xs font-mono truncate">
+              {/* Short on phones, where the full date was cut off. */}
+              <span className="sm:hidden">{format(new Date(), 'EEE, d MMM yyyy')}</span>
+              <span className="hidden sm:inline">{format(new Date(), 'EEEE, d MMMM yyyy')}</span>
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          {/* Backend health — label hidden below sm so this stays a small
-              dot instead of competing with the title for space on a phone
-              (see the min-w-0/truncate above); the dot's own color already
-              carries the same live/offline/connecting signal on its own. */}
+          {/* Below sm only the dot shows. */}
           <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
             isUp === true  ? 'bg-green-50 text-green-700' :
             isUp === false ? 'bg-red-50 text-red-600'    :

@@ -1,3 +1,4 @@
+import { invoiceAmount, isFullInvoice as isFull } from '@/utils/invoiceAmount'
 import { useState } from 'react'
 import { FileText, Eye, Receipt } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -24,15 +25,8 @@ export function InvoiceListPage() {
   const update = invoiceHooks.useUpdate()
   const navigate = useNavigate()
 
-  // Defaults to Unpaid — that's the actionable view (this is the AR
-  // Receivable list, effectively); "All" and "Paid" are one click away.
-  // Backed by sessionStorage rather than plain useState, same fix and same
-  // reasoning as CrudPage's own search box: the Eye/Receipt row actions
-  // below both navigate to a real route (invoice print / kwitansi), which
-  // unmounts this page — filtering to "Paid" or "All" to investigate
-  // something, opening a row, then coming back used to silently land back
-  // on "Unpaid" with no explanation, looking like the filtered results had
-  // vanished.
+  // Defaults to Unpaid (the receivables). Kept in sessionStorage so it survives
+  // opening an invoice and coming back.
   const [statusFilter, setStatusFilterState] = useState<'unpaid' | 'paid' | 'all'>(() => {
     try {
       const saved = sessionStorage.getItem('invoice-status-filter')
@@ -48,26 +42,14 @@ export function InvoiceListPage() {
 
   const toggleStatus = (row: Invoice) => {
     const nextStatus = row.status === 'paid' ? 'unpaid' : 'paid'
-    // Stamp paid_date the first time an invoice is marked paid, so there's
-    // a record of when that happened. Going back to unpaid deliberately
-    // leaves paid_date alone rather than clearing it — reverting a status
-    // flip shouldn't erase the history of when it WAS marked paid.
+    // paid_date is stamped the first time an invoice is marked paid and kept if it
+    // goes back to unpaid.
     const body = nextStatus === 'paid' && !row.paid_date
       ? { status: nextStatus, paid_date: new Date().toISOString() }
       : { status: nextStatus }
     update.mutate({ id: row.id, body }, {
-      // Marking Unpaid → Paid is the one direction worth a safety net: the
-      // badge toggles on a single click with no confirmation, so a
-      // mis-click is easy — and unlike the reverse, this one immediately
-      // defaults the row right out of view (statusFilter above defaults to
-      // Unpaid), so "just click the badge again" isn't actually available
-      // without first realizing the row vanished and switching the filter
-      // to find it again. An inline Undo sidesteps all of that: revert
-      // right where the mistake happened. Deliberately a direct mutate
-      // here rather than calling toggleStatus(row) again — `row` is a
-      // stale closure still holding the PRE-toggle status, so re-running
-      // this function's own nextStatus logic against it would compute
-      // 'paid' a second time instead of reverting.
+      // Marking paid hides the row under the Unpaid filter, so the toast offers Undo.
+      // It reverts directly: `row` still holds the old status.
       onSuccess: () => {
         if (nextStatus !== 'paid') return
         toast((t) => (
@@ -122,12 +104,7 @@ export function InvoiceListPage() {
           render: r => <span className="font-medium">{r.kepada_yth}</span> },
         { header: 'Type',         key: 'type',
           render: r => {
-            // Same "0% DP = full invoice, not a partial one" convention as
-            // OrderDetailPage/InvoicePrintPage/KwitansiPrintPage — a
-            // dp-type invoice with no actual down payment reads as "Down
-            // Payment" here otherwise, which is misleading once it's
-            // really covering the whole order.
-            const isFullInvoice = r.type === 'dp' && (r.down_payment ?? 0) === 0
+            const isFullInvoice = isFull(r)
             return (
               <span className={`badge ${TYPE_BADGE[r.type] ?? 'bg-slate-100 text-slate-600'}`}>
                 {isFullInvoice ? 'Full Invoice' : r.type === 'dp' ? 'Down Payment' : 'Pelunasan'}
@@ -136,18 +113,7 @@ export function InvoiceListPage() {
           }},
         { header: 'Amount Due',   key: 'total',
           render: r => {
-            // Same fix: a full invoice's "amount due" is the whole
-            // remaining balance, not down_payment (which is 0 for these —
-            // that's what makes it "full" rather than partial).
-            //
-            // Reads ar_receivable rather than the plain `remaining` field
-            // for that balance — `remaining` is total minus down_payment
-            // BEFORE any discount, so a discounted invoice would otherwise
-            // show a bigger "amount due" here than the client actually
-            // owes. Falls back to `remaining` for older invoices saved
-            // before ar_receivable existed.
-            const isFullInvoice = r.type === 'dp' && (r.down_payment ?? 0) === 0
-            const due = r.type === 'dp' && !isFullInvoice ? (r.down_payment ?? 0) : (r.ar_receivable ?? r.remaining)
+            const due = invoiceAmount(r)
             return (
               <div>
                 <span className="font-mono">{formatRp(due)}</span>
@@ -174,11 +140,8 @@ export function InvoiceListPage() {
       renderForm={() => null}
       onDelete={id => del.mutate(id)}
       deleteMessage={r => `Delete invoice ${r.id}?`}
-      // Invoices aren't created/edited through this generic modal — they're
-      // generated from an order's item list (OrderDetailPage), since the
-      // total/items context lives there. The pencil takes you straight to
-      // that order with the right (DP or Pelunasan) form already open;
-      // Add New sends you to Orders to pick which order to invoice.
+      // Invoices are made and edited from their order; the pencil opens it with the
+      // right form.
       onEditClick={row => navigate(`/orders/${encodeURIComponent(row.order_id)}`, {
         state: { openInvoiceType: row.type },
       })}

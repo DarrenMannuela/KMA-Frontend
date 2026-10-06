@@ -10,18 +10,11 @@ import { itemsApi, invoicesApi } from '@/api'
 import type { Item, CreateItemRequest } from '@/types'
 import { GenerateInvoiceForm } from './GenerateInvoiceForm'
 import { Modal } from '@/components/ui/Modal'
+import { OrderCosts } from '@/components/finance/OrderCosts'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
 
-// Same caret-jump problem as the uppercase fields elsewhere (see
-// InvoicePrintPage.tsx's useUppercaseField): re-rendering a controlled
-// input with a freshly-computed string on every keystroke resets the caret
-// to the end unless something restores it. Formatted numbers have it worse
-// than a plain uppercase transform, because formatThousands can also
-// insert/remove a thousands separator on the very keystroke that changed
-// the digit next to it — so the caret can't just be put back at "the same
-// index", the separators around it may have shifted. What's stable across
-// a reformat is how many DIGITS sit to the left of the caret, so that's
-// what gets captured and restored instead of a raw character offset.
+// Keeps the caret in place while thousands separators come and go, by
+// restoring how many digits are to its left.
 function useFormattedNumberField(value: number, onValueChange: (n: number) => void) {
   const ref = useRef<HTMLInputElement>(null)
   const digitsBeforeCaret = useRef<number | null>(null)
@@ -76,11 +69,8 @@ function ItemForm({
     return [...history].sort((a, b) => b.year - a.year)[0].price
   }
 
-  // Tracks which catalogue entry (if any) was picked, purely to keep the
-  // select controlled — the actual item_name/size/price below are plain
-  // form fields once filled, so picking from the catalogue is a shortcut,
-  // not a lock: everything stays editable afterward, and typing a name
-  // that doesn't match anything in the catalogue works exactly as before.
+  // The picked catalogue entry, only to keep the select controlled: the fields
+  // it fills stay editable.
   const [catalogueItemId, setCatalogueItemId] = useState<number | ''>('')
 
   const [form, setForm] = useState<Omit<CreateItemRequest, 'sub_total'>>({
@@ -98,12 +88,8 @@ function ItemForm({
     if (!item) return
     setCatalogueItemId(id)
     const price = latestPriceFor(id)
-    // Manual entry goes through UppercaseField before it ever reaches
-    // `form`; picking from the catalogue bypassed that and could leave
-    // item_name/size in whatever casing the catalogue record happened to
-    // have. Since the backend's dedupe-merge (idx_items_dedupe) is an
-    // exact string match, mismatched casing meant two visually-identical
-    // items could silently fail to merge into one row.
+    // Uppercase like typed entries: the backend merges duplicate items by exact
+    // name and size.
     setForm(p => ({
       ...p,
       item_name: item.item_name.toUpperCase(),
@@ -116,10 +102,8 @@ function ItemForm({
   const priceField = useFormattedNumberField(form.price, price => setForm(p => ({ ...p, price })))
 
   const handleSubmit = () => {
-    // Size is sent as '' rather than null when blank — SQLite treats every
-    // NULL as distinct from every other NULL in a unique index, which
-    // would otherwise stop two "no size" rows of the same item from ever
-    // merging via idx_items_dedupe on the backend (see Items.go).
+    // A blank size is '' rather than null, so "no size" rows of the same item merge
+    // (SQLite's unique index treats NULLs as distinct).
     const payload: CreateItemRequest = { ...form, size: form.size || '', sub_total: subTotal }
     if (editing) {
       update.mutate({ id: editing.id, body: payload }, { onSuccess: onClose })
@@ -166,10 +150,7 @@ function ItemForm({
             onChange={v => setForm(p => ({ ...p, size: v }))} />
         </FormField>
         <FormField label="Qty" required>
-          {/* Qty counts whole items. type="number" only blocks keyboard
-              input, not paste/drag-drop/IME text, so a pasted "12abc" could
-              still land in the field. Filtering to digits-only in onChange
-              closes that gap regardless of how the character got in. */}
+          {/* Whole items only; onChange also filters pasted text. */}
           <input
             className="field"
             type="text"
@@ -219,12 +200,8 @@ export function OrderDetailPage() {
     queryFn: () => itemsApi.getByOrder(orderId),
     enabled: !!orderId,
   })
-  // allInvoices silently staying [] on a failed fetch is worse here than
-  // most lists: dpInvoice/pelunasanInvoice below would resolve to null
-  // even though a DP invoice genuinely exists, which would offer "Generate
-  // DP Invoice" for an order that's already invoiced — folded into the
-  // same page-level loading/error gate as `order` and `orderItems` rather
-  // than letting the page render with that silently wrong state.
+  // A failed invoice fetch blocks the page: an empty list would offer to create
+  // an invoice that already exists.
   const {
     data: allInvoices = [],
     isLoading: invoicesLoading, isError: invoicesError, refetch: refetchInvoices,
@@ -237,13 +214,7 @@ export function OrderDetailPage() {
   const orderInvoices = allInvoices.filter(inv => inv.order_id === orderId)
   const dpInvoice = orderInvoices.find(inv => inv.type === 'dp') ?? null
   const pelunasanInvoice = orderInvoices.find(inv => inv.type === 'pelunasan') ?? null
-  // A 0% down payment isn't really a "down payment" — it's the full amount
-  // due in one invoice, with nothing left over for a second (Pelunasan)
-  // invoice to collect. Still stored/typed as 'dp' under the hood (no
-  // schema change needed), but the UI treats it as a plain invoice: the
-  // button/modal drop the "DP" wording, and the Pelunasan button — which
-  // would otherwise offer to collect a remaining balance of Rp 0 — is
-  // hidden entirely rather than left there to be confusing.
+  // A 0% DP is a full invoice: no DP wording, and no Pelunasan to collect.
   const dpIsFullPayment = !!dpInvoice && (dpInvoice.down_payment ?? 0) === 0
 
   const del = itemHooks.useDelete()
@@ -251,19 +222,10 @@ export function OrderDetailPage() {
   const [editing, setEditing] = useState<Item | null>(null)
   const [duplicating, setDuplicating] = useState<Item | null>(null)
   const [invoiceFormType, setInvoiceFormType] = useState<'dp' | 'pelunasan' | 'cod' | null>(null)
-  // Deleting an item used to fire on a single tap with no way back — the
-  // only destructive action on this page (and one of very few in the
-  // whole app) that skipped the confirm step every list-row delete
-  // elsewhere already has. One shared dialog here rather than one per row
-  // for the same reason DeliveryItemsManager's does: some of the rows
-  // that trigger it are real <tr> elements, and a raw confirm div can't
-  // legally sit next to a <tr> inside <tbody>.
+  // Deleting an item asks first. One shared dialog, since rows are <tr>s.
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<Item | null>(null)
 
-  // Arriving here from InvoiceListPage's pencil icon carries which invoice
-  // type to edit in navigation state — open that form immediately, then
-  // clear the state so navigating back/forward or refreshing doesn't
-  // re-trigger it.
+  // Coming from the invoice list's pencil opens that invoice's form once.
   useEffect(() => {
     const openType = (location.state as { openInvoiceType?: 'dp' | 'pelunasan' } | null)?.openInvoiceType
     if (openType) {
@@ -275,12 +237,8 @@ export function OrderDetailPage() {
 
   const total = orderItems.reduce((s, i) => s + i.sub_total, 0)
 
-  // Group rows by item_name — e.g. 5 "KEMEJA SERVER" rows (one per size)
-  // collapse into a single dropdown entry instead of flooding the table.
-  // A group of exactly one item renders as a plain flat row (no
-  // chevron/dropdown affordance — nothing to collapse). Preserves each
-  // name's first-appearance order rather than alphabetizing, so the list
-  // still reads in the order items were added.
+  // Items with the same name (one per size) collapse into one row, in the order
+  // they were added.
   const itemGroups: { name: string; items: Item[] }[] = []
   const groupIndex = new Map<string, number>()
   for (const item of orderItems) {
@@ -331,13 +289,7 @@ export function OrderDetailPage() {
   }
 
   if (orderLoading || itemsLoading || invoicesLoading) return <div className="p-8 text-slate-400">Loading…</div>
-  // Same distinction made in InvoicePrintPage/KwitansiPrintPage: a failed
-  // fetch (network drop, 500, etc.) previously looked identical to a
-  // genuinely missing order — "Order not found." — sending people
-  // searching for a bad link instead of just retrying. Covers the items
-  // and invoices queries too now (see their own comments above) — any one
-  // of the three failing blocks the page the same way, rather than
-  // rendering with silently-wrong item/invoice state.
+  // A failed fetch shows Retry, not "Order not found".
   if (orderError || itemsError || invoicesError) {
     return (
       <div className="p-8 text-center">
@@ -374,27 +326,15 @@ export function OrderDetailPage() {
       </div>
 
       <div className="card">
-        {/* flex-wrap on both this row and the button group below — up to
-            four buttons (Add Item, COD/DP/Pelunasan invoice actions) next
-            to a title never all fit on one line at phone width. Without
-            wrapping, they don't just overflow off-screen (this row has no
-            scroll container of its own) — they overlap each other in
-            place, since a non-wrapping flex row still lets each item keep
-            its own natural size and just spill past the container's
-            edge. */}
+        {/* Wraps so the up to four buttons fit at phone width. */}
         <div className="flex items-center justify-between gap-2 p-4 border-b border-slate-100 flex-wrap">
           <h2 className="font-semibold text-navy-900">Order Items ({orderItems.length})</h2>
           <div className="flex items-center gap-2 flex-wrap">
             <button className="btn-primary flex items-center gap-1" onClick={openAdd}>
               <Plus size={14} /> Add Item
             </button>
-            {/* COD ("pay the full amount, no D/P split") is a UI-level
-                shortcut to the exact same state a manually-typed 0% D/P
-                already produces (see GenerateInvoiceForm's Props comment
-                on forcedType) — so once dpInvoice exists, regardless of
-                which button created it, there's only ever the one
-                'Update Invoice' button below to edit it. This one is only
-                ever a STARTING choice. */}
+            {/* COD is a starting choice that makes a 0% DP invoice; after that there's only
+               Update Invoice. */}
             {!dpInvoice && (
               <button className="btn-secondary flex items-center gap-1" onClick={() => setInvoiceFormType('cod')}>
                 <FileText size={14} /> Generate COD Invoice
@@ -412,12 +352,7 @@ export function OrderDetailPage() {
           </div>
         </div>
 
-        {/* On mobile this opens as a popup instead of expanding in place
-            — an inline panel here pushed the whole item list further down
-            the page every time it opened, reading as the existing data
-            shifting/disappearing out from under you rather than a form
-            simply appearing on top. Desktop keeps the original inline
-            panel — plenty of width there and no such complaint. */}
+        {/* On phones the item form opens as a popup instead of pushing the list down. */}
         {showForm && isMobile && (
           <Modal
             title={editing ? 'Edit Item' : duplicating ? 'Duplicate Item' : 'Add Item'}
@@ -443,14 +378,7 @@ export function OrderDetailPage() {
             />
           </div>
         )}
-        {/* Item list scrolls on its own once it grows past a comfortable
-            height — previously every item pushed the Total row further
-            down the page with it, so a 12-item order buried the total off
-            the visible screen. Capping the table at a fixed height and
-            scrolling *inside* it keeps Total pinned directly under the
-            list at all times, however many items there are. The header
-            row stays sticky within that scroll area so column labels don't
-            scroll away with row 1. */}
+        {/* The list scrolls inside a fixed height so Total stays in view. */}
         {isMobile ? (
           <div className="max-h-[420px] overflow-y-auto divide-y divide-slate-50">
             {orderItems.length === 0 ? (
@@ -596,13 +524,8 @@ export function OrderDetailPage() {
                   )
                 }
 
-                // Multiple sizes of the same item — collapse into one
-                // dropdown row. Header shows the combined Qty/Subtotal
-                // across every size; Price only shows a value when every
-                // size in the group actually shares one (the common case)
-                // — otherwise it's left blank rather than showing a
-                // misleading single number, since the per-size prices are
-                // visible once expanded anyway.
+                // Sizes of one item collapse into a row with the combined qty and subtotal;
+                // the price shows only if every size shares it.
                 const groupQty = group.items.reduce((s, i) => s + i.amount, 0)
                 const groupSubtotal = group.items.reduce((s, i) => s + i.sub_total, 0)
                 const uniquePrices = new Set(group.items.map(i => i.price))
@@ -675,6 +598,8 @@ export function OrderDetailPage() {
         )}
       </div>
 
+      <OrderCosts orderId={order.id} value={total} />
+
       {invoiceFormType && (
         <Modal
           title={
@@ -691,10 +616,7 @@ export function OrderDetailPage() {
             order={order}
             items={orderItems}
             forcedType={invoiceFormType}
-            // 'cod' resolves to dpInvoice too — it's saved as a real 'dp'
-            // Invoice.type under the hood (see GenerateInvoiceForm's
-            // Props comment), so editing an existing COD invoice means
-            // finding the same record a real D/P invoice would.
+            // COD is saved as a 'dp' invoice too.
             existingInvoice={invoiceFormType === 'pelunasan' ? pelunasanInvoice : dpInvoice}
             prefillFrom={invoiceFormType === 'pelunasan' ? dpInvoice : null}
             clientId={order.client_id}

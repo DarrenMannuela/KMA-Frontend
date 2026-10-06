@@ -2,6 +2,7 @@ import axios from 'axios'
 import { handleSessionExpired } from '@/api/authApi'
 import type {
   Order, Item, Invoice, Supplier, FinanceHeader, ProductionItem, OperationItem,
+  FinanceBatch, FinanceBatchResult, Budget, RecurringCost,
   Delivery, DeliveryItem, Client, ClientContact, ClientItem, ClientItemPrice,
   CreateOrderRequest, UpdateOrderRequest,
   CreateItemRequest, UpdateItemRequest,
@@ -18,17 +19,10 @@ import type {
   CreateClientItemPriceRequest, UpdateClientItemPriceRequest,
 } from '@/types'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Base URL: Vite proxies /api/v1 → http://localhost:8000/api/v1
-// See vite.config.ts proxy config.
-// Port is 8000 (Go server) — not 8080.
-// ─────────────────────────────────────────────────────────────────────────────
+// Base URL: nginx (and Vite in dev) proxies /api/v1 to the Go server on :8000.
 
-// Thrown by the response interceptor below for any failed request against
-// the main Go API (orders, items, invoices, etc). Mirrors AuthApiError's
-// shape (a `.status` field carrying the HTTP status) so callers — e.g.
-// OrdersPage's 409-on-duplicate-order-id handling — can branch on the
-// specific status instead of just getting an opaque Error with a message.
+// Thrown for any failed request to the main API, with the HTTP status so
+// callers can branch on it (e.g. 409 on a duplicate order ID).
 export class ApiError extends Error {
   status?: number
 
@@ -47,13 +41,7 @@ const http = axios.create({
 http.interceptors.response.use(
   (r) => r,
   (e) => {
-    // A 401 here means the main backend's own session check (which
-    // proxies to the auth service's Validate — see internal_handler.go)
-    // rejected the request, same underlying cause as a 401 straight from
-    // authHttp. Routed through the SAME handleSessionExpired rather than
-    // a second copy of the redirect logic, so the two API clients can't
-    // drift into disagreeing about when a session counts as dead or
-    // where "logged out" sends someone.
+    // The backend's session check failed: same handling as a 401 from the auth service.
     if (e.response?.status === 401) handleSessionExpired(e.config?.url)
     return Promise.reject(new ApiError(
       e.response?.data?.error ?? e.response?.data?.message ?? e.message ?? 'Error',
@@ -75,55 +63,14 @@ function crud<T, C, U>(base: string) {
   }
 }
 
-// ── Route mapping (verified against main.go) ─────────────────────────────────
-//
-// CORRECTION: this comment previously listed /order, /items, /delivery as
-// STUBs "not wired to DB yet". That was stale/incorrect — cross-checked
-// against main.go's actual route table, all three (along with /item's
-// GET/POST/PATCH/DELETE, /invoice, /supplier, /finance-header,
-// /production-item, /operation-item, and the whole /client* subtree) are
-// fully wired to real, DB-backed handlers. Don't trust this block over
-// main.go itself; update it here if the routing ever changes rather than
-// letting it drift again.
-//
-//  LIVE (wired to real handlers in main.go):
-//    /order, /order/:id
-//    /item, /item/:id, /item/by-order        (GET /item/:id added — see
-//      ItemHandler.go's GetItemByID; every other entity already had a
-//      single-record GET, this was the one gap)
-//    /invoice, /invoice/:id
-//    /delivery, /delivery/:id
-//    /delivery-item, /delivery-item/:id
-//    /supplier, /supplier/:id
-//    /finance-header, /finance-header/:id  (shared parent for Production/Operation Kas Bons —
-//      not filterable by type; a header can have both production and
-//      operation items attached, so listing is just "give me all headers")
-//    /production-item, /production-item/:id  (carries its own supplier_id)
-//    /operation-item, /operation-item/:id
-//    /client, /client/:id
-//    /client-contact, /client-contact/:id, /client-contact/by-client?client_id=
-//    /client-item, /client-item/:id, /client-item/by-client?client_id=
-//    /client-item/:id/photo  (POST multipart "photo", DELETE)
-//    /client-item-price, /client-item-price/:id,
-//      /client-item-price/by-item?client_item_id=, /client-item-price/grouped
-//
-//  NOT IN main.go AT ALL (genuinely unimplemented — no route, no handler):
-//    /order-recap, /order-recap/:id
-//    /delivery-order, /delivery-order/:id
-//    /surat-jalan, /surat-jalan/:id
-//  Don't call these until they're actually added to main.go + a handler.
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Endpoints (see main.go for the full route table) ────────────────────────
 
 export const ordersApi        = crud<Order,         CreateOrderRequest,        UpdateOrderRequest>('/order')
 export const itemsApi         = {...crud<Item,           CreateItemRequest,          UpdateItemRequest>('/item'), getByOrder: (orderId: string) => http.get<Item[]>(`/item/by-order?order_id=${encodeURIComponent(orderId)}`).then(r => r.data)}
 export const invoicesApi    = crud<Invoice,     CreateInvoiceRequest,    UpdateInvoiceRequest>('/invoice')
 export const suppliersApi     = crud<Supplier,       CreateSupplierRequest,      UpdateSupplierRequest>('/supplier')
 
-// financeHeaderApi: the shared "Kas Bon" parent. Plain list() is now what
-// production/operations actually use — there's no type filter anymore,
-// since a single header can have both production and operation items on
-// it. Each page's hooks (productionHooks/operationHooks) filter down to
-// "headers that actually have an item in my table" client-side instead.
+// The Kas Bon headers. One header can hold production and operation lines.
 export const financeHeaderApi = crud<FinanceHeader, CreateFinanceHeaderRequest, UpdateFinanceHeaderRequest>('/finance-header')
 
 // productionItemApi / operationItemApi: the line items under a header.
@@ -137,6 +84,22 @@ export const productionItemApi = {
 export const operationItemApi = {
   ...crud<OperationItem, CreateOperationItemRequest, UpdateOperationItemRequest>('/operation-item'),
   grouped: () => http.get<Record<string, OperationItem[]>>('/operation-item/grouped').then(r => r.data),
+}
+
+export const financeBatchApi = {
+  apply: (batch: FinanceBatch) => http.post<FinanceBatchResult>('/finance/batch', batch).then(r => r.data),
+}
+
+export const budgetApi = {
+  list: () => http.get<Budget[]>('/budget').then(r => r.data),
+  /** An amount of 0 removes the budget. */
+  put: (b: Omit<Budget, 'id'>) => http.put<Budget>('/budget', b).then(r => r.data),
+}
+
+export const recurringCostApi = {
+  ...crud<RecurringCost, Omit<RecurringCost, 'id'>, Partial<RecurringCost>>('/recurring-cost'),
+  postMonth: (body: { month: string; header_id: string; date: string }) =>
+    http.post<{ posted: OperationItem[] | null }>('/recurring-cost/post-month', body).then(r => r.data),
 }
 
 export const deliveryApi      = crud<Delivery,       CreateDeliveryRequest,      UpdateDeliveryRequest>('/delivery')
@@ -172,10 +135,7 @@ export const clientItemApi = {
     http.delete<ClientItem>(`/client-item/${encodeURIComponent(id)}/photo`).then(r => r.data),
 }
 
-// clientItemPriceApi: year-by-year price history per catalogue item.
-// grouped() returns { [client_item_id]: Price[] }, same "grouped" shape
-// as productionItemApi/operationItemApi — lets a client's whole catalogue
-// render its price history in one request instead of one per item.
+// Price history per catalogue item; grouped() returns { [client_item_id]: Price[] }.
 export const clientItemPriceApi = {
   ...crud<ClientItemPrice, CreateClientItemPriceRequest, UpdateClientItemPriceRequest>('/client-item-price'),
   getByItem: (clientItemId: number | string) =>

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingBag, ListOrdered, FileText,
-  Truck, PackageCheck, ScrollText, Factory, Users, Wrench,
+  Truck, Factory, Users, Wrench, BarChart3,
   Building2, Circle, ChevronDown, ShieldCheck, X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -10,12 +10,7 @@ import { useAuth } from '@/contexts/AuthContext'
 
 type RouteStatus = 'live' | 'stub'
 
-// Per-item status dots and the legend footer are a build-time aid for
-// whoever's wiring up handlers — not something a real KMA staff member
-// should see. "Stub (placeholder)" next to a menu item reads as "this is
-// broken" to someone who isn't the developer. Vite sets import.meta.env.DEV
-// to false in a production build, so this disappears automatically once
-// shipped; nothing to remember to toggle off by hand.
+// Route status dots and their legend: development builds only.
 const SHOW_DEV_STATUS = import.meta.env.DEV
 
 interface NavItem {
@@ -51,6 +46,7 @@ const GROUPS: NavGroup[] = [
     label: 'Finances',
     icon: Factory,
     items: [
+      { label: 'Overview',   path: '/finance',    icon: BarChart3, status: 'live' },
       { label: 'Suppliers',  path: '/suppliers',  icon: Users,   status: 'live' },
       { label: 'Production', path: '/production', icon: Factory, status: 'live' },
       { label: 'Operations', path: '/operations', icon: Wrench,  status: 'live' },
@@ -63,11 +59,7 @@ function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => v
     <NavLink
       to={item.path}
       end={item.path === '/'}
-      // Closes the mobile drawer the moment a real navigation happens —
-      // on desktop (where the sidebar is always visible, not a drawer)
-      // onNavigate is undefined and this is a no-op. Doesn't fire for the
-      // group-expand/collapse buttons below, since those aren't links and
-      // don't reach this handler at all.
+      // Closes the mobile drawer on navigation (undefined on desktop).
       onClick={onNavigate}
       className={({ isActive }) =>
         `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 group ${
@@ -130,11 +122,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
   return (
     <>
-      {/* Backdrop — mobile only (md:hidden matches the sidebar's own
-          md:translate-x-0 below: once the sidebar is permanently visible
-          at that breakpoint, a backdrop over the whole page would make no
-          sense). Clicking it closes the drawer, same as clicking outside
-          any other overlay in this app (ConfirmDialog, Modal). */}
+      {/* Backdrop for the mobile drawer; a click closes it. */}
       {open && (
         <div
           className="fixed inset-0 z-20 bg-navy-950/50 backdrop-blur-sm md:hidden"

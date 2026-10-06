@@ -73,9 +73,15 @@ Start the three stacks in order: KMA (it creates `kma_network`), KMA-Auth, then 
 - **Orders** — order + item management, linked to a client or freeform company info.
 - **Invoices** — DP/Pelunasan generation off an order, a print-ready invoice layout with manual/predicted page breaks, and a matching Kwitansi (receipt) print view.
 - **Delivery** — Delivery Order (DO) and Surat Jalan (SJ) tracking with per-box item packing, and a print view for both document types.
-- **Production / Operations** — Kas Bon–based spend tracking (materials by supplier, operating costs by category), with a monthly dashboard + spend bars and a full spreadsheet-style editor.
+- **Production / Operations** — Kas Bon–based spend tracking (materials by supplier, operating costs by category), with a monthly dashboard + spend bars and a spreadsheet of every line:
+  - search across all months, filter by supplier/category/order, group by Kas Bon, supplier/category or order, sort any column;
+  - edit cells in place (arrow keys move, typing replaces), select rows (shift-click for a range) to move them to another Kas Bon, set a supplier/category/order, copy, export or delete them;
+  - every change can be undone (the toast's Undo, or Ctrl+Z);
+  - **New Kas Bon** enters a whole Kas Bon at once, production and operation lines together; Enter adds the next line;
+  - copy rows in Excel and press Ctrl+V on the sheet (or into a line of the form) to bring them in;
+  - **Import** reads .xlsx or .csv (Indonesian or English headings, "30.000", "2,5", 05/10/2026), lets you check the column mapping, adds unknown suppliers, and skips lines already saved; **Export** writes a real .xlsx of what's shown or selected.
+- **Finance** — the year month by month against last year, where the money goes (suppliers, bahan, operation categories; click through to the lines), cash in vs out with a running balance, who owes what by age, profit per client and per order (costs are linked to orders in the sheet's Order column), monthly budgets with progress, and recurring costs added each month with one click. Downloads as one Excel workbook.
 - **Suppliers** — supplier records by category (Sablon, Embroidery, Merchandise, Uniform, General).
-- **Reports** — yearly orders/invoicing/cost breakdown with a profit/loss chart.
 - **Users (admin only)** — staff account provisioning, deactivation, and password resets. No self-signup — accounts are created by an admin and invited by email.
 
 ## Supplier Category Enum (from kma.yaml)
@@ -83,6 +89,19 @@ Start the three stacks in order: KMA (it creates `kma_network`), KMA-Auth, then 
 `sablon` | `embroidery` | `merchandise_supplier` | `uniform_supplier` | `general_supplier`
 
 Display labels and colors for these live in `src/constants/supplierCategories.ts` — reuse that shared constant rather than redefining labels/colors locally (see `SuppliersPage.tsx` for the intended pattern).
+
+## Closing KMA logs you out
+
+Closing the last KMA tab or window — or the browser, or the installed app — signs you out: the next time KMA is opened, it's the login screen. A reload doesn't, and neither does closing one KMA tab while another is still open. It's in `src/utils/tabSession.ts` (with `POST /closing` on the auth service):
+
+- **On closing**, a tab tells the auth service, and the session ends 20 seconds later unless something uses it again. A reload does, at once; so do other KMA tabs that are still open, which hear about the close over a `BroadcastChannel`.
+- **On opening**, a tab works out whether KMA was closed in between: its `sessionStorage` mark survives a reload but not a close; a new tab asks the other KMA tabs whether one is open; and since browsers that reopen their tabs on start bring `sessionStorage` back too, open tabs note the time in `localStorage` every 30s, and a mark more than 2 minutes stale counts as closed. If KMA was closed, any leftover session is ended on the server (for closes that went unreported, like a phone app swiped away) and the login screen shows.
+
+Limits: a browser that reopens its tabs within 2 minutes of being closed keeps you signed in; and a KMA tab the browser has frozen in the background (phones, battery saver) can't answer, so opening a second KMA tab then signs out both.
+
+## Signed in somewhere else
+
+The auth service allows one session per account. When a login is refused because the account is signed in on another device, the login page says when that session ends by itself and offers **Sign out the other device and sign in here** (`src/pages/auth/LoginPage.tsx`), so a phone that died signed in doesn't lock its owner out for hours.
 
 ## Install it as an app (phone or computer)
 
@@ -98,7 +117,7 @@ Browsers only install from an `https://` address (or `localhost`), so this doesn
 
 - **This repository is public**, history included. Nothing secret belongs in the frontend anyway (all of it is sent to every browser), and `.gitignore` keeps `.env` files, keys and certificates out regardless; `.dockerignore` keeps `.env`, `node_modules` and `.git` out of image builds.
 - nginx adds `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN` (other sites can't frame KMA) and `Referrer-Policy: same-origin` (KMA addresses, with order numbers in them, aren't sent to other sites) to every response (`security-headers.conf`).
-- The image is built with Node 22 (Node 20 stopped getting security fixes in April 2026).
+- The image is built with Node 22 (Node 20 stopped getting security fixes in April 2026), and Vite 6: Vite 5's esbuild let any website read the dev server's responses while `npm run dev` ran. `npm audit` still lists `braces`, which every version is affected by, through Tailwind 3's file watcher at build time; it goes with a move to Tailwind 4.
 
 ## Build for Production
 

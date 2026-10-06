@@ -1,13 +1,8 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 
-// Mirrors ProtectedRoute's status handling: while AuthContext is still
-// checking whether the session cookie is valid (status === 'loading'),
-// `user` is null but that does NOT mean logged out — it means "don't
-// know yet". Redirecting to /login on every null `user` (regardless of
-// status) caused a page refresh or back-navigation to bounce straight to
-// the login screen even for an already-valid session, because this
-// component used to fire before the /me check had a chance to resolve.
+// While the session is still being checked, `user` is null without meaning
+// logged out: wait, as ProtectedRoute does.
 export function AdminRoute({ children }: { children: React.ReactNode }) {
   const { user, status, retryMe } = useAuth()
 
