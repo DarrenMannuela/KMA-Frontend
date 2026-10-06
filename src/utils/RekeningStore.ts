@@ -1,12 +1,7 @@
 import { useEffect, useState } from 'react'
 
-/**
- * The bank account details shown in the payment instructions on printed
- * invoices and kwitansi. This was previously hardcoded in InvoicePrintPage;
- * now it's editable in the UI and persisted in localStorage so it doesn't
- * need to be retyped for every invoice, and isn't a backend/database
- * concern — it's a per-browser "company settings" value, not order data.
- */
+/** The bank account printed on invoices and kwitansi: a per-browser company
+ *  setting in localStorage, editable on the print pages. */
 export interface Rekening {
   accountName: string
   bankBranch: string

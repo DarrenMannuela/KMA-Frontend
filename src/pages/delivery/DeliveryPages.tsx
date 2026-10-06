@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Truck, Eye, Plus, RotateCcw, Printer, Building2, ArrowRight } from 'lucide-react'
+import { Truck, Eye, RotateCcw, Printer, Building2, ArrowRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField, UppercaseField } from '@/components/ui'
@@ -27,22 +27,13 @@ function suggestNextDeliveryId(deliveries: Delivery[], type: 'DO' | 'SJ'): strin
   return `${String(next).padStart(2, '0')}/KMA/${type}/${yy}`
 }
 
-// For an SJ tied to an order, the documents that physically go out are
-// derived, not typed: an original kwitansi + invoice per invoice raised
-// against that order (labelled DP or PELUNASAN depending on whether it's
-// been paid off), plus a "COPY PO" line if the order has a PO number.
-// Mirrors the paper template — see the physical SJ example this was built
-// from, which lists exactly these three document types under ITEMS.
+// The documents an SJ for an order carries: a kwitansi and an invoice per
+// invoice raised (DP or PELUNASAN), plus COPY PO if the order has a PO.
 function suggestSJDocuments(order: Order | undefined, orderInvoices: Invoice[]): { item_name: string; amount: number }[] {
   if (!order) return []
   const docs: { item_name: string; amount: number }[] = []
   orderInvoices.forEach(inv => {
-    // Same "0% DP = full invoice, not a partial one" convention as
-    // OrderDetailPage/InvoiceListPage/InvoicePrintPage/KwitansiPrintPage —
-    // a dp-type invoice with nothing actually down reads as Pelunasan here
-    // too. (Previously checked `inv.remaining === 0`, which is never true:
-    // `remaining` is the amount THIS invoice bills for, not what's left
-    // after it — so Pelunasan invoices were printing with no suffix at all.)
+    // A 0% DP is a full invoice, labelled PELUNASAN.
     const isFullInvoice = inv.type === 'dp' && (inv.down_payment ?? 0) === 0
     const suffix = inv.type === 'pelunasan' || isFullInvoice ? ' (PELUNASAN)' : ' (DP)'
     docs.push({ item_name: `ASLI KWITANSI NO. ${inv.id}`, amount: 1 })
@@ -59,18 +50,12 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
   const update = deliveryHooks.useUpdate()
   const createItem = deliveryItemHooks.useCreate()
   const navigate = useNavigate() 
-  // isError matters here beyond the usual loading/retry case: idAlreadyExists
-  // and the auto-suggested next number below are both derived entirely from
-  // this list (same as GenerateInvoiceForm's identical invoices list), so a
-  // silent fetch failure would leave `deliveries` at [] and make the
-  // client-side duplicate-ID guard look like it passed when it never ran.
+  // If this list failed to load, the duplicate-ID check and the suggested number
+  // can't be trusted; the form says so.
   const { data: deliveries = [], isError: isDeliveriesError } = deliveryHooks.useList()
   const { data: orders = [] } = orderHooks.useList()
   const { data: clients = [] } = clientHooks.useList()
-  // Only needed to build the SJ auto-documents preview/creation below — a
-  // plain fetch here (like DeliveryPrintPage does for delivery/items)
-  // rather than a dedicated hook, since this is the only place in the app
-  // that needs invoices scoped to an order.
+  // The order's invoices, for the SJ document list.
   const { data: invoices = [] } = useQuery({
     queryKey: ['invoices'],
     queryFn: () => invoicesApi.list(),
@@ -85,18 +70,11 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
   // manually-entered ID.
   const [idTouched, setIdTouched] = useState(false)
 
-  // Same "touched" convention for the two fields the selected Order can
-  // supply (Company, PO Number): as long as the user hasn't typed into
-  // them directly, picking an order — or switching to a different one —
-  // keeps them in sync with that order's data. Editing an existing
-  // delivery starts touched=true so opening the edit modal never
-  // overwrites what's already saved.
+  // Company and PO follow the picked order until typed by hand. Editing starts
+  // "touched" so saved values are kept.
   const [companyTouched, setCompanyTouched] = useState(!!editing)
   const [poNumberTouched, setPoNumberTouched] = useState(!!editing)
-  // Same idea for Client — picking an Order that's itself linked to a
-  // Client fills this in for free; picking a Client directly (or editing
-  // an existing delivery) marks it touched so linking/switching an order
-  // never silently overwrites a deliberately-chosen client.
+  // Client too: an order's client fills it unless one was picked by hand.
   const [clientTouched, setClientTouched] = useState(!!editing)
 
   const [form, setForm] = useState<CreateDeliveryRequest>({
@@ -121,10 +99,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
   // ClientDetailPage's POC list.
   const { data: contacts = [] } = clientContactHooks.useByClient(form.client_id ?? undefined)
 
-  // Shared by both the DO "Order" select and the SJ "Order (optional)"
-  // select — picking an order fills Company/PO Number/Client from it
-  // wherever those fields haven't been touched directly, same rule
-  // uniformly applied in one place instead of duplicated per-type.
+  // For both the DO and SJ order selects: fill the untouched fields from the order.
   const applyOrderSelection = (newOrderId: string | null) => {
     const selectedOrder = orders.find(o => o.id === newOrderId)
     setForm(p => {
@@ -143,10 +118,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
     })
   }
 
-  // Picking a client prefills Company from client_name — same convention
-  // as OrdersPage — but only when Company hasn't been touched directly.
-  // Any previously-picked contact is cleared, since it belonged to the
-  // old client.
+  // Picking a client fills Company (unless typed) and clears the old contact.
   const handleClientChange = (idStr: string) => {
     setClientTouched(true)
     const newClientId = idStr ? Number(idStr) : null
@@ -159,16 +131,8 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
     }))
   }
 
-  // Picking a contact fills Contact Person / Phone Number / Address from
-  // it — same "touched" idea as everything else here, so it never clobbers
-  // a value you've already typed by hand. Address too, now: a ClientContact
-  // carries its own address (a specific PIC can have a different site than
-  // the client's general one — see location_label/address on that type),
-  // which used to sit unused here even though "who's this delivery for"
-  // and "where's it going" are usually the same decision. Only overwrites
-  // when the picked contact actually has an address on file, same as
-  // phone_number already does — a contact with no stored address shouldn't
-  // blank out one someone already typed.
+  // Picking a contact fills Contact Person, Phone and Address; values the contact
+  // doesn't have are kept.
   const handleContactChange = (idStr: string) => {
     const newContactId = idStr ? Number(idStr) : null
     const contact = contacts.find(c => c.id === newContactId)
@@ -198,12 +162,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
 
   const idAlreadyExists = deliveries.some(d => d.id === form.id && d.id !== editing?.id)
 
-  // Same convention as OrdersPage — Address/PO Number/Contact Person/
-  // Company uppercase as-typed via UppercaseField directly now, so
-  // "jl. hayam wuruk" / "Jl. Hayam Wuruk" / "JL. HAYAM WURUK" don't end up
-  // as three different-looking values across deliveries. Phone number is
-  // left alone since it's digits only. setStr now only handles the two
-  // remaining plain fields (Date, Phone Number).
+  // For the plain fields (Date, Phone); the text fields use UppercaseField.
   const setStr = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm(p => ({ ...p, [k]: e.target.value }))
   }
@@ -234,10 +193,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
             if (type === 'SJ' && form.order_id) {
               const linkedOrder = orders.find(o => o.id === form.order_id)
               const orderInvoices = invoices.filter(inv => inv.order_id === form.order_id)
-              // Sequential, not a forEach of .mutate() calls — those fire
-              // concurrently and land in whatever order the network happens
-              // to resolve them, which scrambles the intended
-              // Kwitansi → Invoice → PO sequence on the printout.
+              // One at a time, so the documents keep their Kwitansi → Invoice → PO order.
               for (const doc of suggestSJDocuments(linkedOrder, orderInvoices)) {
                 await createItem.mutateAsync({
                   delivery_id: newDelivery.id,

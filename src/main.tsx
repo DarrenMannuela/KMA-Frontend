@@ -34,12 +34,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <QueryClientProvider client={queryClient}>
-        {/* Outermost safety net — catches anything that escapes App itself
-            (e.g. AuthProvider or the router chrome), which the route-scoped
-            boundary inside AppShell can't see since it sits below both.
-            No resetKeys here on purpose: there's nothing "outside" this one
-            to navigate to, so recovery is a reload, same as the fallback UI
-            says. */}
+        {/* Outermost safety net, for errors outside the routes' own boundary; recovery
+           is a reload. */}
         <ErrorBoundary fullPage>
           <App />
         </ErrorBoundary>

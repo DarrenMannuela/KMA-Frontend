@@ -18,10 +18,7 @@ function ItemPhotoPanel({ item }: { item: ClientItem }) {
   const remove = clientItemHooks.useDeletePhoto()
   const inputRef = useRef<HTMLInputElement>(null)
   const [imgFailed, setImgFailed] = useState(false)
-  // A bare "Remove" that fires on the first click is one misclick away from
-  // losing the photo with no undo — same reasoning as CrudPage's delete
-  // button and SpreadsheetView's row-delete trash icon, both of which arm
-  // on a first click and only act on a second, deliberate one.
+  // Remove asks for a second click.
   const [confirmingRemove, setConfirmingRemove] = useState(false)
 
   const handleRemove = () => {
@@ -165,27 +162,14 @@ function ItemPriceHikeCalculator({ item, prices }: { item: ClientItem; prices: C
     if (last && pct !== '' && !isNaN(pctNum)) {
       setPriceDigits(String(Math.round(last.price * (1 + pctNum / 100))))
     }
-    // `last` deliberately included (unlike a typical "run only when the
-    // user types a %" effect) — prices can refetch in the background
-    // (e.g. after Save This Price, or another tab/user adding one), and
-    // without this, a percentage typed before that refetch would keep
-    // suggesting a price computed off the now-stale "Last Price" instead
-    // of the one the read-only field above it is currently showing.
+    // Also recompute when the last price changes (prices refetch in the background).
   }, [pct, last])
 
   const priceNum = priceDigits ? Number(priceDigits) : null
 
   const handleSave = () => {
     if (priceNum == null) return
-    // setPct/setPriceDigits used to run unconditionally right after
-    // .mutate() fired — meaning they cleared regardless of whether the
-    // save actually succeeded. A failed save (network drop, validation
-    // error) silently wiped whatever price/percentage was just typed with
-    // no error shown and nothing to recover it — exactly the data-loss
-    // pattern the rest of the app's spreadsheets (ProductionSpreadsheet/
-    // OperationsSpreadsheet's onCreateRow handling) are careful to avoid.
-    // Gating the clear on onSuccess, and adding onError, fixes both: a
-    // failure now leaves the typed values in place and says so.
+    // Clear the inputs only when the save succeeds; a failure keeps them and says so.
     create.mutate(
       { client_item_id: item.id, year, price: priceNum, effective_date: effectiveDate ? new Date(effectiveDate).toISOString() : null },
       {
@@ -240,11 +224,7 @@ export function ClientItemDetailPage() {
   const { data: prices = [], isLoading: pricesLoading, isError: pricesError, refetch: refetchPrices } = clientItemPriceHooks.useByItem(itemId)
 
   if (itemLoading) return <Spinner />
-  // Distinguish "the fetch actually failed" from "this item genuinely
-  // doesn't exist" — previously indistinguishable, since a failed
-  // clientItemHooks.useGet() left `item` undefined the same as a real
-  // 404 would, and both fell through to the same "Item not found."
-  // message with no way to retry a fetch that just needs another try.
+  // A failed fetch shows Retry, not "Item not found".
   if (itemError) {
     return (
       <div className="p-8 text-center">

@@ -9,14 +9,8 @@ export interface Column<T> {
   header: string
   key: keyof T | string
   render?: (row: T) => React.ReactNode
-  /** MobileEntryList-style mobile cards only (desktop table ignores this)
-   *  — use this column's value as the card's own title line instead of
-   *  defaulting to the first column. Matters when the first column is a
-   *  bare id/number (e.g. Items' row id, Suppliers' id) that reads as an
-   *  unhelpful, meaningless heading on its own — mark the column people
-   *  would actually scan by instead (an item name, a supplier name). Only
-   *  one column should set this; if none do, the first column is still
-   *  the fallback, unchanged from before this existed. */
+  /** Mobile cards only: use this column as the card's title instead of the first
+   *  column (when the first is a bare id). Set on one column at most. */
   primary?: boolean
 }
 
@@ -25,14 +19,7 @@ interface CrudPageProps<T extends { id: string | number }> {
   icon: LucideIcon
   data: T[] | undefined
   isLoading: boolean
-  // Distinct from "loaded successfully and there's just nothing yet" — a
-  // failed fetch previously fell through to the same EmptyState as a
-  // genuinely empty table ("No invoices yet — click Add New"), which sent
-  // people looking for data that was never actually missing, just
-  // unreachable. Optional and defaults to false so existing callers that
-  // haven't wired their query's isError through keep behaving exactly as
-  // before; `data` is expected to be undefined/[] in the error case same
-  // as it already is during loading.
+  // A failed fetch shows an error with Retry, not the empty state.
   isError?: boolean
   onRetry?: () => void
   columns: Column<T>[]
@@ -42,15 +29,10 @@ interface CrudPageProps<T extends { id: string | number }> {
   deleteMessage?: (row: T) => string
   searchKeys?: (keyof T)[]
   rowActions?: (row: T) => React.ReactNode
-  // Override for the built-in pencil button. Some pages (e.g. Invoices)
-  // don't edit through this generic modal at all — editing happens on a
-  // dedicated page/flow elsewhere. When provided, the pencil calls this
-  // instead of opening the (otherwise empty) generic form modal.
+  // Replaces the built-in edit modal (e.g. Invoices edit on their own page).
   onEditClick?: (row: T) => void
-  // Same idea, for the "Add New" button.
-  // Same idea as onEditClick/onAddClick — an escape hatch for page-specific
-  // needs without baking them into this generic component. Rendered next
-  // to the search box; e.g. Invoices uses it for a Paid/Unpaid toggle.
+  // Same, for Add New.
+  // Extra controls next to the search box (e.g. Invoices' Paid/Unpaid toggle).
   onAddClick?: () => void
   filterBar?: React.ReactNode
 }
@@ -63,18 +45,8 @@ export function CrudPage<T extends { id: string | number }>({
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<T | null>(null)
   const [confirmRow, setConfirmRow] = useState<T | null>(null)
-  // Backed by sessionStorage (keyed by `title`, which is unique per page
-  // that renders a CrudPage) rather than plain useState — every row action
-  // that opens a detail view (the pencil escape hatch, a custom rowAction,
-  // etc.) does a real route navigation, which unmounts this component
-  // entirely. A user who searches "Zenbu" on Orders, opens a row, then
-  // clicks Back found their search silently cleared — looked like the
-  // filtered results had vanished, the same "my data disappeared" bug the
-  // month-selector fix addressed elsewhere. sessionStorage (rather than,
-  // say, lifting into the URL) survives that round trip regardless of how
-  // any particular page's own Back button navigates — a hardcoded path, a
-  // history(-1), or something else entirely — since it doesn't depend on
-  // the URL carrying anything forward.
+  // The search survives opening a row and coming back (sessionStorage, keyed
+  // by the page title).
   const searchStorageKey = `crud-search:${title}`
   const [search, setSearchState] = useState(() => {
     try { return sessionStorage.getItem(searchStorageKey) ?? '' } catch { return '' }
@@ -100,10 +72,6 @@ export function CrudPage<T extends { id: string | number }>({
   }
   const closeModal = () => { setModalOpen(false); setEditing(null) }
   const isMobile = useIsMobile()
-  // Which column's value becomes a mobile card's own title line — see
-  // Column.primary's own comment for why a page would mark one explicitly
-  // (a bare id/number as the first column reads as a meaningless heading
-  // otherwise) rather than always defaulting to the first column.
   const titleKey = columns.find(c => c.primary)?.key ?? columns[0]?.key
 
   return (
@@ -129,7 +97,7 @@ export function CrudPage<T extends { id: string | number }>({
       {(searchKeys.length > 0 || filterBar) && (
         <div className="flex items-center gap-3 mb-4 fade-up delay-1">
           {searchKeys.length > 0 && (
-            <div className="relative max-w-xs flex-1">
+            <div className="relative w-full sm:max-w-xs flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
                 className="field !pl-9 !py-2 text-sm"
@@ -159,19 +127,8 @@ export function CrudPage<T extends { id: string | number }>({
         ) : filtered.length === 0 ? (
           <EmptyState icon={Icon} title={`No ${title.toLowerCase()} yet`} subtitle="Click Add New to create one" />
         ) : isMobile ? (
-          // Cards instead of an N-column table below md — an arbitrary
-          // column set (this component is shared by Orders/Items/Invoices/
-          // Clients/Suppliers, each with its own columns) has no room to
-          // breathe as a table at phone width; even contained to its own
-          // scroll box (the desktop branch below), reading it means
-          // swiping sideways cell by cell. Same fix already applied to
-          // MobileEntryList/SpreadsheetView and the Dashboard's two
-          // tables — titleKey's column (see its own comment above) reads
-          // as the card's own title line, everything else becomes a
-          // label:value line. Actions move from a dedicated table column
-          // to a row of icons under the content — the same handlers
-          // (openEdit/setConfirmRow/rowActions), just laid out for touch
-          // instead of a hover-revealed table cell.
+          // Phone width: one card per row (title column first, the rest as
+          // label: value), with the row actions as icons underneath.
           <div className="divide-y divide-slate-100">
             {filtered.map(row => (
               <div key={row.id} className="px-5 py-3">

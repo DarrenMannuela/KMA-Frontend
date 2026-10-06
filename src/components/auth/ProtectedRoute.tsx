@@ -14,11 +14,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     )
   }
 
-  // Distinct from 'unauthenticated' — the session check itself failed
-  // (network/5xx), not a confirmed "you're logged out." Bouncing this to
-  // /login too would make a transient blip on first load indistinguishable
-  // from an actually-expired session; offering a retry in place keeps
-  // someone with a perfectly valid session from being kicked out by wifi.
+  // The session check failed (network/5xx): offer Retry rather than /login.
   if (status === 'error') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 px-4 text-center">

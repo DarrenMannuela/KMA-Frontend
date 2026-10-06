@@ -23,13 +23,8 @@ interface OperationsDashboardProps {
   onCursorChange: (year: number, month: number) => void
 }
 
-// price kept as a raw string while typing — see comment in ProductionDashboard
-// for why converting to Number on every keystroke breaks backspacing to blank.
-// Category is the shared, sticky field for a Kas Bon (e.g. "Transport",
-// "Utilities") — stays filled across "Add Entry" clicks, and is what the
-// spreadsheet groups by and the bars below break spend down by.
-// Description is the specific cost line (e.g. "Ojek to supplier") — cleared
-// after each add, same role Material plays in Production's quick add.
+// Price stays a string while typing. Category stays filled between adds; the
+// item is cleared after each.
 const emptyQuickAdd = () => ({ header_id: '', category: '', item: '', price: '', date: todayISODate() })
 
 export function OperationsDashboard({ onOpenSheet, selectedCategory, cursor, onCursorChange }: OperationsDashboardProps) {
@@ -49,10 +44,7 @@ export function OperationsDashboard({ onOpenSheet, selectedCategory, cursor, onC
   )
   const monthTotal = monthData.reduce((s, o) => s + o.price, 0)
 
-  // Same convention as ProductionDashboard/OrdersPage's idTouched. Shared
-  // with ProductionDashboard via useKasBonIdSuggestion. refetchHeaders lets
-  // resetIdSuggestion (wired to the 409 handler below) recompute off a
-  // fresh header list rather than this render's possibly-stale one.
+  // The suggested Kas Bon ID; reset() refetches headers first (used after a 409).
   const { idTouched, setIdTouched, reset: resetIdSuggestion } = useKasBonIdSuggestion(
     headers,
     quickAdd.header_id,
@@ -60,11 +52,7 @@ export function OperationsDashboard({ onOpenSheet, selectedCategory, cursor, onC
     refetchHeaders
   )
 
-  // Spend grouped by Category — the closest Operations analog to
-  // Production's "spend by supplier" bars. Kas Bon ID is just an arbitrary
-  // reference number and isn't a meaningful category to group or filter
-  // by; Category (e.g. "Transport", "Utilities") actually is, and a single
-  // category naturally spans many different Kas Bons.
+  // Spend by category, like Production's spend by supplier.
   const categoryTotals = useMemo(() => {
     const totals: Record<string, number> = {}
     monthData.forEach(row => {
@@ -102,10 +90,7 @@ export function OperationsDashboard({ onOpenSheet, selectedCategory, cursor, onC
     }
     create.mutate(payload, {
       onSuccess: () => {
-        // Keep header_id/category/date filled so the next "Add Entry"
-        // click adds another cost line to the same Kas Bon under the same
-        // category — only the line-specific fields get cleared. Use "New
-        // Kas Bon" to start a different header instead.
+        // Keep the Kas Bon and category for the next line.
         setQuickAdd(p => ({ ...p, item: '', price: '' }))
       },
       // Same race OrdersPage/GenerateInvoiceForm/ProductionDashboard guard
@@ -244,14 +229,7 @@ export function OperationsDashboard({ onOpenSheet, selectedCategory, cursor, onC
           <SpendBars
             items={categoryTotals}
             selectedId={selectedCategory ?? null}
-            // Same fix as ProductionDashboard's SpendBars — SpendBars calls
-            // onSelect(null) when you click an already-selected bar (its
-            // built-in "deselect"), which used to fall through to
-            // onOpenSheet(undefined) and navigate to the spreadsheet with
-            // NO filter instead of just turning the highlight off. Every
-            // click here means "open this category's entries," so the
-            // null/deselect case is ignored — clicking a highlighted bar
-            // again just re-opens the same filtered view.
+            // A click always opens that category's lines; SpendBars' deselect (null) is ignored.
             onSelect={(id) => { if (id != null) onOpenSheet(String(id)) }}
             emptyLabel="No operations spend recorded for this month"
           />

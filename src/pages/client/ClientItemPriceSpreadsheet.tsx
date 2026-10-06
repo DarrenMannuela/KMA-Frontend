@@ -7,7 +7,7 @@ import { formatDateShort } from '@/utils/MonthUtils'
 import type { ClientItem } from '@/types'
 
 interface ClientItemPriceSpreadsheetProps {
-  /** Already scoped to one client (see useClientCatalogueRows in hooks). */
+  /** Already scoped to one client. */
   data: ClientItemPriceRow[]
   /** This client's catalogue — populates the "Item" select and its labels. */
   items: ClientItem[]
@@ -17,10 +17,7 @@ export function ClientItemPriceSpreadsheet({ data, items }: ClientItemPriceSprea
   const update = clientItemPriceHooks.useUpdate()
   const del = clientItemPriceHooks.useDelete()
 
-  // Unlike a Kas Bon ID, a catalogue item can't be typed into existence —
-  // it must already exist (created via the Catalogue table above), so this
-  // is a select, not free text with autocomplete (contrast
-  // ProductionsSpreadsheet's header_id suggestions).
+  // A select: prices can only be added to existing catalogue items.
   const itemOptions = items.map(i => ({
     value: i.id,
     label: i.size ? `${i.item_name} (${i.size})` : i.item_name,
@@ -31,26 +28,13 @@ export function ClientItemPriceSpreadsheet({ data, items }: ClientItemPriceSprea
     return item.size ? `${item.item_name} (${item.size})` : item.item_name
   }
 
-  // The Item column repeats the exact same item name/size that
-  // renderGroupHeader below already shows once per group — the same
-  // redundant-with-its-own-group-header pattern already fixed in
-  // ProductionSpreadsheet's Supplier column (see that file's own
-  // groupedByHeader comment). Today's one caller (ClientItemDetailPage)
-  // always passes a single-item `items` array, so every row is already in
-  // the one and only group — showing this column would repeat the group
-  // header on every single row for nothing. Kept conditional rather than
-  // deleted outright: this component's props are still shaped for more
-  // than one item (itemOptions/groupByKey both support it), so a future
-  // caller passing several items back gets the column again, exactly when
-  // it'd stop being redundant.
+  // The Item column only when there's more than one item (the group header
+  // already names a single one).
   const columns: ColumnDef<ClientItemPriceRow>[] = [
     ...(items.length > 1 ? [{
       key: 'client_item_id' as const, header: 'Item', type: 'select' as const, editable: true,
       options: itemOptions,
-      // Same reasoning as Production's Supplier column: renderGroupHeader
-      // below already shows this exact item's name once per group, so
-      // MobileEntryList shouldn't repeat it on every card underneath.
-      // Still editable in the mobile form.
+      // The group header names the item; still editable in the form.
       hideOnCard: true,
       format: (val: number) => <span className="font-medium text-navy-900">{itemLabel(Number(val))}</span>,
     }] : []),
@@ -78,13 +62,7 @@ export function ClientItemPriceSpreadsheet({ data, items }: ClientItemPriceSprea
     const { item_name, size, ...rest } = body as Partial<ClientItemPriceRow>
     update.mutate({
       id: Number(id),
-      // Falls back to null, not the raw (possibly '') value — clearing
-      // the date via EditableCell leaves rest.effective_date as '',
-      // and `rest.effective_date : rest.effective_date` would send
-      // that '' straight to the API. Every other place that writes
-      // this same field (ClientItemForm, ItemPriceHikeCalculator)
-      // falls back to null for "no date", so this matches that
-      // instead of introducing a second, inconsistent "empty" value.
+      // An emptied date is saved as null, like everywhere else.
       body: { ...rest, effective_date: rest.effective_date ? new Date(rest.effective_date).toISOString() : null },
     })
   }

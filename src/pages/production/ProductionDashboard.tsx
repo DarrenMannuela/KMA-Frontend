@@ -19,18 +19,13 @@ interface ProductionDashboardProps {
   /** Last supplier selected from the bars, if any — kept in the parent page
    *  so the highlight survives a round trip to the spreadsheet and back. */
   selectedSupplierId?: number
-  /** Month being viewed — owned by the parent page (ProductionPage) rather
-   *  than here, so it survives a round trip to the spreadsheet and back the
-   *  same way selectedSupplierId already does. See ProductionPage's own
-   *  comment on why this moved up. */
+  /** The month shown; the page keeps it so it survives a trip to the sheet. */
   cursor: { year: number; month: number }
   onCursorChange: (year: number, month: number) => void
 }
 
-// Price/Qty are kept as raw strings while the form is open so a controlled
-// input can actually go blank while typing — converting to Number on every
-// keystroke means backspacing to "" instantly snaps back to 0 and the field
-// looks stuck. Conversion happens once, at submit time.
+// Price and Qty stay strings while typing (so a field can be blank) and are
+// converted on submit.
 const emptyQuickAdd = () => ({
   header_id: '', description: '', supplier_id: 0, material_name: '',
   price: '', si_unit: 'yard', amount: '1', date: todayISODate(),
@@ -54,11 +49,7 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId, cursor, o
     [allData, cursor]
   )
 
-  // Same convention as OrdersPage's idTouched. Shared with
-  // OperationsDashboard via useKasBonIdSuggestion. refetchHeaders is
-  // passed so resetIdSuggestion (below, wired to the 409 handler) recomputes
-  // off a fresh header list instead of this render's possibly-stale one —
-  // same reasoning as OrdersPage/GenerateInvoiceForm's own resetIdSuggestion.
+  // The suggested Kas Bon ID; reset() refetches headers first (used after a 409).
   const { idTouched, setIdTouched, reset: resetIdSuggestion } = useKasBonIdSuggestion(
     headers,
     quickAdd.header_id,
@@ -107,17 +98,10 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId, cursor, o
     }
     create.mutate(payload, {
       onSuccess: () => {
-        // Keep the Kas Bon identity (header_id/description/supplier/date) so
-        // the next "Add Entry" click adds another material line to the same
-        // Kas Bon — only the item-specific fields get cleared. Use "New Kas
-        // Bon" to start a different header instead.
+        // Keep the Kas Bon (ID, description, supplier, date) for the next line.
         setQuickAdd(p => ({ ...p, material_name: '', price: '', amount: '1' }))
       },
-      // Same race OrdersPage/GenerateInvoiceForm guard against: the
-      // suggested Kas Bon ID is a client-side guess, so two people quick-
-      // adding at once can land on the same suggestion. The backend 409s
-      // the second submit — resuggest a fresh number instead of leaving
-      // the form stuck on one that's already taken.
+      // Someone took the suggested ID first: suggest the next one.
       onError: (e: Error) => {
         if (e instanceof ApiError && e.status === 409) {
           toast.error('That Kas Bon ID was just taken by someone else — grabbing you a new one.')
@@ -132,10 +116,6 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId, cursor, o
   if (isLoading) {
     return <Spinner />
   }
-  // Distinguish "the fetch actually failed" from "there's just no spend
-  // recorded yet" — previously indistinguishable, since productionHooks.
-  // useList() folded any query failure into the same empty `data` used
-  // while still loading (see finance.ts's own fix for the underlying gap).
   if (isError) {
     return (
       <div className="p-8 text-center">
@@ -265,15 +245,7 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId, cursor, o
               onChange={e => setQuickAdd(p => ({ ...p, date: e.target.value }))} />
           </FormField>
 
-          {/* Live Price × Qty preview, paired on the same row as the submit
-              button (col-span-3 + the button's own col-start-4 fill the
-              4-column grid exactly, so they land side by side in auto-flow)
-              rather than each getting its own row — a preview stacked
-              directly above a right-indented button read as two
-              disconnected lines instead of one "here's the total, here's
-              submit" row. items-center keeps the preview text vertically
-              centered against the button's own height instead of sitting
-              at the row's top edge. */}
+          {/* The Price × Qty preview shares the submit button's row. */}
           <div className="md:col-span-3 flex items-center -mt-1">
             <span className="text-xs text-slate-400">
               {quickAddSubtotal > 0 && <>= <span className="font-mono font-semibold text-slate-600">{formatRp(quickAddSubtotal)}</span> for this line</>}
@@ -297,17 +269,7 @@ export function ProductionDashboard({ onOpenSheet, selectedSupplierId, cursor, o
           <SpendBars
             items={supplierTotals}
             selectedId={selectedSupplierId ?? null}
-            // Not id != null ? onOpenSheet(Number(id)) : onOpenSheet(undefined)
-            // — SpendBars treats clicking an already-selected bar as a
-            // "deselect" and calls onSelect(null), which used to fall
-            // through to onOpenSheet(undefined) and navigate to the
-            // spreadsheet with NO filter. That reads as the bar's
-            // highlight just turning off; it actually jumped to a
-            // different (unfiltered) screen. Every bar click here always
-            // means "open this supplier's entries," so the null/deselect
-            // case is simply ignored — clicking a highlighted bar again
-            // just re-opens the same filtered view instead of surprising
-            // you with the unfiltered one.
+            // A click always opens that supplier's lines; SpendBars' deselect (null) is ignored.
             onSelect={(id) => { if (id != null) onOpenSheet(Number(id)) }}
             emptyLabel="No production spend recorded for this month"
           />

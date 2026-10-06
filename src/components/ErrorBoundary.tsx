@@ -3,10 +3,7 @@ import { AlertTriangle } from 'lucide-react'
 
 interface Props {
   children: ReactNode
-  // Remount (and clear the caught error) whenever any value in this array
-  // changes — e.g. pass [location.pathname] so navigating away from a page
-  // that crashed on render recovers on its own instead of leaving the user
-  // stuck on the fallback until a full reload.
+  // Recover (remount) when any of these change, e.g. [location.pathname].
   resetKeys?: unknown[]
   // Swap in a smaller fallback for boundaries nested inside the page shell
   // (Sidebar/Topbar survive either way, since only the routed content below

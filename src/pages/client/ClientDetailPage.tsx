@@ -80,12 +80,7 @@ function ClientContactForm({ clientId, editing, onClose }: { clientId: number; e
   )
 }
 
-// Was an inline upload/replace/remove control (see git history / the old
-// ClientItemPhotoCell) — that's all moved to ClientItemDetailPage now,
-// which has room for a real photo panel instead of a 36px table cell.
-// This cell is just a doorway into that page: click the thumbnail (or the
-// placeholder icon, if there's no photo yet) to open the item's full
-// info + price history.
+// The photo cell links to the item's own page, where its photo is managed.
 function ClientItemPhotoCell({ item, clientId }: { item: ClientItem; clientId: number }) {
   const navigate = useNavigate()
   const [imgFailed, setImgFailed] = useState(false)
@@ -136,15 +131,8 @@ function ClientItemForm({ clientId, editing, onClose }: { clientId: number; edit
       create.mutate(form, {
         onSuccess: (newItem) => {
           if (!priceDigits) { onClose(); return }
-          // Wait on the price create too, rather than closing the instant
-          // the item exists — this used to fire-and-forget createPrice and
-          // close immediately regardless of outcome, so a failed price
-          // save left the new item silently priceless with no indication
-          // anything went wrong. onSettled (not onSuccess) so the modal
-          // still closes on failure too — the item itself is already
-          // saved either way, and the person can always add a price from
-          // the item's own page; what's fixed here is that a failure is
-          // no longer invisible.
+          // Close once the price is saved too (onSettled: the item exists either way),
+          // so a failed price save is reported, not silent.
           createPrice.mutate(
             {
               client_item_id: newItem.id,
@@ -232,10 +220,7 @@ export function ClientDetailPage() {
   // moved to ClientItemDetailPage, which fetches its own item's history.
   const { data: groupedPrices } = clientItemPriceHooks.useGrouped()
 
-  // Hook, not a plain computation — has to sit above the clientLoading/
-  // !client early returns below so hook order stays stable across renders
-  // (a useMemo after a conditional return would be skipped on some
-  // renders and not others, which breaks the Rules of Hooks).
+  // Above the early returns, for a stable hook order.
   const pricesByItem: Record<number, ClientItemPrice[]> = useMemo(() => {
     const map: Record<number, ClientItemPrice[]> = {}
     catalogueItems.forEach(item => {
@@ -245,10 +230,7 @@ export function ClientDetailPage() {
   }, [catalogueItems, groupedPrices])
 
   const [showPrint, setShowPrint] = useState(false)
-  // Backed by ?tab= instead of plain useState — ClientItemDetailPage's
-  // "back to catalogue" link does a real route change to this page (a
-  // remount, not a re-render), which would otherwise reset any local
-  // state back to the 'contacts' default every time.
+  // The tab lives in ?tab= so coming back from an item page keeps it.
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = searchParams.get('tab') === 'catalogue' ? 'catalogue' : 'contacts'
   const setTab = (next: 'contacts' | 'catalogue') => setSearchParams({ tab: next }, { replace: true })
@@ -256,10 +238,7 @@ export function ClientDetailPage() {
   if (clientLoading) {
     return <Spinner />
   }
-  // Same distinction the contacts/catalogueItems queries below already
-  // make: a failed fetch previously fell through to the same "Client not
-  // found" message as a genuinely bad id, sending people looking for a
-  // broken link instead of just retrying.
+  // A failed fetch shows Retry, not "Client not found".
   if (clientError) {
     return (
       <div className="p-8 text-center">
@@ -301,11 +280,7 @@ export function ClientDetailPage() {
         </div>
       )}
 
-      {/* Tabs — Contacts and Catalogue used to stack on one long page,
-          which got cramped once a client had any real amount of either.
-          Catalogue + its price history stay together under one tab since
-          the pricing spreadsheet is meaningless without the items it
-          prices. */}
+      {/* Tabs: Contacts, and Catalogue with its prices. */}
       <div className="flex gap-1 border-b border-slate-200">
         <button
           onClick={() => setTab('contacts')}
@@ -354,12 +329,7 @@ export function ClientDetailPage() {
       )}
 
       {tab === 'catalogue' && (
-        // Just the list now — click a row's photo icon (or the item name)
-        // to open ClientItemDetailPage, where that item's own price
-        // history, hike calculator, and photo management live. This tab's
-        // only other job is "Print Price List" up top, which works off
-        // whatever's checked in the picker regardless of which item pages
-        // anyone's visited.
+        // The list; each item's prices and photo are on its own page.
         <CrudPage<ClientItem>
           title="Catalogue"
           icon={Package}

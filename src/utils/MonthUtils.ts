@@ -15,16 +15,6 @@ export function isInYear(dateStr: string | null | undefined, year: number): bool
   return d.getFullYear() === year
 }
 
-/** Which 0-11 month a date string falls in, or null if it's missing/invalid.
- *  Used to bucket a year's worth of records into their 12 months for the
- *  Yearly Report's charts. */
-export function monthIndexOf(dateStr: string | null | undefined): number | null {
-  if (!dateStr) return null
-  const d = new Date(dateStr)
-  if (isNaN(d.getTime())) return null
-  return d.getMonth()
-}
-
 export function monthLabel(year: number, month: number): string {
   return new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }

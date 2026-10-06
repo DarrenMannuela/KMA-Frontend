@@ -1,3 +1,4 @@
+import { invoiceAmount } from '@/utils/invoiceAmount'
 import { useState, useEffect, useLayoutEffect } from 'react'
 import type { CSSProperties } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -12,17 +13,8 @@ import { numberToWordsID } from '@/utils/NumberToWordsID'
 
 type PaymentMethod = 'transfer' | 'cheque' | 'bilyet_giro'
 
-// Auto-sizes an inline text input to the ACTUAL rendered pixel width of its
-// content, instead of the HTML `size` attribute's character-count guess.
-// `size` assumes an average glyph width, but every field this feeds
-// (kwitansi No, purpose line, signer name) is forced ALL-CAPS on input —
-// and uppercase runs (especially wide letters, long company names like
-// "PT ZENBU ASIA PERMATA...") are wider than that average. A too-narrow
-// input box doesn't wrap or show a scrollbar, it just silently clips the
-// tail of the text — that's what produced "PT ZENBU ASIA PEF" instead of
-// the full company name. Measuring with a canvas using the SAME font the
-// input actually renders in gives the true width, so the box is always at
-// least as wide as its content.
+// Sizes an inline input to its text's real width (measured on a canvas in the
+// input's own font), so long all-caps names aren't clipped.
 let measureCanvas: HTMLCanvasElement | null = null
 function measureTextWidth(text: string, font: string): number {
   if (!measureCanvas) measureCanvas = document.createElement('canvas')
@@ -43,30 +35,16 @@ function useAutoWidthInput(text: string, font: string, minWidthPx = 60) {
   return width
 }
 
-// ── Print-critical layout ────────────────────────────────────────────────
-// Kept as an inline style, not Tailwind, because these are physical
-// measurements matching the company's existing paper kwitansi template
-// (A4 box, exact mm margins) — not something to round off to Tailwind's
-// spacing scale. Everything inside inherits its font/size/color from here,
-// so child elements don't need to restate them.
+// ── Print-critical layout: the company's paper kwitansi (A4, exact mm) ──
 const PAGE_STYLE: CSSProperties = {
   width: '210mm', minHeight: '148mm', padding: '18mm 20mm',
   fontFamily: 'Arial, sans-serif', fontSize: '13px', color: '#000',
 }
 
-// One shared label-column width for EVERY "label : value" row on the
-// receipt — the body section (Sudah terima dari / Banyaknya Uang) and the
-// bank-details section (BANK / NAMA / NO REK) used to have their own
-// widths (150px vs 90px), so the colons landed at two different x-
-// positions depending which section you looked at. One constant means one
-// straight column of colons down the whole card.
+// One label width for every "label : value" row, so the colons line up.
 const LABEL_COL_W = 'w-[150px]'
 
-// A "Label : value" row with a fixed-width label column so the colons all
-// line up regardless of label length — used for "Sudah terima dari" /
-// "Banyaknya Uang". Every row but the last carries the gap; `last:mb-0`
-// zeroes it on whichever InfoRow happens to be last, same as the original
-// hand-placed marginBottoms did.
+// A "Label : value" row on the shared label column.
 function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex mb-2.5 last:mb-0">
@@ -125,11 +103,7 @@ function PaymentMethodOption({ label, active, onClick }: {
   )
 }
 
-// "Label : value" for a header field (No / INV / TGL) — its own (much
-// narrower) label width than InfoRow's, since these labels are short
-// (2-3 chars) and would otherwise land their colons at a different
-// x-position than InfoRow's longer labels the same way the body rows did
-// before LABEL_COL_W unified those.
+// "Label : value" for the short header fields (No / INV / TGL).
 function HeaderField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex font-bold">
@@ -139,12 +113,8 @@ function HeaderField({ label, children }: { label: string; children: React.React
   )
 }
 
-// Same shape as HeaderField, but an editable line — for the physical
-// Kwitansi number ("No"), which (unlike INV, the system's real invoice
-// number) has no backing field in the data model. Paper receipt books
-// number their own copies independently of the invoice numbering, so this
-// is filled in by hand at print time, the same way BANK/NAMA/NO REK
-// already are via RekeningField above.
+// An editable header field, for the receipt book's own number, which isn't
+// stored anywhere.
 function EditableHeaderField({ label, value, onChange, placeholder }: {
   label: string
   value: string
@@ -172,12 +142,7 @@ function EditableHeaderField({ label, value, onChange, placeholder }: {
   )
 }
 
-// The Kwitansi (receipt) is generated purely from the existing Invoice +
-// Order records — it's not its own database entity. It exists only for
-// printing/handing to the client and for the company's own bookkeeping
-// copy, so there's nothing here worth persisting beyond what the invoice
-// already stores (plus a few purely-per-print fields — see kwitansiNo/
-// purposeText/signerName below — that have no backing field at all).
+// The receipt for an invoice, made from the invoice and order; only printed.
 export function KwitansiPrintPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -185,11 +150,7 @@ export function KwitansiPrintPage() {
   const { rekening, setRekening } = useRekening()
   const [method, setMethod] = useState<PaymentMethod>('transfer')
 
-  // "Shrink the whole preview to fit the screen" — see useScaleToFit's own
-  // comment for why this is purely visual and leaves the actual print/
-  // export output untouched. Always on (not gated to a mobile breakpoint)
-  // since the scale is capped at 1 and is a no-op on anything already
-  // wide enough — see InvoicePrintPage.tsx's identical comment.
+  // Shrinks the preview to fit the screen; printing is unaffected.
   const { containerRef: scaleContainerRef, docRef: scaleDocRef, scale, scaledWidth, scaledHeight } = useScaleToFit(true)
 
   const { data: invoice, isLoading, isError, refetch } = useQuery({
@@ -204,16 +165,7 @@ export function KwitansiPrintPage() {
     enabled: !!invoice?.order_id,
   })
 
-  // This Kwitansi shows the WHOLE payment schedule (both the D/P and the
-  // Pelunasan halves) regardless of which one it's actually being printed
-  // against — but each half's own paid/due date only lives on ITS OWN
-  // invoice record, not necessarily the one loaded above. Pulling the full
-  // list and matching by order_id (rather than guessing the sibling's ID
-  // from this one's) is the same approach GenerateInvoiceForm.tsx uses;
-  // its own suggestNextInvoiceId comment is explicit that the ".1" suffix
-  // pattern is legacy only — new invoice numbers are independently
-  // suggested, not deterministically derived from each other, so a string
-  // trick here would silently misfire on current data.
+  // All invoices, to find this order's other half (DP or Pelunasan) by order_id.
   const { data: allInvoices = [], isError: isAllInvoicesError, refetch: refetchAllInvoices } = invoiceHooks.useList()
   const dpInvoice = invoice?.type === 'dp'
     ? invoice
@@ -222,15 +174,7 @@ export function KwitansiPrintPage() {
     ? invoice
     : allInvoices.find(i => i.order_id === invoice?.order_id && i.type === 'pelunasan')
 
-  // ── Fields with no backing data at all ──────────────────────────────────
-  // The physical Kwitansi number, the free-text payment-purpose line, and
-  // the signer's name don't correspond to anything in the Invoice/Order
-  // records — there's no "order description" or "kwitansi sequence"
-  // field anywhere in this data model (checked InvoicePrintPage.tsx too).
-  // Treated the same way BANK/NAMA/NO REK already are: plain editable
-  // text, filled in by hand per print. Unlike those, these are per-
-  // DOCUMENT rather than per-company, so they're local state (reset for
-  // each invoice) instead of living in the shared RekeningStore.
+  // ── Typed by hand for each print: receipt number, purpose and signer ──
   const [kwitansiNo, setKwitansiNo] = useState('')
   const [signerName, setSignerName] = useState('')
   // font-semibold ≈ weight 600 — measuring at the same weight the field
@@ -247,15 +191,7 @@ export function KwitansiPrintPage() {
   const purposeWidth = useAutoWidthInput(purposeText || 'PEMESANAN SERAGAM …', '13px Arial')
 
   if (isLoading) return <div className="p-8 text-slate-400">Loading…</div>
-  // Distinguish "the fetch actually failed" (network drop, 500, etc.) from
-  // "the server answered and there's genuinely no such invoice" — these
-  // used to render identically as "Invoice not found.", which sent people
-  // down a dead end (double-checking an ID that was actually fine) instead
-  // of just retrying the request that failed. Covers the order/allInvoices
-  // queries too now: this receipt derives its DP/Pelunasan status lines
-  // (e.g. "PELUNASAN BELUM DITERBITKAN") from allInvoices, so a fetch
-  // failure there could otherwise print as a wrong status on a document
-  // someone signs, rather than as an obvious "didn't load."
+  // A failed fetch shows Retry rather than "not found" or a wrong payment status.
   if (isError || isOrderError || isAllInvoicesError) {
     return (
       <div className="p-8 text-center">
@@ -266,32 +202,12 @@ export function KwitansiPrintPage() {
   }
   if (!invoice) return <div className="p-8 text-red-400">Invoice not found.</div>
 
-  // The amount THIS kwitansi is a receipt for — the D/P amount if this is
-  // a DP invoice, the remaining balance if this is the Pelunasan invoice.
-  // A 0% down payment isn't really a "down payment" — same convention as
-  // OrderDetailPage/InvoiceListPage/InvoicePrintPage — so a dp-type
-  // invoice with nothing actually down is treated as a full/Pelunasan
-  // payment here too: a receipt for "D/P — Rp 0" would be meaningless.
-  //
-  // For the Pelunasan/full-payment case, this reads ar_receivable (the
-  // discount-already-applied figure GenerateInvoiceForm computes and
-  // saves), not the plain `remaining` field — `remaining` is total minus
-  // down_payment BEFORE any discount, so using it here would print a
-  // receipt asking for more than the client actually owes whenever a
-  // discount was applied. Falls back to `remaining` only for older
-  // invoices saved before ar_receivable existed.
+  // What this receipt is for (see invoiceAmount: a 0% DP is a full payment).
   const isFullInvoice = invoice.type === 'dp' && (invoice.down_payment ?? 0) === 0
-  const amount = invoice.type === 'dp' && !isFullInvoice
-    ? (invoice.down_payment ?? 0)
-    : (invoice.ar_receivable ?? invoice.remaining)
+  const amount = invoiceAmount(invoice)
   const purposeLabel = invoice.type === 'dp' && !isFullInvoice ? 'DOWN PAYMENT (D/P)' : 'PELUNASAN'
 
-  // The big printed figure and the "Banyaknya Uang" words-amount are the
-  // order's FULL total when there's an actual D/P/Pelunasan split to show
-  // underneath (matching the reference design, which totals both halves
-  // together) — not just this one document's own partial amount. For a
-  // full/single invoice the two are the same number anyway (down_payment
-  // is 0, so total === amount), so this changes nothing in that case.
+  // The big figure is the order's full total, with the DP/Pelunasan split below.
   const printAmount = invoice.total || amount
 
   // ── D/P line ──────────────────────────────────────────────────────────
@@ -303,20 +219,11 @@ export function KwitansiPrintPage() {
       ? `LUNAS - ${format(new Date(dpInvoice.paid_date), 'd MMMM yyyy').toUpperCase()}`
       : 'BELUM LUNAS'
 
-  // ── Sisa (remaining) line ─────────────────────────────────────────────
-  // Prefers the Pelunasan invoice's own ar_receivable/remaining (post-
-  // discount, same convention as `amount` above) — falls back to a plain
-  // total-minus-down_payment only when no Pelunasan invoice has been
-  // raised yet for this order, since there's nothing else to read it from.
+  // ── Sisa: the Pelunasan invoice's balance, or total minus DP before one exists ──
   const sisaAmount = pelunasanInvoice
     ? (pelunasanInvoice.ar_receivable ?? pelunasanInvoice.remaining ?? 0)
     : (invoice.total ?? 0) - dpAmount
-  // Full-invoice (0% D/P) case has no separate Pelunasan invoice to read a
-  // paid/due date from — the invoice being printed IS the whole payment,
-  // so its own status/paid_date/due_date carry that instead, mirroring
-  // dpPaidLabel's LUNAS-vs-BELUM-LUNAS convention above rather than the
-  // "PELUNASAN BELUM DITERBITKAN" wording, which only makes sense when a
-  // D/P-then-Pelunasan split actually exists.
+  // A full invoice's own status and dates, there being no Pelunasan.
   const sisaDueLabel = isFullInvoice
     ? (invoice.status === 'paid' && invoice.paid_date
         ? `LUNAS - ${format(new Date(invoice.paid_date), 'd MMMM yyyy').toUpperCase()}`
@@ -342,18 +249,8 @@ export function KwitansiPrintPage() {
         </button>
       </div>
 
-      {/* Kwitansi document — overflow-x-auto is load-bearing, not
-          decorative. See the identical comment in InvoicePrintPage.tsx
-          for the full reasoning: #kwitansi below is a fixed physical-page
-          width, wider than a phone viewport, and without a scroll
-          container here that width propagates up through this
-          unconstrained div and stretches the toolbar above along with
-          it. print:overflow-visible keeps the real printed/exported
-          output on the browser's native paginated layout, unaffected.
-
-          .scale-wrap additionally shrinks the whole preview to fit
-          whatever width is actually available via useScaleToFit — see
-          InvoicePrintPage.tsx's identical comment for why. */}
+      {/* The page is a fixed physical width: it scrolls (and is scaled to fit) here
+         so it doesn't widen the toolbar. Printing uses the real size. */}
       <div className="p-8 print:p-0 overflow-x-auto print:overflow-visible" ref={scaleContainerRef}>
         <div
           className="scale-wrap"
@@ -368,11 +265,7 @@ export function KwitansiPrintPage() {
           {/* Header */}
           <div className="flex items-start justify-between mb-7">
             <div className="flex flex-col items-center">
-              {/* items-center on the parent (not text-align/mx-auto) so
-                  this stays correct regardless of how wide the logo image
-                  ends up relative to the "KREASI MAKMUR ABADI" text below
-                  it — whichever of the two is wider, the narrower one
-                  centers under/over it exactly. */}
+              {/* Centered whichever of logo and name is wider. */}
               <img src="/Logo.png" alt="KMA Logo" className="block w-20 h-auto mb-1" />
               <div className="font-bold text-sm tracking-[2px]">KREASI MAKMUR ABADI</div>
             </div>
@@ -418,15 +311,7 @@ export function KwitansiPrintPage() {
                     ASLI INVOICE NO {dpInvoice?.id ?? '—'} (D/P) & {pelunasanInvoice?.id ?? '—'} (PELUNASAN)
                   </li>
                 )}
-                {/* D/P line only applies when there's an actual down
-                    payment to report (dp% > 0) — a 0% D/P isn't a real
-                    down payment, so this line is skipped rather than
-                    printing "D/P 0% : Rp 0". The Sisa line, however,
-                    always applies: even a full invoice (0% D/P) has an
-                    amount still owed until it's paid, so it's shown
-                    either way — just computed against the invoice's own
-                    total/due-date instead of a sibling Pelunasan invoice
-                    (see sisaDueLabel above). */}
+                {/* No D/P line for a 0% DP; the Sisa line is always shown. */}
                 {!isFullInvoice && (
                   <li className="font-bold">
                     D/P{dpPercent != null ? ` ${dpPercent}%` : ''} : Rp {Math.round(dpAmount).toLocaleString('id-ID')}
@@ -457,16 +342,7 @@ export function KwitansiPrintPage() {
                 <RekeningField label="NO REK" value={rekening.accountNumber} onChange={v => setRekening({ accountNumber: v })} />
               </div>
 
-              {/* Signer's name — no backing field (see the comment on
-                  kwitansiNo/signerName above), filled in by whoever hands
-                  over/prints this specific receipt. Sits BELOW the bank
-                  block with a gap above it (room for an actual wet
-                  signature), right-aligned — matching the reference
-                  template's placement. Previously shared a flex row with
-                  the bank-details block, which squeezed that column's
-                  width and made its fixed-width inputs wrap onto their
-                  own line; a plain block below it has the full row width
-                  to itself instead. */}
+              {/* The signer's name, right-aligned below the bank block with room to sign. */}
               <div className="flex justify-end mt-8">
                 <input
                   value={signerName}
@@ -490,10 +366,7 @@ export function KwitansiPrintPage() {
           .print\\:shadow-none { box-shadow: none !important; }
           .print\\:p-0 { padding: 0 !important; }
           #kwitansi { width: 100% !important; margin: 0 !important; transform: none !important; }
-          /* Undoes useScaleToFit's mobile-only preview shrink (inline
-             style, hence needing !important here) — printing/exporting
-             must always use the real physical size regardless of what
-             the screen preview happened to be scaled to. */
+          /* Undo the on-screen scaling when printing. */
           .scale-wrap { width: auto !important; height: auto !important; overflow: visible !important; }
           @page { size: A4; margin: 0; }
           aside { display: none !important; }

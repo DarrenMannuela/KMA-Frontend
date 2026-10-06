@@ -8,17 +8,8 @@ import { deliveryHooks, deliveryItemHooks, useOrderRemainingItems } from '@/hook
 import { OrderItemSelect } from './DeliveryOrderItemSelect'
 import type { DeliveryItem, CreateDeliveryItemRequest } from '@/types'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Single implementation of "add / edit / view delivery items," used by
-// DeliveryDetailPage — the workflow is always "open the DO you're packing,
-// fill its boxes with what the client ordered, print when done," so the
-// delivery is always known from the route (`/delivery/:id`); there's no
-// cross-delivery workspace anymore. Previously this logic was duplicated
-// across DeliveryItemForm + a flat table AND DeliveryItemsQuickAdd +
-// DeliveryItemsByBox, which had drifted apart (only one supported
-// duplicating a row, "Max N available" was copy-pasted three times).
-// Consolidating means a fix to one only needs to happen once.
-// ─────────────────────────────────────────────────────────────────────────────
+// Adding, editing and viewing one delivery's items (DeliveryDetailPage):
+// fill the boxes with what the client ordered, then print.
 
 const emptyQuickAddItem = () => ({ item_name: '', size: '', amount: 1, box_number: null as number | null })
 
@@ -28,25 +19,14 @@ const emptyQuickAddItem = () => ({ item_name: '', size: '', amount: 1, box_numbe
 const BOX_BADGE_COLORS = [
   'bg-navy-900', 'bg-blue-700', 'bg-teal-700', 'bg-purple-700', 'bg-amber-700', 'bg-rose-700',
 ]
-// Same six colors, tint-on-white instead of solid-fill-with-white-text —
-// used only on mobile (see the badgeColor/badgeColorMobile split below).
-// A solid dark bar repeated once per box read as the single heaviest
-// element on the whole page once there were several boxes stacked on a
-// phone screen; a light tint with colored text keeps the same at-a-glance
-// distinctness the color-per-box scheme is for for without that weight.
-// Desktop keeps the original solid bars.
+// Tinted versions of the box colors, for phones, where solid bars felt heavy.
 const BOX_BADGE_COLORS_LIGHT = [
   'bg-navy-50 text-navy-700', 'bg-blue-50 text-blue-700', 'bg-teal-50 text-teal-700',
   'bg-purple-50 text-purple-700', 'bg-amber-50 text-amber-700', 'bg-rose-50 text-rose-700',
 ]
 
-// Reserves a fixed-height line under every field, whether or not it has
-// hint text this render. Grid rows stretch to their tallest cell — without
-// this, a field that conditionally grows (e.g. Amount's "Max N available")
-// makes its row taller than its neighbors, and anything bottom-aligned in
-// that row (the submit button) visibly drops relative to inputs that
-// aren't. Reserving the same slot everywhere keeps every cell the same
-// height regardless of which hints are showing.
+// A fixed-height hint line under every field, so rows line up whether or not
+// a hint shows.
 function FieldHint({ children }: { children?: React.ReactNode }) {
   return <p className="text-xs text-slate-400 mt-1 h-4 leading-4">{children ?? '\u00A0'}</p>
 }
@@ -57,13 +37,8 @@ interface DeliveryItemsManagerProps {
 
 export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) {
   const isMobile = useIsMobile()
-  // isError here matters beyond the usual loading/retry case: a silent
-  // failure would leave `deliveries` at [], so `selectedDelivery` resolves
-  // to undefined and `isDO`/`orderId` silently fall back to "DO with no
-  // linked order" — which drops the order-item picker's "max remaining"
-  // constraint down to unconstrained free-text entry with no indication
-  // why. Folded into the same isLoading/isError gate as allItems below
-  // rather than letting the form silently change behavior.
+  // A failed fetch blocks the form: otherwise it would quietly lose the order's
+  // "max remaining" limits.
   const { data: deliveries = [], isError: isDeliveriesError } = deliveryHooks.useList()
   const { data: allItems = [], isLoading, isError: isItemsError, refetch } = deliveryItemHooks.useList()
   const isError = isDeliveriesError || isItemsError
@@ -175,15 +150,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
         </button>
       </div>
 
-      {/* On mobile this opens as a popup instead of expanding in place —
-          an inline card here pushed the Recap/Box/Documents list further
-          down the page every time it opened, which read as the existing
-          data shifting/disappearing out from under you rather than a form
-          simply appearing. A Modal overlays instead of displacing, so
-          what's already on screen stays exactly where it was. Desktop
-          keeps the original inline panel (unaffected by this complaint,
-          and there's enough width there for the 4-up grid to read fine
-          without a popup). */}
+      {/* On phones the form opens as a popup instead of pushing the lists down. */}
       {open && isMobile && (
         <Modal
           title={isDO ? (duplicatingFrom ? 'Duplicate Item' : 'Add Item') : (duplicatingFrom ? 'Duplicate Document' : 'Add Document')}
@@ -343,11 +310,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
       {isLoading ? (
         <div className="p-8 text-slate-400 text-sm">Loading…</div>
       ) : isError ? (
-        // Same distinction made elsewhere (OrderDetailPage, DeliveryPrintPage,
-        // DeliveryPage, KwitansiPrintPage/InvoicePrintPage): a failed fetch
-        // shouldn't look like "there's just nothing here" — that sent people
-        // re-checking a delivery that was actually fine instead of retrying
-        // the request that failed.
+        // A failed fetch shows Retry, not "nothing here".
         <div className="card p-10 text-center text-sm">
           <p className="text-red-400 mb-3">Couldn't load {isDO ? 'items' : 'documents'} — check your connection and try again.</p>
           <button onClick={() => refetch()} className="btn-secondary">Retry</button>
@@ -367,12 +330,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
                 <span className="text-xs text-navy-500">{boxGroups.length} box{boxGroups.length !== 1 ? 'es' : ''} · {recap.reduce((s, r) => s + r.total, 0)} pcs total</span>
               </div>
               {isMobile ? (
-                // A scrollable 3-column table still meant scrolling
-                // sideways to read a single number (Total Qty) — a plain
-                // label:value card list reads at a glance instead, the
-                // same reasoning as every other mobile-card conversion
-                // this pass (OrderDetailPage's item table, Yearly
-                // Report's monthly breakdown).
+                // Phone width: label: value cards instead of a 3-column table.
                 <div className="divide-y divide-slate-50">
                   {recap.map(r => (
                     <div key={`${r.item_name}|${r.size ?? ''}`} className="flex items-center justify-between gap-3 p-4">
@@ -454,12 +412,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
                       ))}
                     </div>
                   ) : (
-                    // Same overflow-x-auto-on-the-table-only reasoning as
-                    // the Recap table above — this row has 5 columns
-                    // including a 4-button action group, which the outer
-                    // overflow-hidden card would otherwise clip flush at
-                    // the screen edge on mobile (e.g. cutting off the
-                    // Delete button) rather than making it reachable.
+                    // Only the table scrolls, so the action buttons stay reachable on phones.
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm min-w-[560px]">
                         <thead>
@@ -560,12 +513,8 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
   )
 }
 
-// A single item row in the box-grouped/flat table. Amount and Box Number
-// edit inline (click the pencil, Save/Cancel replace it) — that's the
-// common correction after physical packing. Changing the item itself
-// (name/size) goes through the full modal, since re-picking from the
-// order's item list is a bigger change than fixing a quantity. Duplicate
-// prefills the quick-add panel above instead of a separate form.
+// One item row. Amount and box number edit inline; changing the item opens
+// the full form; Duplicate prefills the quick-add panel.
 function DeliveryItemRow({
   item,
   isDO,
@@ -581,16 +530,7 @@ function DeliveryItemRow({
   orderId: string | null
   onFullEdit: (item: DeliveryItem) => void
   onDuplicate: (item: DeliveryItem) => void
-  // Confirmation + the actual delete mutation both live in the parent
-  // list, not here — same reason CrudPage's row actions call up to a
-  // shared onDelete rather than each row owning its own confirm dialog:
-  // ConfirmDialog is `position:fixed` and renders correctly regardless of
-  // where in the DOM it's mounted, but this row IS a <tr> in the desktop
-  // branch, and a raw <div> can't legally sit next to <tr> inside
-  // <tbody> — a per-row dialog here would work in practice (React
-  // doesn't parse-and-correct HTML the way a browser parsing a string
-  // would) but trips React DOM's validateDOMNesting dev warning for no
-  // reason when hoisting it one level up avoids the question entirely.
+  // The parent owns the confirm dialog (a dialog can't sit next to a <tr>).
   onRequestDelete: (item: DeliveryItem) => void
 }) {
   const update = deliveryItemHooks.useUpdate()
@@ -616,10 +556,7 @@ function DeliveryItemRow({
 
   if (editing) {
     if (isMobile) {
-      // Labeled fields instead of the table's bare width-20 inputs — with
-      // a whole card row to work with instead of a cramped table cell,
-      // there's no reason not to spell out what each number means instead
-      // of relying on column position (which doesn't exist here anyway).
+      // Labeled fields on the card, instead of the table's bare inputs.
       return (
         <div className="p-4 bg-navy-50/40">
           <div className="font-medium mb-3">{item.item_name}{isDO && item.size ? ` · ${item.size}` : ''}</div>
@@ -704,10 +641,7 @@ function DeliveryItemRow({
         <div className="text-xs text-slate-400 mt-1">
           {isDO ? 'Box' : 'Package'}: {item.box_number ?? '—'}
         </div>
-        {/* gap-4 (not the table row's tighter gap-3) and slightly larger
-            icons/text — four actions side by side is the single most
-            cramped spot in this whole page on a phone, and it's the one
-            row people actually have to tap accurately, not just read. */}
+        {/* Roomier actions: the row people tap most on a phone. */}
         <div className="flex items-center gap-4 mt-3 flex-wrap">
           <button className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1.5" title="Duplicate"
             onClick={() => onDuplicate(item)}>

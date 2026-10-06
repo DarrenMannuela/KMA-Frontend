@@ -24,17 +24,8 @@ export interface ColumnDef<T> {
   suggestions?: string[]
   /** Force text input to uppercase as it's typed (e.g. Kas Bon IDs). Only relevant for type="text". */
   uppercase?: boolean
-  /** MobileEntryList only (SpreadsheetView ignores this) — omit this
-   *  column from a card's own face, while still including it as a field
-   *  in the create/edit form. For a column whose value is ALREADY shown
-   *  once in the group header above every card in that group (e.g.
-   *  Production's Supplier column when grouped by supplier — see
-   *  ProductionSpreadsheet's own renderGroupHeader) — repeating it on
-   *  every single card underneath would be the exact same redundant-
-   *  right-next-to-itself pattern already fixed on the desktop table's
-   *  Supplier column, just worse on a card face where space is tighter.
-   *  Still worth keeping editable in the form so reassigning it (e.g.
-   *  moving a line to a different supplier) still works on mobile. */
+  /** MobileEntryList only: leave this column off the card face (e.g. a value the
+   *  group header already shows) but keep it in the edit form. */
   hideOnCard?: boolean
 }
 
@@ -50,16 +41,11 @@ interface SpreadsheetViewProps<T> {
   keyColumn?: keyof T
   /** The column whose edit triggers creation of a blank row. Defaults to keyColumn. */
   triggerColumn?: keyof T
-  /** Called once every column in requiredColumns is filled in on a blank row — creates the row
-   *  server-side. Normally returns void: the row is discarded immediately (optimistic). If the
-   *  create needs a confirmation step first (e.g. a modal), return a Promise<boolean> instead —
-   *  resolving `false` restores the row's typed data rather than discarding it (`true`/no
-   *  explicit false behaves the same as void). */
+  /** Creates a filled-in blank row. Return a Promise<boolean> to confirm first:
+   *  `false` puts the typed row back. */
   onCreateRow?: (row: Partial<T>) => void | Promise<boolean>
-  /** Columns that must ALL be non-empty before a blank row is submitted via onCreateRow.
-   *  Defaults to [triggerColumn ?? keyColumn], preserving the original single-field behavior.
-   *  Set this to e.g. [triggerColumn, 'price'] to keep a row staged in the "New entries" buffer
-   *  until every required field is filled, instead of submitting the instant the first one is. */
+  /** Columns that must all be filled before a blank row is submitted.
+   *  Defaults to [triggerColumn ?? keyColumn]. */
   requiredColumns?: (keyof T)[]
   /** If provided, the keyColumn is auto-assigned from this at the moment a blank row is committed, instead of being typed by hand. */
   getNextId?: () => string
@@ -143,13 +129,8 @@ export function SpreadsheetView<T extends { id: string | number }>({
               setBlankRows(cur => [...cur, row])
             }
           }).catch(() => {
-            // A rejected promise means the create actually failed (network
-            // error, server validation, etc.) — not the same as the
-            // shouldKeepGoing===false "user cancelled" case above, but it
-            // needs the same recovery: put the typed row back instead of
-            // silently discarding data the person already entered. The
-            // caller is still responsible for surfacing *why* it failed
-            // (e.g. a toast) — this only guarantees the data isn't lost.
+            // The create failed: put the typed row back so nothing is lost (the caller
+            // shows why).
             setBlankRows(cur => [...cur, row])
           })
         }
@@ -161,13 +142,7 @@ export function SpreadsheetView<T extends { id: string | number }>({
 
   const addBlankRow = () => setBlankRows(prev => [...prev, ...makeBlankRows(1)])
 
-  // ── Delete confirmation ─────────────────────────────────────────────────
-  // A bare trash icon that fires immediately is one misclick away from
-  // losing a row — worse here, since deleting the last item on a Kas Bon
-  // can cascade-delete the whole shared header (see productionHooks/
-  // operationHooks useDelete). First click arms a row (shows check/cancel
-  // in place of the trash icon); a second, deliberate click actually
-  // deletes. Arming a different row disarms the previous one.
+  // ── Delete confirmation: the first click arms a row, the second deletes ──
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const requestDelete = (id: string) => setPendingDeleteId(id)
   const cancelDelete = () => setPendingDeleteId(null)
@@ -217,23 +192,14 @@ export function SpreadsheetView<T extends { id: string | number }>({
 
   const colCount = columns.length + (onDeleteRow ? 1 : 0)
 
-  // ── Keyboard navigation (arrow keys between cells, like Excel) ──────────
-  // Every cell registers its currently-mounted focusable node here, keyed
-  // by "<rowKey>:<colIndex>" — rowKey is String(row.id) for real rows and
-  // row.__key for blank ones, so the same map covers both. Whichever
-  // element EditableCell happens to be rendering (the display div, or the
-  // input/select while editing) re-registers itself via cellRef, so a
-  // lookup always finds whatever's actually focusable right now.
+  // ── Keyboard navigation: each cell's focusable node, by "<rowKey>:<col>" ──
   const cellRefs = useRef<Map<string, HTMLElement>>(new Map())
   const setCellRef = (key: string) => (el: HTMLElement | null) => {
     if (el) cellRefs.current.set(key, el)
     else cellRefs.current.delete(key)
   }
 
-  // Row order exactly as rendered — collapsed groups are skipped (arrow
-  // keys shouldn't land on hidden rows), and blank "New entries" rows are
-  // appended after, so arrowing down off the last real row continues
-  // straight into the New entries buffer instead of stopping dead.
+  // Row order as rendered (collapsed groups skipped), then the blank rows.
   const visibleRowKeys = useMemo(() => {
     const keys: string[] = []
     Object.entries(groupedData).forEach(([groupName, group]) => {
@@ -253,10 +219,7 @@ export function SpreadsheetView<T extends { id: string | number }>({
     cellRefs.current.get(`${newRowKey}:${newColIdx}`)?.focus()
   }
 
-  // Jump to the bottom on first load, once real data has actually rendered —
-  // that's normally where people are working (most recent entries, or the
-  // "new entries" footer right below), so no one has to scroll down by hand
-  // every time they open the sheet.
+  // Start scrolled to the bottom, where the newest rows and the blank rows are.
   const scrollRef = useRef<HTMLDivElement>(null)
   const hasAutoScrolled = useRef(false)
   useEffect(() => {
@@ -267,10 +230,7 @@ export function SpreadsheetView<T extends { id: string | number }>({
     hasAutoScrolled.current = true
   }, [data])
 
-  // Shared column widths so the scrollable data table and the pinned
-  // "new entries" table below it stay pixel-aligned regardless of their
-  // (different) cell content — table-layout: fixed + an identical colgroup
-  // in both tables is what actually guarantees that, not content sizing.
+  // One colgroup for both tables keeps the pinned blank rows aligned with the data.
   const colGroup = (
     <colgroup>
       {columns.map((c, idx) => <col key={idx} style={c.width ? { width: c.width } : undefined} />)}

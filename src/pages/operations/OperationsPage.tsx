@@ -1,48 +1,32 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Wrench } from 'lucide-react'
+import { Ledger } from '@/components/finance/Ledger'
+import { filtersFromParams, periodParam, sheetParams } from '@/components/finance/ledgerParams'
 import { OperationsDashboard } from './OperationsDashboard'
-import { OperationsSheetView } from './OperationsSheetView'
 
-type View = { mode: 'dashboard' } | { mode: 'sheet'; category?: string }
-
-// Controller only — swaps between the dashboard (bars + quick add) and the
-// full spreadsheet as two separate screens, mirroring ProductionPage.
+/** The operations dashboard, or (?view=sheet) every operation cost line. */
 export function OperationsPage() {
-  const [view, setView] = useState<View>({ mode: 'dashboard' })
-  // Kept separately from `view` so the dashboard's category-bar highlight
-  // survives a round trip to the spreadsheet and back — without this, going
-  // dashboard -> click category -> sheet -> back leaves the bars with no
-  // memory of which one was active, which reads as "did my click even
-  // register?" on return.
-  const [lastCategory, setLastCategory] = useState<string | undefined>(undefined)
-  // Same idea, for the month being viewed — see ProductionPage's identical
-  // fix and comment. Previously each screen kept its own cursor defaulting
-  // to "today," so browsing to a past month on the dashboard and then
-  // opening the spreadsheet silently dropped back to the current month,
-  // showing an empty sheet even though the month you were just looking at
-  // had real entries.
+  const [params, setParams] = useSearchParams()
   const now = new Date()
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() })
 
-  const openSheet = (category?: string) => {
-    setLastCategory(category)
-    setView({ mode: 'sheet', category })
-  }
-
-  if (view.mode === 'sheet') {
+  if (params.get('view') === 'sheet') {
     return (
-      <OperationsSheetView
-        onBack={() => setView({ mode: 'dashboard' })}
-        initialCategory={view.category}
-        cursor={cursor}
-        onCursorChange={(year, month) => setCursor({ year, month })}
+      <Ledger
+        key={params.toString()}
+        kind="operation"
+        title="Operations"
+        icon={<Wrench className="text-navy-600" size={20} />}
+        initial={filtersFromParams(params)}
+        onBack={() => setParams({})}
       />
     )
   }
-
   return (
     <OperationsDashboard
-      onOpenSheet={openSheet}
-      selectedCategory={lastCategory}
+      onOpenSheet={category => setParams(sheetParams({ group: category ?? '', period: periodParam({ mode: 'month', ...cursor }) }))}
+      selectedCategory={undefined}
       cursor={cursor}
       onCursorChange={(year, month) => setCursor({ year, month })}
     />

@@ -8,13 +8,7 @@ interface SpendBarItem {
    *  (Sablon, Embroidery, ...). Also helps disambiguate two suppliers that
    *  happen to share a name but differ in category. */
   category?: string
-  /** Optional fixed color (hex/rgb) for the small category dot next to the
-   *  label. Deliberately NOT applied to the bar fill itself — the bar's
-   *  length already carries the "how much was spent" comparison, and
-   *  tinting the whole bar by category would layer a second, competing
-   *  visual variable onto the same shape (and would collide with the
-   *  white "selected" state below). The dot gives a fast category scan
-   *  without touching that. */
+  /** Color of the dot by the label (the bar itself stays neutral). */
   color?: string
 }
 

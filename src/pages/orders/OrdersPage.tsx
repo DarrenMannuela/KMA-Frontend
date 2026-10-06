@@ -10,9 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import { ApiError } from '@/api'
 
 // ─── ID auto-numbering ────────────────────────────────────────────────────
-// Order IDs follow "NNN/KMA/YY" (e.g. "015/KMA/26"). For a brand new order
-// we suggest the next sequential number for the CURRENT year, so switching
-// years naturally restarts the count at 001 instead of continuing to climb.
+// Order IDs are "NNN/KMA/YY", numbered from 001 each year.
 function suggestNextOrderId(orders: Order[]): string {
   const yy = new Date().getFullYear().toString().slice(-2)
   const pattern = new RegExp(`^(\\d+)\\/KMA\\/${yy}$`)
@@ -46,10 +44,7 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
     date:       editing?.date ? editing.date.split('T')[0] : new Date().toISOString().split('T')[0],
   })
 
-  // Picking a client prefills Company from client_name — but only when
-  // Company is still blank or still matches the previously-selected
-  // client's name, so swapping the client doesn't clobber a manually
-  // typed/edited company name.
+  // Picking a client fills Company, unless it was typed by hand.
   const handleClientChange = (idStr: string) => {
     const newClientId = idStr ? Number(idStr) : null
     const newClient = clients.find(c => c.id === newClientId)
@@ -64,10 +59,7 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
     })
   }
 
-  // As soon as the orders list is available, prefill the ID suggestion for
-  // brand-new orders. Runs once orders load, and again if the user hasn't
-  // touched the field yet (covers the case where the form opens before
-  // the list has finished fetching).
+  // Suggest the next ID once orders load, until the user types one.
   useEffect(() => {
     if (!editing && !idTouched) {
       setForm(p => ({ ...p, id: suggestNextOrderId(orders) }))
@@ -75,11 +67,7 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders, editing])
 
-  // ID and PO Number are alphanumeric codes (e.g. "001/KMA/26", "P0000011")
-  // — force them to uppercase as-typed so we never end up with "p0000011"
-  // and "P0000011" being treated as different POs. Handled by
-  // UppercaseField now for id/company/po_number; `set` is left for the
-  // one remaining plain field (Date).
+  // For the plain fields (Date); the codes use UppercaseField.
   const set = (k: keyof CreateOrderRequest) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm(prev => ({ ...prev, [k]: e.target.value }))
   }
@@ -89,11 +77,7 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
     setForm(prev => ({ ...prev, id: value }))
   }
 
-  // Refetches before recomputing — our local `orders` cache can be stale
-  // by the time this runs (e.g. right after a 409, where a DIFFERENT
-  // client's order — the one that just caused the conflict — hasn't
-  // landed in our cache yet). Suggesting off stale data risked handing
-  // the user right back the same number that just collided.
+  // Refetch first: after a 409 the cached list may not have the order that took it.
   const resetIdSuggestion = async () => {
     setIdTouched(false)
     const { data: freshOrders } = await refetchOrders()
@@ -122,12 +106,7 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
           navigate(`/orders/${encodeURIComponent(newOrder.id)}`)
         },
         onError: (err) => {
-          // Two people can both load the "next" suggested ID before either
-          // submits — the backend is the real source of truth and rejects
-          // the second submit with 409 (see PostOrders). Rather than
-          // showing a raw/confusing failure, tell the user plainly what
-          // happened and hand them a fresh, still-open number so the only
-          // cost is one extra click, not a dead end.
+          // Someone else took this ID first: say so and offer the next free one.
           if (err instanceof ApiError && err.status === 409) {
             toast.error('That order number was just taken by someone else — grabbing you a new one.')
             resetIdSuggestion()

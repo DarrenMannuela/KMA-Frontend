@@ -1,10 +1,5 @@
-/**
- * Converts an integer Rupiah amount into Indonesian words, e.g.
- * 21600000 -> "dua puluh satu juta enam ratus ribu". Used for the
- * "terbilang" line on the kwitansi/receipt, which is standard on
- * Indonesian receipts as a fraud-resistance measure (the numeral and the
- * words must match).
- */
+/** An integer Rupiah amount in Indonesian words, e.g. 21600000 → "dua puluh satu
+ *  juta enam ratus ribu": the kwitansi's "terbilang" line. */
 
 const ONES = [
   '', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan',

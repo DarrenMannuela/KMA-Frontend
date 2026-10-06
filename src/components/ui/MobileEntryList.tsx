@@ -1,35 +1,12 @@
 import { useState } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
+import { Plus, Trash2, ChevronRight, Loader2 } from 'lucide-react'
 import type { ColumnDef } from './SpreadsheetView'
 import { Modal } from './Modal'
 import { ConfirmDialog, FormField, UppercaseField, formatRp } from './index'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// A phone-width alternative to SpreadsheetView, sharing the exact same
-// ColumnDef-driven props (data/columns/groupByKey/calculateSubtotal/
-// onCreateRow/onUpdateRow/onDeleteRow/emptyRowTemplate/requiredColumns/
-// renderGroupHeader) so any page already built around SpreadsheetView can
-// swap in this component for narrow viewports without touching its own
-// column definitions or CRUD wiring at all — see useIsMobile + the
-// conditional render in ProductionSpreadsheet/OperationsSpreadsheet for how
-// that swap actually happens.
-//
-// Why a separate component rather than a responsive mode bolted onto
-// SpreadsheetView itself: SpreadsheetView's interaction model is built
-// entirely around a keyboard-navigable grid — arrow-key cell-to-cell
-// movement, a persistent "type into a blank row to create it" buffer,
-// per-cell inline edit-in-place. None of that translates to touch: there's
-// no hover state to reveal affordances, no keyboard to arrow between
-// cells, and a blank row sitting at the bottom of a long scrolling list is
-// a much worse "add a new entry" pattern on a phone than a single explicit
-// button that opens a real form. Rather than teach one already-complex,
-// keyboard-focused component two very different interaction models, this
-// is a second, purpose-built renderer for the touch case: a grouped card
-// list (tap a card to edit it in a modal form) plus one explicit "Add"
-// button (opens the same form blank). Both read the same ColumnDef list,
-// so a column's `format`/`type`/`options`/`suggestions`/`uppercase` all
-// still apply identically — only how it's laid out changes.
-// ─────────────────────────────────────────────────────────────────────────────
+// The phone version of SpreadsheetView, taking the same column definitions:
+// grouped cards (tap to edit in a form) and an Add button instead of an
+// inline keyboard grid.
 
 interface MobileEntryListProps<T extends { id: string | number }> {
   data: T[]
@@ -41,11 +18,7 @@ interface MobileEntryListProps<T extends { id: string | number }> {
   /** The primary-key column. Defaults to 'id'. Never shown as a field —
    *  same convention as SpreadsheetView. */
   keyColumn?: keyof T
-  /** Same contract as SpreadsheetView's onCreateRow: normally void
-   *  (optimistic, the form just closes), or return Promise<boolean> if
-   *  creation needs a confirmation step first (e.g. NewKasBonDateModal) —
-   *  resolving false keeps this form open with what was typed intact
-   *  instead of discarding it. */
+  /** As SpreadsheetView's onCreateRow; resolving false keeps the form open. */
   onCreateRow?: (row: Partial<T>) => void | Promise<boolean>
   /** Columns that must all be non-empty before "Add" is enabled. */
   requiredColumns?: (keyof T)[]
@@ -73,10 +46,7 @@ export function MobileEntryList<T extends { id: string | number }>({
   addLabel = 'Add Entry',
 }: MobileEntryListProps<T>) {
   const editableColumns = columns.filter(c => c.editable)
-  // What actually renders on a card's own face — excludes anything marked
-  // hideOnCard (see that field's own comment on ColumnDef), even though
-  // such a column still shows up in editableColumns above and so still
-  // gets a field in the create/edit form.
+  // The card face leaves out hideOnCard columns; the form still has them.
   const cardColumns = columns.filter(c => !c.hideOnCard)
   const required = requiredColumns ?? []
 
@@ -156,12 +126,7 @@ export function MobileEntryList<T extends { id: string | number }>({
                       {cardColumns.map((col, idx) => {
                         const value = row[col.key]
                         const rendered = col.format ? col.format(value, row) : String(value ?? '—')
-                        // First column reads as the card's own small id/
-                        // label line (e.g. Kas Bon ID) — everything else
-                        // (except the last, handled separately below) is a
-                        // compact label:value line. Mirrors how a receipt
-                        // lists a reference number up top, details in the
-                        // middle, and the amount at the bottom.
+                        // The first column is the card's small reference line, like a receipt number.
                         if (idx === 0) {
                           return <div key={String(col.key) + idx} className="text-xs text-slate-400 font-mono">{rendered}</div>
                         }
@@ -257,10 +222,7 @@ function EntrySheet<T extends { id: string | number }>({
         const result = onCreateRow?.(draft as Partial<T>)
         if (result && typeof (result as Promise<boolean>).then === 'function') {
           const ok = await (result as Promise<boolean>)
-          // false = the caller cancelled a confirmation step (e.g. backed
-          // out of the "new Kas Bon needs a date" prompt) — same as
-          // SpreadsheetView's own restore path, leave the form open with
-          // what was typed still there instead of discarding it.
+          // false: the caller cancelled; keep the form and what was typed.
           if (ok === false) { setSubmitting(false); return }
         }
         setSubmitting(false)
@@ -308,10 +270,7 @@ function EntrySheet<T extends { id: string | number }>({
   )
 }
 
-// One field, typed off the same ColumnDef the desktop grid's EditableCell
-// reads — text/uppercase/suggestions, number/allowDecimal, select, date all
-// behave the same as they do there, just as a normal form field instead of
-// an inline table cell.
+// One form field, driven by the same ColumnDef as the desktop cell.
 function EntryField<T>({ col, value, onChange }: {
   col: ColumnDef<T>
   value: unknown
@@ -359,10 +318,7 @@ function EntryField<T>({ col, value, onChange }: {
     )
   }
 
-  // text — uppercase transform + suggestions both layer onto the same
-  // UppercaseField used everywhere else in the app when col.uppercase is
-  // set, so caret behavior matches every other uppercase field; plain
-  // .field input otherwise.
+  // Uppercase text uses UppercaseField so the caret behaves like everywhere else.
   if (col.uppercase) {
     return (
       <>

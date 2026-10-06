@@ -6,16 +6,8 @@ import { itemHooks, orderHooks } from '@/hooks'
 import type { Item, CreateItemRequest } from '@/types'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
 
-// Same caret-jump problem as the uppercase fields elsewhere (see
-// InvoicePrintPage.tsx's useUppercaseField): re-rendering a controlled
-// input with a freshly-computed string on every keystroke resets the caret
-// to the end unless something restores it. Formatted numbers have it worse
-// than a plain uppercase transform, because formatThousands can also
-// insert/remove a thousands separator on the very keystroke that changed
-// the digit next to it — so the caret can't just be put back at "the same
-// index", the separators around it may have shifted. What's stable across
-// a reformat is how many DIGITS sit to the left of the caret, so that's
-// what gets captured and restored instead of a raw character offset.
+// Keeps the caret in place while thousands separators come and go, by
+// restoring how many digits are to its left.
 function useFormattedNumberField(value: number, onValueChange: (n: number) => void) {
   const ref = useRef<HTMLInputElement>(null)
   const digitsBeforeCaret = useRef<number | null>(null)
@@ -91,10 +83,7 @@ function ItemForm({ editing, onClose }: { editing: Item | null; onClose: () => v
             onChange={v => setForm(p => ({ ...p, size: v }))} />
         </FormField>
         <FormField label="Amount" required>
-          {/* Amount counts whole items. type="number" only blocks keyboard
-              input, not paste/drag-drop/IME text, so a pasted "12abc" could
-              still land in the field. Filtering to digits-only in onChange
-              closes that gap regardless of how the character got in. */}
+          {/* Whole items only; onChange also filters pasted text. */}
           <input
             className="field"
             type="text"
@@ -130,12 +119,7 @@ function ItemForm({ editing, onClose }: { editing: Item | null; onClose: () => v
 
 export function ItemsPage() {
   const { data, isLoading, isError, refetch } = itemHooks.useList()
-  // Order.company is the display name to use here (not a Client lookup by
-  // client_id) — it's already the denormalized name that's correct whether
-  // this order is linked to a real Client record or just has a typed-in
-  // company, exactly the same convention OrdersPage/InvoiceListPage/etc.
-  // already read it under. Items only carry order_id, not client_id, so
-  // this is the one hop needed to get from an item to a client name at all.
+  // The client name for an item comes from its order's company.
   const { data: orders = [] } = orderHooks.useList()
   const del = itemHooks.useDelete()
 
@@ -153,11 +137,7 @@ export function ItemsPage() {
       columns={[
         { header: 'ID',        key: 'id' },
         { header: 'Order ID',  key: 'order_id', render: r => <span className="font-mono text-xs text-slate-500">{r.order_id}</span> },
-        // A synthetic key ('client', not a real Item field) — needed since
-        // Column.key doubles as this column's React list key, and reusing
-        // 'order_id' (the field this actually reads) would collide with
-        // the real Order ID column above. Never read back as row['client']
-        // since render is always provided here.
+        // A key of its own, distinct from the Order ID column's.
         { header: 'Client',    key: 'client',   render: r => clientNameByOrderId.get(r.order_id) ?? '—' },
         { header: 'Item',      key: 'item_name', primary: true, render: r => <span className="font-medium">{r.item_name}</span> },
         { header: 'Size',      key: 'size',      render: r => r.size ? <span className="badge-slate">{r.size}</span> : '—' },

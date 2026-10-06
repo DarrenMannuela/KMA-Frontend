@@ -3,38 +3,22 @@ import { readCsrfCookie } from '@/api/authApi'
 // ─────────────────────────────────────────────────────────────────────────────
 // Logging out when KMA is closed.
 //
-// Closing the last KMA tab or window (or the browser, or the installed
-// app) ends the session: the next time KMA is opened it starts at the
-// login screen. Closing one KMA tab while another is still open doesn't —
-// the session carries on in the open one. A reload doesn't either.
+// Closing the last KMA tab or window (or the browser, or the installed app)
+// ends the session; closing one of several tabs, or reloading, doesn't.
 //
-// A browser can't tell a page whether it's being closed or reloaded, and
-// on phones an app swiped away often gets no warning at all. So this works
-// at both ends:
-//
-// As a tab goes away (`pagehide`), it tells the auth service it's closing
-// (POST /closing). That doesn't end the session outright — it would on a
-// reload too — it makes it run out in 20 seconds unless it's used again.
-// A reload uses it again at once (and once more 2 seconds in, in case its
-// first request overtook the closing one), and other KMA tabs that are
-// still open hear about the close over a BroadcastChannel and use it too.
-// Nothing uses it after a real close, so it ends, and the account is free
-// to sign in on another device (the auth service allows one live session
-// per account).
-//
-// As KMA is opened, it checks whether this is a reload or KMA being opened
-// again after it was closed:
-//   - sessionStorage survives a reload but not closing the tab, so a mark
-//     there (TAB_KEY) says "this tab was signed in during this visit".
-//   - A new tab, or one whose mark is gone, asks the other KMA tabs over
-//     the BroadcastChannel whether any of them is signed in and open.
-//   - Browsers that reopen their tabs on start ("Continue where you left
-//     off") also bring back those tabs' sessionStorage and cookies. So open
-//     tabs also note the time in localStorage (ALIVE_KEY) every 30s; a mark
-//     whose last note is more than 2 minutes old means KMA was closed in
-//     between, even though the mark came back.
-// If KMA was closed, a session still left over (the close went unreported,
-// as on a phone) is ended on the server, and the login screen shows.
+// A page can't tell a close from a reload, and phones often give no warning,
+// so this works at both ends:
+// - On `pagehide` a tab reports it's closing (POST /closing): the session
+//   then runs out in 20 seconds unless used again. A reload uses it at once
+//   (and again 2s in); other open tabs hear of the close on a
+//   BroadcastChannel and use it too.
+// - On opening, a sessionStorage mark (TAB_KEY) means this tab was signed in
+//   during this visit; without one, the tab asks the others. Browsers that
+//   restore tabs also restore that mark, so open tabs note the time in
+//   localStorage every 30s (ALIVE_KEY): a mark over 2 minutes stale means
+//   KMA was closed in between.
+// If KMA was closed, a leftover session is ended on the server and the login
+// screen shows.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TAB_KEY = 'kma-signed-in-tab'

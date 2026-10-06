@@ -8,20 +8,9 @@ import { deliveryHooks, deliveryItemHooks } from './delivery'
 export const orderHooks = makeCrudHooks('orders', ordersApi, 'Order')
 export const itemHooks  = makeCrudHooks('items',  itemsApi,  'Item')
 
-// ─────────────────────────────────────────────────────────────────────────────
-// A DO's box contents are constrained by what was actually ordered — this
-// computes, for every Item on an Order, how much has already gone out
-// across ALL deliveries linked to that order (not just the one currently
-// being edited), and what's left. Matching is by item_name+size since
-// there's no order_item_id FK on DeliveryItem — same convention Items.go
-// already uses to dedupe order items (see the comment in
-// OrderDetailPage's ItemForm).
-//
-// excludeItemId lets a specific DeliveryItem's own amount be left out of
-// the "already delivered" sum — used when editing that exact item, so its
-// current amount doesn't count against itself when computing how much
-// headroom is left.
-// ─────────────────────────────────────────────────────────────────────────────
+// What's left to deliver of each item on an order, across all its deliveries
+// (matched by item name + size). excludeItemId leaves one delivery item out,
+// for editing it.
 export interface OrderRemainingItem extends Item {
   delivered: number
   remaining: number

@@ -9,12 +9,8 @@ import { invoiceHooks, clientHooks, clientContactHooks } from '@/hooks'
 import type { Order, Item, Invoice, CreateInvoiceRequest, UpdateInvoiceRequest } from '@/types'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
 
-// Same convention as Orders' suggestNextOrderId: "NNN/KMA/YY" for the
-// current year. Some older invoices in the system use a decimal suffix
-// like "076.1/KMA/26" (e.g. to distinguish DP vs Pelunasan on one order) —
-// the regex tolerates that trailing ".N" so old data doesn't break the
-// "what's the next number" scan, but new suggestions are always plain
-// "NNN/KMA/YY".
+// "NNN/KMA/YY" for this year. Older invoices may carry a ".N" suffix
+// ("076.1/KMA/26"); the scan allows it, new suggestions never use it.
 function suggestNextInvoiceId(invoices: Invoice[]): string {
   const yy = new Date().getFullYear().toString().slice(-2)
   const pattern = new RegExp(`^(\\d+)(?:\\.\\d+)?\\/KMA\\/${yy}$`)
@@ -26,14 +22,8 @@ function suggestNextInvoiceId(invoices: Invoice[]): string {
   return `${String(next).padStart(3, '0')}/KMA/${yy}`
 }
 
-// Same caret-jump problem as the Unit Price field on the item forms:
-// re-rendering a controlled input with a freshly-computed formatted string
-// on every keystroke resets the caret to the end unless something restores
-// it, and formatThousands can shift the thousands separators around the
-// very digit that was just typed/deleted — so what's stable across a
-// reformat is how many DIGITS sit to the left of the caret, not a raw
-// character offset. Total/Discount are comma-formatted the same way as
-// Unit Price, so they need the same fix.
+// Keeps the caret in place while thousands separators come and go, by
+// restoring how many digits are to its left.
 function useFormattedNumberField(value: number, onValueChange: (n: number) => void) {
   const ref = useRef<HTMLInputElement>(null)
   const digitsBeforeCaret = useRef<number | null>(null)
@@ -65,37 +55,12 @@ interface Props {
   order: Order
   items: Item[]
   existingInvoice: Invoice | null
-  // Which invoice this form is for — set by the caller (OrderDetailPage),
-  // not chosen in the UI. There's no "invoice type" selector; whichever
-  // button the user clicked (Generate DP / Generate Pelunasan / Generate
-  // COD) decides it. 'cod' is a UI-level shortcut, not a real Invoice.type
-  // value — see the `type` field in `form` below for why: it maps to
-  // 'dp' with a 0% down payment (down_payment: 0), the exact same shape
-  // the system already uses for "this order's full amount, paid in one
-  // invoice" (see OrderDetailPage's dpIsFullPayment and every isFullInvoice
-  // check across InvoiceListPage/InvoicePrintPage/KwitansiPrintPage).
-  // Introducing a genuine third Invoice.type value would mean touching
-  // every one of those isFullInvoice-style checks (and the backend schema)
-  // for a distinction that's otherwise purely "how this invoice's amount
-  // was decided," not something that needs to survive past invoice
-  // creation — 'cod' only exists here, as a friendlier on-ramp to a state
-  // the form already fully supports, so an invoice created this way is
-  // indistinguishable from a manually-typed 0% D/P afterward (same
-  // "Full Invoice" badge, same Kwitansi wording, etc.). If COD invoices
-  // ever need to be tracked or worded differently after the fact, that's
-  // a real schema field to add later — flagging it here rather than
-  // guessing at that now.
+  // Which invoice this is, from the button clicked on the order. 'cod' is saved
+  // as a 'dp' invoice with a 0% down payment: the app's "full invoice".
   forcedType: 'dp' | 'pelunasan' | 'cod'
-  // When creating a brand-new Pelunasan invoice, we prefill client and
-  // production details from the order's existing DP invoice — same
-  // client, same production info, just a second document. Null/undefined
-  // when generating a DP invoice (nothing to prefill from) or when
-  // existingInvoice is already set (editing takes priority).
+  // A new Pelunasan copies the client and production details from the DP invoice.
   prefillFrom?: Invoice | null
-  // The order's linked Client (if any) — lets this form pull Alamat from
-  // the Client record and offer a Contact picker for Untuk/Telp/Email,
-  // the same way OrdersPage/DeliveryPages link to Clients. Null for
-  // orders that only have a free-text company.
+  // The order's client, if linked: fills Alamat and offers its contacts.
   clientId: number | null
   onClose: () => void
 }
@@ -103,37 +68,18 @@ interface Props {
 export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType, prefillFrom, clientId, onClose }: Props) {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  // isError matters here beyond the usual "show a spinner/retry" case:
-  // idAlreadyExists and the auto-suggested next number below are both
-  // derived entirely from this list, so a silent fetch failure would
-  // leave `invoices` at [] and make the client-side duplicate-ID guard
-  // look like it passed when it never actually ran. The 409-on-submit
-  // handler further down is a real backend-side safety net for this, but
-  // the user gets no warning their local check isn't trustworthy without
-  // isInvoicesError below.
+  // If this list failed to load, the duplicate-ID check and the suggested number
+  // can't be trusted; the form says so (the backend still rejects duplicates).
   const { data: invoices = [], isError: isInvoicesError, refetch: refetchInvoices } = invoiceHooks.useList()
 
-  // Only fetched when the order is actually linked to a client — an
-  // unlinked order just falls back to typing everything by hand, same as
-  // before this existed. useGet's `id` is typed as `string | number` (no
-  // `undefined`) since it's the shared CRUD-hook factory, not one of the
-  // purpose-built "fetch only if linked" hooks — 0 is never a real client
-  // id, so it works as the same "don't fetch yet" sentinel while still
-  // satisfying the type, and useGet's internal `enabled: !!id` treats it
-  // exactly like undefined would.
+  // Only fetched for a linked client (0 never matches, and disables the query).
   const { data: client } = clientHooks.useGet(clientId ?? 0)
   const { data: contacts = [] } = clientContactHooks.useByClient(clientId ?? undefined)
 
   const total = items.reduce((s, i) => s + i.sub_total, 0)
 
-  // Kept as a string while the field is being edited — an empty input
-  // becomes "" here, not 0, so backspacing to clear the field doesn't
-  // instantly get overwritten back to "0" by a controlled re-render
-  // before you can type a replacement. Only meaningful for forcedType
-  // 'dp'; Pelunasan bypasses this entirely (see downPayment below). COD
-  // starts at '0' rather than the '50' a real D/P defaults to — COD IS
-  // the 0%-down case (the whole point of the button), not a percentage
-  // someone picks, so there's nothing to default toward 50% of.
+  // A string while editing, so the field can be emptied. COD starts at 0%,
+  // a DP at 50%.
   const [dpPercent, setDpPercent] = useState(() => {
     if (existingInvoice && existingInvoice.total > 0) {
       return String(Math.round(((existingInvoice.down_payment ?? 0) / existingInvoice.total) * 100))
@@ -145,11 +91,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
   const [form, setForm] = useState({
     id:             existingInvoice?.id             ?? '',
     order_id:       order.id,
-    // 'cod' is a UI-level concept only (see the Props comment above) —
-    // the record itself is always saved as a real 'dp'/'pelunasan'
-    // Invoice.type, so every isFullInvoice-style check elsewhere in the
-    // app keeps working on this invoice without needing to know COD was
-    // ever involved.
+    // 'cod' is saved as 'dp'.
     type:           forcedType === 'cod' ? 'dp' : forcedType,
     kepada_yth:     existingInvoice?.kepada_yth     ?? prefillFrom?.kepada_yth     ?? order.company ?? '',
     untuk:          existingInvoice?.untuk          ?? prefillFrom?.untuk          ?? '',
@@ -174,19 +116,10 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
 
   const [idTouched, setIdTouched] = useState(false)
   const [totalTouched, setTotalTouched] = useState(false)
-  // Which Client Contact (if any) was picked to autofill Untuk/Telp/Email
-  // — purely to keep the select controlled, same role catalogueItemId
-  // plays in OrderDetailPage's item picker. Editing an existing invoice or
-  // prefilling from a DP invoice already has real values here, so this
-  // starts unset in those cases rather than guessing which contact they
-  // came from.
+  // The picked contact, only to keep the select controlled.
   const [contactId, setContactId] = useState<number | ''>('')
 
-  // Alamat has no other source to prefill from (unlike Kepada Yth, which
-  // already defaults from order.company above) — pull it from the linked
-  // Client's address once it loads, but only for a brand-new invoice with
-  // nothing typed into that field yet, so this never clobbers a saved or
-  // prefilled value.
+  // A new invoice with an empty Alamat takes the client's address once it loads.
   useEffect(() => {
     if (!existingInvoice && !prefillFrom && !form.alamat && client?.address) {
       setForm(p => (p.alamat ? p : { ...p, alamat: client.address!.toUpperCase() }))
@@ -194,19 +127,8 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, existingInvoice, prefillFrom])
 
-  // Picking a contact fills Untuk/Telp/Email directly — an explicit user
-  // action, so it overwrites those fields outright (same convention as
-  // DeliveryPages' handleContactChange) rather than only filling blanks.
-  // Alamat too, now: a ClientContact carries its own address (a specific
-  // PIC can have a different site/office than the client's general
-  // address — see location_label/address on that type) which used to sit
-  // unused here — the form only ever offered the client's own address (via
-  // the effect above and its own "reset to client's address" button), even
-  // though the whole point of picking a specific contact is often "this
-  // shipment/invoice is for THIS person's location." Falls back to
-  // whatever's already in the field when the contact has no address of its
-  // own, same as Telp/Email already do — picking a contact with no stored
-  // address shouldn't blank out a real one someone already typed.
+  // Picking a contact fills Untuk, Telp, Email and (the contact's own) Alamat;
+  // fields the contact has no value for are kept.
   const handleContactChange = (idStr: string) => {
     const id = idStr ? Number(idStr) : ''
     setContactId(id)
@@ -221,13 +143,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
     }))
   }
 
-  // For a Pelunasan invoice, the amount already covered is exactly what
-  // the D/P invoice actually collected — pulled straight from the record
-  // (existingInvoice when editing one, prefillFrom when generating a new
-  // one off the order's D/P invoice) rather than recomputed from a
-  // percentage, which could drift if the order's items/total changed
-  // since the D/P was raised. There's nothing to type here; it's just
-  // "total minus what's already been paid."
+  // A Pelunasan takes what the DP invoice collected, as saved on it.
   const alreadyPaidAmount = forcedType === 'pelunasan'
     ? (existingInvoice?.down_payment ?? prefillFrom?.down_payment ?? 0)
     : 0
@@ -236,21 +152,13 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
     ? Math.min(alreadyPaidAmount, form.total)
     : Math.round(form.total * (dpPercentNum / 100))
   const remaining = form.total - downPayment
-  // A discount bigger than what's left to collect (or a shrunken order
-  // total after the D/P was already raised) would otherwise print a
-  // negative "amount due" with no warning — clamp to 0 and flag it
-  // instead of silently showing a number that doesn't make sense.
+  // Never negative: a discount bigger than what's left floors it at 0, with a warning.
   const arRaw = remaining - (Number(form.discount) ?? 0)
   const ar = Math.max(0, arRaw)
   const discountExceedsRemaining = arRaw < 0
 
-  // form.total was previously set only once, in useState's initializer —
-  // which meant if this form auto-opened (e.g. via the pencil-icon deep
-  // link from InvoiceListPage) before OrderDetailPage's items query had
-  // finished loading, `items` was still [] at mount time and total got
-  // permanently locked at 0, even after the real items arrived a moment
-  // later. Keep it synced to the live computed total until the user
-  // actually types into the field themselves.
+  // Follow the order's total (its items may load after the form opens) until
+  // the user types their own.
   useEffect(() => {
     if (!existingInvoice && !totalTouched) {
       setForm(p => ({ ...p, total }))
@@ -258,10 +166,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [total, existingInvoice])
 
-  // Prefill the suggested next invoice number once the invoice list loads
-  // — same pattern as Orders' resetIdSuggestion effect. Only applies to
-  // brand-new invoices, and backs off the moment the user types into the
-  // field themselves.
+  // Suggest the next number for a new invoice, until the user types one.
   useEffect(() => {
     if (!existingInvoice && !idTouched) {
       setForm(p => ({ ...p, id: suggestNextInvoiceId(invoices) }))
@@ -269,12 +174,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoices, existingInvoice])
 
-  // Refetches before recomputing — same reasoning as OrdersPage's own
-  // resetIdSuggestion: our local `invoices` cache can be stale by the
-  // time this runs (e.g. right after a 409, where the invoice that just
-  // caused the conflict hasn't landed in our cache yet). Suggesting off
-  // stale data risks handing the user right back the same number that
-  // just collided.
+  // Refetch first: after a 409 the cached list may not have the invoice that took it.
   const resetIdSuggestion = async () => {
     setIdTouched(false)
     const { data: freshInvoices } = await refetchInvoices()
@@ -284,13 +184,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
   const idAlreadyExists = invoices.some(inv => inv.id === form.id && inv.id !== existingInvoice?.id)
   const idChanged = !!existingInvoice && form.id !== existingInvoice.id
 
-  // Invoice No., Kepada Yth, Untuk, Alamat, Start Produksi, and Lama
-  // Produksi now uppercase via UppercaseField directly, matching the
-  // convention used on the Order/Item forms. Email is deliberately
-  // excluded — email addresses are conventionally lowercase and forcing
-  // case there tends to look wrong even though it's technically valid.
-  // `set` is left for the remaining plain fields (dates, discount inputs
-  // handled elsewhere).
+  // For the plain fields; the text fields use UppercaseField (email stays as typed).
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setForm(p => ({ ...p, [k]: e.target.value }))
   }
@@ -320,13 +214,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
       navigate(`/invoice/${encodeURIComponent(inv.id)}`)
     },
     onError: (e: Error) => {
-      // Same race OrdersPage.tsx already guards against: the suggested
-      // "next number" is only a client-side guess (this.invoices), so two
-      // people generating an invoice off the same order/list at once can
-      // both land on the same suggested ID. The backend is the real
-      // source of truth and rejects the second submit with 409 — rather
-      // than a confusing raw failure, tell the user plainly and hand them
-      // a fresh, still-open number so the only cost is one extra click.
+      // Someone else took this number first: say so and offer the next free one.
       if (e instanceof ApiError && e.status === 409) {
         toast.error('That invoice number was just taken by someone else — grabbing you a new one.')
         resetIdSuggestion()
@@ -389,16 +277,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
         </div>
       )}
 
-      {/* grid-cols-1 below sm on every one of these grids — a hardcoded
-          grid-cols-2/3 doesn't shrink with its own field content the way
-          a flex row would; at the phone width this modal actually renders
-          at (see OrderDetailPage.tsx's Modal wrap), a fixed 2 or 3 columns
-          left each field around 100-150px wide regardless of what it
-          held, squeezing things as plain as a date picker down to where
-          the day/month/year barely fit. Single-column below sm gives
-          every field the full modal width; sm+ (a wider phone in
-          landscape, tablet, or desktop) has room to actually spend on
-          multiple columns. */}
+      {/* One column on phones: fixed columns left fields too narrow. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <FormField label="Invoice No." required>
           <div className="flex items-center gap-2">
@@ -454,12 +333,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
             )}
           </FormField>
         ) : forcedType === 'cod' ? (
-          // No percentage to pick — COD is inherently "the whole amount,
-          // collected on delivery," so this just confirms that rather
-          // than asking for an input the way the DP branch does. Reuses
-          // the exact same downPayment=0/remaining=total math as a
-          // manually-typed 0% D/P (see the Props comment on forcedType
-          // above) — this FormField only differs in wording.
+          // COD collects the whole amount; nothing to choose.
           <FormField label="Amount (COD)">
             <input className="field font-mono bg-slate-50 text-slate-500 cursor-not-allowed" readOnly
               value={formatRp(remaining)} />
@@ -521,12 +395,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
             <UppercaseField as="textarea" className="field" rows={2} placeholder="Jl. Boulevard Pantai Indah Kapuk..."
               value={form.alamat}
               onChange={v => setForm(p => ({ ...p, alamat: v }))} />
-            {/* The auto-fill effect above only ever runs once for a brand
-                new invoice — it deliberately never overwrites an existing
-                invoice's saved Alamat, since the client's address may have
-                changed since. This is the escape hatch for that case: a
-                one-click pull instead of a silent overwrite, shown only
-                when there's actually something new to pull in. */}
+            {/* A saved invoice keeps its Alamat; this offers the client's newer address. */}
             {client?.address && client.address.toUpperCase() !== form.alamat && (
               <button
                 type="button"

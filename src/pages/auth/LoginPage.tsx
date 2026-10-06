@@ -16,15 +16,20 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The account is signed in somewhere else (the auth service allows one
+  // session per account): offer to sign that one out instead of leaving
+  // the person locked out until it expires.
+  const [signedInElsewhere, setSignedInElsewhere] = useState(false)
 
   const redirectTo = (location.state as { from?: Location })?.from?.pathname || '/'
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
+  async function signIn(takeOver: boolean) {
     setError(null)
+    setSignedInElsewhere(false)
     setSubmitting(true)
     try {
-      await login(email, password)
+      await login(email, password, takeOver)
+      if (takeOver) toast.success('Signed in here. The other device was signed out.')
       navigate(redirectTo, { replace: true })
     } catch (err) {
       // The backend deliberately returns the same generic message for
@@ -32,12 +37,21 @@ export function LoginPage() {
       // just surface it as-is rather than trying to be more specific.
       const message = err instanceof AuthApiError ? err.message : 'Could not reach the auth server'
       setError(message)
-      if (!(err instanceof AuthApiError) || err.status !== 401) {
+      const elsewhere = err instanceof AuthApiError && err.status === 409
+      setSignedInElsewhere(elsewhere)
+      // 401 and 409 are explained right under the form; a toast would
+      // just say it twice.
+      if (!(err instanceof AuthApiError) || (err.status !== 401 && !elsewhere)) {
         toast.error(message)
       }
     } finally {
       setSubmitting(false)
     }
+  }
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    signIn(false)
   }
 
   return (
@@ -104,7 +118,19 @@ export function LoginPage() {
           </div>
 
           {error && (
-            <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
+            <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2" role="alert">{error}</p>
+          )}
+
+          {signedInElsewhere && (
+            <button
+              type="button"
+              onClick={() => signIn(true)}
+              disabled={submitting}
+              className="w-full py-2.5 rounded-lg border border-navy-200 text-navy-900 text-sm font-semibold
+                         hover:bg-navy-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              Sign out the other device and sign in here
+            </button>
           )}
 
           <button

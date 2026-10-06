@@ -12,11 +12,7 @@ export function UsersPage() {
   const isMobile = useIsMobile()
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
-  // Distinct from "loaded fine, there just aren't any users" — see
-  // CrudPage's own isError/EmptyState split for why folding a failed
-  // fetch into the same empty-list UI is misleading (this page predates
-  // CrudPage and has its own bespoke fetch/render, so it needs its own
-  // copy of that fix rather than getting it for free).
+  // A failed fetch shows an error, not an empty list.
   const [loadError, setLoadError] = useState(false)
   const [showForm, setShowForm] = useState(false)
   // Which row has a deactivate/reactivate request in flight — disables
@@ -85,12 +81,7 @@ export function UsersPage() {
         </button>
       </div>
 
-      {/* Always a popup rather than mobile-only — this is a short, rarely-
-          used admin form, unlike the item-heavy Add flows elsewhere in
-          the app that keep an inline desktop panel because they're
-          reached constantly while looking at the data they're adding to.
-          One consistent behavior is simpler here and matches every plain
-          CrudPage-based Add form already in the app. */}
+      {/* Always a popup: a short, rarely used form. */}
       {showForm && (
         <Modal title="Add User" onClose={() => setShowForm(false)}>
           <AddUserForm
@@ -117,15 +108,7 @@ export function UsersPage() {
         ) : users.length === 0 ? (
           <p className="text-center text-sm text-slate-400 py-12">No users yet.</p>
         ) : isMobile ? (
-          // The plain 5-column table's outer card uses overflow-hidden for
-          // its rounded corners (same as every other card in this app) —
-          // without a scroll container of its own, a too-wide row just got
-          // silently clipped instead of scrollable, cutting off the
-          // Deactivate/Reactivate button with no visible sign anything was
-          // missing. A card per user sidesteps that instead of adding yet
-          // another overflow-x-auto-on-the-table-only wrapper, since a
-          // single admin looking up one account at a time reads better as
-          // a card than a cramped scrollable row anyway.
+          // One card per user, so the action buttons are never clipped.
           <div className="divide-y divide-slate-50">
             {users.map(u => (
               <div key={u.id} className="p-4">
@@ -287,12 +270,7 @@ function AddUserForm({ onCreated }: { onCreated: (u: AdminUser) => void }) {
         </select>
       </div>
 
-      {/* No password field anymore — the backend generates a locked,
-          never-shown password and emails the new hire a one-time
-          "set your password" link instead (see CreateUser/AcceptInvite
-          on the auth service). Nothing usable to type in here on
-          purpose, so there's nothing left for an admin to accidentally
-          mishandle by copy-pasting it somewhere insecure. */}
+      {/* No password here: the new user gets an email link to set their own. */}
       <p className="col-span-1 sm:col-span-2 text-xs text-slate-400 -mt-2">
         They'll get an email with a link to set their own password. The link expires after a couple of days.
       </p>

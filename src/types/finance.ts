@@ -1,14 +1,8 @@
 import type { Supplier } from './supplier'
 
 // ─── Matches dto/FinanceHeader.go ─────────────────────────────────────────────
-// A "Kas Bon" — shared parent for Production and/or Operation line items.
-// Deliberately just a receipt: id/date/description. It does NOT carry a
-// type or a supplier anymore. Whether a header shows up on the Production
-// page, the Operations page, or both, is purely a function of which item
-// tables actually have rows pointing at it (see toProductionRows /
-// toOperationRows in hooks/index.ts) — a single Kas Bon can legitimately
-// have both production material lines AND an operation cost line on it,
-// e.g. one physical receipt covering fabric plus the ojek fee to fetch it.
+// A Kas Bon: one receipt (id, date, description) holding production lines,
+// operation lines, or both (e.g. fabric plus the ojek fee to fetch it).
 export interface FinanceHeader {
   id: string          // e.g. "01/KB/26"
   date: string         // ISO date string, e.g. "2026-04-02"
@@ -26,7 +20,8 @@ export interface ProductionItem {
   material_name: string
   price: number
   si_unit: string     // e.g. "yard", "meter", "pcs"
-  amount: number
+  amount: number      // may be fractional: 2.5 meters
+  order_id: string | null
 }
 
 // ─── Matches dto/OperationItem.go ─────────────────────────────────────────────
@@ -36,12 +31,10 @@ export interface OperationItem {
   category: string
   description: string
   price: number
+  order_id: string | null
 }
 
-// ─── Flattened view-models ─────────────────────────────────────────────────────
-// The spreadsheets show one row per item with its parent header's fields
-// merged in. These are computed client-side in hooks/index.ts; they're not
-// the wire format.
+// ─── Rows as the pages show them: one per line, with its Kas Bon's fields ─────
 export interface ProductionRow {
   id: number                   // ProductionItem.id
   header_id: string            // e.g. "01/KB/26" — the Kas Bon id
@@ -53,6 +46,7 @@ export interface ProductionRow {
   price: number                // item-level
   si_unit: string               // item-level
   amount: number                // item-level
+  order_id: string | null       // item-level: the order this cost was for
 }
 
 export interface OperationRow {
@@ -63,6 +57,7 @@ export interface OperationRow {
   category: string             // item-level — what OperationsDashboard/OperationsSpreadsheet group and filter by
   item_description: string     // item-level (the specific cost line)
   price: number                // item-level
+  order_id: string | null      // item-level: the order this cost was for
 }
 
 // ─── Request / Create DTOs ────────────────────────────────────────────────────
@@ -77,8 +72,57 @@ export type UpdateOperationItemRequest = Partial<CreateOperationItemRequest>
 
 // What the spreadsheet / quick-add UI submits — the hooks layer splits
 // these into a FinanceHeader + item under the hood.
-export type CreateProductionRowRequest = Omit<ProductionRow, 'id'>
-export type UpdateProductionRowRequest = Partial<CreateProductionRowRequest>
+export type CreateProductionRowRequest = Omit<ProductionRow, 'id' | 'order_id'> & { order_id?: string | null }
 
-export type CreateOperationRowRequest = Omit<OperationRow, 'id'>
-export type UpdateOperationRowRequest = Partial<CreateOperationRowRequest>
+export type CreateOperationRowRequest = Omit<OperationRow, 'id' | 'order_id'> & { order_id?: string | null }
+
+// ─── Batch changes (POST /finance/batch), applied in one transaction ─────────
+export interface ItemPatch {
+  id: number
+  fields: Record<string, unknown>
+}
+
+export interface FinanceBatch {
+  new_headers?: FinanceHeader[]   // must not exist yet
+  headers?: FinanceHeader[]       // created if missing
+  header_update?: FinanceHeader[] // new date and description
+  production_create?: Partial<ProductionItem>[]
+  operation_create?: Partial<OperationItem>[]
+  production_update?: ItemPatch[]
+  operation_update?: ItemPatch[]
+  production_delete?: number[]
+  operation_delete?: number[]
+}
+
+export interface FinanceBatchResult {
+  headers_created: FinanceHeader[] | null
+  headers_deleted: FinanceHeader[] | null
+  headers_before: FinanceHeader[] | null
+  production: ProductionItem[] | null
+  operation: OperationItem[] | null
+  production_before: ProductionItem[] | null
+  operation_before: OperationItem[] | null
+  production_deleted: ProductionItem[] | null
+  operation_deleted: OperationItem[] | null
+}
+
+// ─── Budgets and recurring costs ─────────────────────────────────────────────
+export type BudgetScope = 'production' | 'operation'
+
+/** A monthly limit for an operation category, a supplier category, or ""
+ *  for the whole scope. */
+export interface Budget {
+  id: number
+  scope: BudgetScope
+  category: string
+  amount: number
+}
+
+export interface RecurringCost {
+  id: number
+  category: string
+  description: string
+  price: number
+  active: boolean
+  last_posted: string   // "2026-10", or "" if never posted
+}

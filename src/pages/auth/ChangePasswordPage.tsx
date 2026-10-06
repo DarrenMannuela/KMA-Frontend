@@ -6,19 +6,14 @@ import toast from 'react-hot-toast'
 import { authApi, AuthApiError } from '@/api/authApi'
 import { useAuth } from '@/contexts/AuthContext'
 
-// Reached via MustChangePasswordRoute whenever the current user's account
-// still carries an admin-set temporary password. ChangePassword on the
-// backend deletes every session (including this one) on success, so we
-// don't try to update AuthContext locally afterward — we just send the
-// user back to /login to re-authenticate with their new password.
+// Changing the password ends every session, this one included: go to /login
+// afterwards.
 export function ChangePasswordPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
 
-  // Reached two ways: forced (must_change_password is true — no way
-  // out, the account can't be used until this is done) or voluntary
-  // (clicked "Change password" from the account menu — should be
-  // cancelable). Only show a way back for the voluntary case.
+  // Forced (a temporary password) or chosen from the menu; only the latter can
+  // be cancelled.
   const isForced = user?.must_change_password ?? false
 
   const [currentPassword, setCurrentPassword] = useState('')
