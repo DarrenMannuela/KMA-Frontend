@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { Plus, Trash2, Factory, Wrench } from 'lucide-react'
+import { Plus, Trash2, Factory, Wrench, Search, Palette } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { formatRp } from '@/components/ui'
 import { useFinanceBatch } from '@/hooks'
@@ -8,6 +8,8 @@ import { SI_UNITS } from '@/utils/Units'
 import { todayISODate } from '@/utils/MonthUtils'
 import { suggestNextKasBonId } from '@/utils/KasBonId'
 import { parseDelimited } from '@/utils/tableText'
+import { ALL_CATALOGUES, catalogueForSupplier, materialFromText, materialLabel, colorCodeFromText } from '@/data/materialCatalogue'
+import type { CatalogueMaterial, CatalogueColor } from '@/data/materialCatalogue'
 import type { FinanceBatch, FinanceHeader, Order, Supplier } from '@/types'
 import { draftProblem, draftsToBatch, draftTotal, newDraft, supplierWithCategory, type DraftLine, type Kind } from './ledgerModel'
 import { guessColumns, readRows } from './columnGuess'
@@ -176,6 +178,11 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
               const problem = showErrors && !isBlank(l) ? draftProblem(l, supplierIds) : null
               const keys = { onKeyDown: (e: React.KeyboardEvent) => onLineKey(e, i), onPaste: (e: React.ClipboardEvent) => onLinePaste(e, i) }
               const prod = l.kind === 'production'
+              const supplierName = prod ? suppliers.find(s => s.id === l.supplier_id)?.supplier_name : undefined
+              const catalogue = prod ? catalogueForSupplier(supplierName) : undefined
+              const catMatch = catalogue ? materialFromText(catalogue, l.name) : undefined
+              const catCode = catalogue && catMatch ? colorCodeFromText(catMatch, l.name) : undefined
+              const catColors = catalogue && catMatch ? catalogue.colorsFor(catMatch) : []
               return (
                 <div key={l.key} className={`px-3 py-2 ${problem ? 'bg-red-50/50' : ''}`}>
                   <div className="grid grid-cols-2 md:grid-cols-[1.5rem_minmax(0,1.6fr)_minmax(0,1.3fr)_4.5rem_5.5rem_7rem_7rem_minmax(0,1fr)_2rem] gap-2 items-center">
@@ -185,9 +192,14 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
                     <input
                       data-line-first
                       className="field col-span-2 md:col-span-1 !py-1.5"
-                      placeholder={prod ? 'Bahan, e.g. DRILL 902' : 'Item, e.g. OJEK AMBIL BAHAN'}
+                      placeholder={catalogue ? 'Bahan — pick from catalogue or type' : prod ? 'Bahan, e.g. DRILL 902' : 'Item, e.g. OJEK AMBIL BAHAN'}
                       value={l.name}
-                      onChange={e => setLine(l.key, { name: e.target.value.toUpperCase() })}
+                      list={catalogue ? `material-catalogue-${catalogue.id}` : undefined}
+                      onChange={e => {
+                        const name = e.target.value.toUpperCase()
+                        const picked = catalogue ? materialFromText(catalogue, name) : undefined
+                        setLine(l.key, picked ? { name, unit: 'yard' } : { name })
+                      }}
                       {...keys}
                     />
                     {prod ? (
@@ -249,6 +261,22 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
                     </button>
                   </div>
                   {problem && <p className="mt-1 text-[11px] text-red-500">{problem}</p>}
+                  {!problem && catalogue && catMatch && (
+                    <>
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        {catMatch.composition}
+                        {catMatch.widthCm != null && catMatch.rollYards != null && <> · roll {catMatch.widthCm} cm × {catMatch.rollYards} yd</>}
+                      </p>
+                      {catColors.length > 0 && (
+                        <MaterialColorPicker
+                          material={catMatch}
+                          colors={catColors}
+                          selectedCode={catCode}
+                          onPick={code => setLine(l.key, { name: `${materialLabel(catMatch)} - ${code}`, unit: 'yard' })}
+                        />
+                      )}
+                    </>
+                  )}
                 </div>
               )
             })}
@@ -269,6 +297,14 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
           {orders.slice(-300).reverse().map(o => <option key={o.id} value={o.id}>{o.company ?? ''}</option>)}
         </datalist>
         <datalist id={categoryListId}>{categories.map(c => <option key={c} value={c} />)}</datalist>
+        {/* One per registered supplier catalogue — only lines whose supplier
+            matches that catalogue actually attach to it (see `catalogue`
+            above), so an unmatched one is simply inert. */}
+        {ALL_CATALOGUES.map(c => (
+          <datalist key={c.id} id={`material-catalogue-${c.id}`}>
+            {c.materials.map(m => <option key={materialLabel(m)} value={materialLabel(m)} />)}
+          </datalist>
+        ))}
 
         <p className="text-xs text-slate-400">
           Enter moves to the next line · paste rows copied from Excel into any line · Ctrl+Enter saves
@@ -280,6 +316,107 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
             {save.isPending ? 'Saving…' : `Save ${filled.length || ''} line${filled.length === 1 ? '' : 's'}`}
           </button>
         </div>
+      </div>
+    </Modal>
+  )
+}
+
+// A compact trigger (current pick, or a prompt) that opens
+// MaterialColorPickerModal. Kept separate from that modal so each line's
+// open/closed state and search text are local to it — not threaded through
+// DraftLine and the batch/paste/import machinery that reads the line's
+// other fields. Generic over any registered catalogue's material, not SAI
+// specifically — see materialCatalogue.ts.
+function MaterialColorPicker({ material, colors, selectedCode, onPick }: {
+  material: CatalogueMaterial
+  colors: CatalogueColor[]
+  selectedCode?: string
+  onPick: (code: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const selected = selectedCode ? colors.find(c => c.code === selectedCode) : undefined
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-1 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 active:bg-slate-100 text-xs"
+      >
+        {selected ? (
+          <>
+            <span className="w-3.5 h-3.5 rounded-full ring-1 ring-black/10 shrink-0" style={{ background: selected.hex }} />
+            <span className="font-mono text-slate-700">{selected.code}</span>
+            {selected.category && <span className="text-slate-400">· {selected.category}</span>}
+          </>
+        ) : (
+          <>
+            <Palette size={11} className="text-slate-400" />
+            <span className="text-slate-500">Pick a colour ({colors.length})</span>
+          </>
+        )}
+      </button>
+      {open && (
+        <MaterialColorPickerModal
+          material={material}
+          colors={colors}
+          selectedCode={selectedCode}
+          onPick={code => { onPick(code); setOpen(false) }}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  )
+}
+
+// The full picker: a search box and a grid of larger, labelled swatches
+// (code, and category when the catalogue has one) — opened from the trigger
+// above instead of living inline, since at up to 256 colours a labelled
+// grid needs real room no Kas Bon line can spare permanently.
+function MaterialColorPickerModal({ material, colors, selectedCode, onPick, onClose }: {
+  material: CatalogueMaterial
+  colors: CatalogueColor[]
+  selectedCode?: string
+  onPick: (code: string) => void
+  onClose: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const q = query.trim().toLowerCase()
+  const filtered = q ? colors.filter(c => c.code.toLowerCase().includes(q) || (c.category ?? '').toLowerCase().includes(q)) : colors
+
+  return (
+    <Modal title={`${materialLabel(material)} — colours`} onClose={onClose} size="lg">
+      <div className="space-y-3">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            autoFocus
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search by number or category…"
+            className="field !pl-9"
+          />
+        </div>
+        <p className="text-xs text-slate-400">{filtered.length} of {colors.length} colours</p>
+        {filtered.length === 0 ? (
+          <p className="text-sm text-slate-400 text-center py-10">No colour matches "{query}".</p>
+        ) : (
+          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2.5 max-h-[55vh] overflow-y-auto pr-1 -mr-1">
+            {filtered.map(c => (
+              <button
+                type="button"
+                key={c.code}
+                onClick={() => onPick(c.code)}
+                className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border transition-colors ${selectedCode === c.code ? 'border-navy-700 bg-navy-50' : 'border-transparent hover:border-slate-200 hover:bg-slate-50 active:bg-slate-100'}`}
+              >
+                <span className="w-10 h-10 rounded-full ring-1 ring-black/10 shrink-0" style={{ background: c.hex }} />
+                <span className="font-mono text-xs text-navy-900">{c.code}</span>
+                {c.category && <span className="text-[10px] text-slate-400 text-center leading-tight">{c.category}</span>}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </Modal>
   )

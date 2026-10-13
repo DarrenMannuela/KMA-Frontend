@@ -1,6 +1,7 @@
 import { useRef, useLayoutEffect } from 'react'
 import { Loader2, AlertTriangle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useIsMobile } from '@/hooks/useIsMobile'
 
 // ─── Spinner ──────────────────────────────────────────────────────────────────
@@ -28,7 +29,7 @@ export function EmptyState({ icon: Icon, title, subtitle }: {
 }
 
 // ─── ConfirmDialog ────────────────────────────────────────────────────────────
-export function ConfirmDialog({ message, onConfirm, onCancel, confirmLabel = 'Delete' }: {
+export function ConfirmDialog({ message, onConfirm, onCancel, confirmLabel }: {
   message: string
   onConfirm: () => void
   onCancel: () => void
@@ -36,6 +37,8 @@ export function ConfirmDialog({ message, onConfirm, onCancel, confirmLabel = 'De
   confirmLabel?: string
 }) {
   const isMobile = useIsMobile()
+  const { t } = useTranslation()
+  const confirm = confirmLabel ?? t('common.delete')
 
   // Bottom sheet on phones, buttons full width with Cancel first.
   if (isMobile) {
@@ -53,8 +56,8 @@ export function ConfirmDialog({ message, onConfirm, onCancel, confirmLabel = 'De
             <p className="text-sm text-slate-700">{message}</p>
           </div>
           <div className="flex flex-col gap-2 px-5 pb-6">
-            <button className="btn-secondary w-full" onClick={onCancel}>Cancel</button>
-            <button className="btn-danger w-full" onClick={onConfirm}>{confirmLabel}</button>
+            <button className="btn-secondary w-full" onClick={onCancel}>{t('common.cancel')}</button>
+            <button className="btn-danger w-full" onClick={onConfirm}>{confirm}</button>
           </div>
         </div>
       </div>
@@ -72,8 +75,8 @@ export function ConfirmDialog({ message, onConfirm, onCancel, confirmLabel = 'De
           <p className="text-sm text-slate-700">{message}</p>
         </div>
         <div className="flex gap-2 justify-end">
-          <button className="btn-secondary btn-sm" onClick={onCancel}>Cancel</button>
-          <button className="btn-danger btn-sm" onClick={onConfirm}>{confirmLabel}</button>
+          <button className="btn-secondary btn-sm" onClick={onCancel}>{t('common.cancel')}</button>
+          <button className="btn-danger btn-sm" onClick={onConfirm}>{confirm}</button>
         </div>
       </div>
     </div>

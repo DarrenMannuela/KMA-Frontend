@@ -106,6 +106,61 @@ export interface FinanceBatchResult {
   operation_deleted: OperationItem[] | null
 }
 
+// ─── Bukti Kas ────────────────────────────────────────────────────────────────
+// Cash RECEIVED, not spent — deliberately a separate header type from
+// FinanceHeader (Kas Bon) rather than a third `kind` grafted onto it. Same
+// header+items shape, own id sequence/format: "01/BK/KMA/26" (see
+// BuktiKasId.ts), own batch endpoint.
+export interface BuktiKasHeader {
+  id: string
+  date: string
+  description: string
+}
+
+export interface BuktiKasItem {
+  id: number
+  header_id: string
+  description: string
+  price: number
+  order_id: string | null
+}
+
+export interface BuktiKasRow {
+  id: number                    // BuktiKasItem.id
+  header_id: string             // e.g. "01/BK/KMA/26"
+  date: string                  // header-level
+  description: string           // header-level
+  item_description: string      // item-level (what the cash was for)
+  price: number                 // item-level
+  order_id: string | null       // item-level: the order this cash was received for
+}
+
+export type CreateBuktiKasHeaderRequest = BuktiKasHeader
+export type UpdateBuktiKasHeaderRequest = Partial<CreateBuktiKasHeaderRequest>
+
+export type CreateBuktiKasItemRequest = Omit<BuktiKasItem, 'id'>
+export type UpdateBuktiKasItemRequest = Partial<CreateBuktiKasItemRequest>
+
+export type CreateBuktiKasRowRequest = Omit<BuktiKasRow, 'id' | 'order_id'> & { order_id?: string | null }
+
+export interface BuktiKasBatch {
+  new_headers?: BuktiKasHeader[]
+  headers?: BuktiKasHeader[]
+  header_update?: BuktiKasHeader[]
+  item_create?: Partial<BuktiKasItem>[]
+  item_update?: ItemPatch[]
+  item_delete?: number[]
+}
+
+export interface BuktiKasBatchResult {
+  headers_created: BuktiKasHeader[] | null
+  headers_deleted: BuktiKasHeader[] | null
+  headers_before: BuktiKasHeader[] | null
+  items: BuktiKasItem[] | null
+  items_before: BuktiKasItem[] | null
+  items_deleted: BuktiKasItem[] | null
+}
+
 // ─── Budgets and recurring costs ─────────────────────────────────────────────
 export type BudgetScope = 'production' | 'operation'
 

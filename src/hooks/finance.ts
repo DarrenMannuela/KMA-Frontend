@@ -1,11 +1,16 @@
 import { createElement, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { financeHeaderApi, productionItemApi, operationItemApi, financeBatchApi, budgetApi, recurringCostApi } from '@/api'
+import {
+  financeHeaderApi, productionItemApi, operationItemApi, financeBatchApi, budgetApi, recurringCostApi,
+  buktiKasHeaderApi, buktiKasItemApi, buktiKasBatchApi,
+} from '@/api'
 import type {
   FinanceHeader, ProductionItem, OperationItem, ProductionRow, OperationRow,
   CreateProductionRowRequest, CreateOperationRowRequest,
   FinanceBatch, FinanceBatchResult, Budget, RecurringCost,
+  BuktiKasHeader, BuktiKasItem, BuktiKasRow, CreateBuktiKasRowRequest,
+  BuktiKasBatch, BuktiKasBatchResult,
 } from '@/types'
 
 // A Kas Bon (FinanceHeader) holds production lines, operation lines, or both.
@@ -18,6 +23,11 @@ const PRODUCTION_ITEMS_KEY = ['production-item', 'grouped']
 const OPERATION_ITEMS_KEY = ['operation-item', 'grouped']
 const BUDGET_KEY = ['budget']
 const RECURRING_KEY = ['recurring-cost']
+
+// Bukti Kas (cash received) — its own headers/items, not Kas Bon's, so
+// its own query keys rather than sharing HEADERS_KEY.
+const BUKTI_KAS_HEADERS_KEY = ['bukti-kas-header']
+const BUKTI_KAS_ITEMS_KEY = ['bukti-kas-item', 'grouped']
 
 export function useFinanceHeaders() {
   return useQuery({ queryKey: HEADERS_KEY, queryFn: financeHeaderApi.list })
@@ -40,11 +50,25 @@ function toOperationRows(headers: FinanceHeader[], grouped: Record<string, Opera
   })))
 }
 
+function toBuktiKasRows(headers: BuktiKasHeader[], grouped: Record<string, BuktiKasItem[]>): BuktiKasRow[] {
+  return headers.flatMap(h => (grouped[h.id] ?? []).map(item => ({
+    id: item.id, header_id: h.id, date: h.date, description: h.description,
+    item_description: item.description, price: item.price, order_id: item.order_id ?? null,
+  })))
+}
+
 /** A production line's total in rupiah (quantities can be fractional). */
 export const lineTotal = (row: { price: number; amount: number }) => Math.round(row.price * row.amount)
 
-function useRows<R, I>(itemsKey: string[], fetchItems: () => Promise<Record<string, I[]>>, toRows: (h: FinanceHeader[], g: Record<string, I[]>) => R[]) {
-  const headers = useQuery({ queryKey: HEADERS_KEY, queryFn: financeHeaderApi.list })
+// Generic across any header+items pair, not just Kas Bon — Bukti Kas
+// reuses this with its own headersKey/fetchHeaders instead of a second
+// copy of the same loading/error/refetch plumbing.
+function useRows<H extends { id: string }, R, I>(
+  headersKey: string[], fetchHeaders: () => Promise<H[]>,
+  itemsKey: string[], fetchItems: () => Promise<Record<string, I[]>>,
+  toRows: (h: H[], g: Record<string, I[]>) => R[],
+) {
+  const headers = useQuery({ queryKey: headersKey, queryFn: fetchHeaders })
   const items = useQuery({ queryKey: itemsKey, queryFn: fetchItems })
   const data = useMemo(
     () => (headers.data && items.data) ? toRows(headers.data, items.data) : [],
@@ -167,7 +191,7 @@ function headerFor(row: { header_id: string; date: string; description: string }
 }
 
 export const productionHooks = {
-  useList: () => useRows(PRODUCTION_ITEMS_KEY, productionItemApi.grouped, toProductionRows),
+  useList: () => useRows(HEADERS_KEY, financeHeaderApi.list, PRODUCTION_ITEMS_KEY, productionItemApi.grouped, toProductionRows),
 
   /** Adds one line, creating its Kas Bon first if it's new. */
   useCreate: () => {
@@ -189,7 +213,7 @@ export const productionHooks = {
 }
 
 export const operationHooks = {
-  useList: () => useRows(OPERATION_ITEMS_KEY, operationItemApi.grouped, toOperationRows),
+  useList: () => useRows(HEADERS_KEY, financeHeaderApi.list, OPERATION_ITEMS_KEY, operationItemApi.grouped, toOperationRows),
 
   useCreate: () => {
     const batch = useFinanceBatch()
@@ -204,6 +228,136 @@ export const operationHooks = {
             price: row.price, order_id: row.order_id ?? null,
           }],
         },
+      }, opts),
+    }
+  },
+}
+
+// ── Bukti Kas ────────────────────────────────────────────────────────────────
+// Own undo stack, parallel to the Kas Bon one above — Ctrl+Z on a Bukti
+// Kas change and Ctrl+Z on a Kas Bon change are independent, the same way
+// the two are independent documents. See the Kas Bon undo section above
+// for the reasoning each piece here mirrors.
+
+interface BuktiKasUndoEntry { label: string; batch: BuktiKasBatch }
+const buktiKasUndoStack: BuktiKasUndoEntry[] = []
+
+const buktiKasItemFields = (i: BuktiKasItem) => ({
+  header_id: i.header_id, description: i.description, price: i.price, order_id: i.order_id ?? null,
+})
+
+function inverseBuktiKasBatch(r: BuktiKasBatchResult): BuktiKasBatch {
+  return {
+    headers: r.headers_deleted ?? [],
+    header_update: r.headers_before ?? [],
+    item_create: r.items_deleted ?? [],
+    item_update: (r.items_before ?? []).map(i => ({ id: i.id, fields: buktiKasItemFields(i) })),
+    item_delete: (r.items ?? []).map(i => i.id),
+  }
+}
+
+const isEmptyBuktiKasBatch = (b: BuktiKasBatch) => Object.values(b).every(v => !v || (Array.isArray(v) && v.length === 0))
+
+function invalidateBuktiKas(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: BUKTI_KAS_HEADERS_KEY })
+  qc.invalidateQueries({ queryKey: BUKTI_KAS_ITEMS_KEY })
+}
+
+export async function undoLastBuktiKas(qc: QueryClient) {
+  const entry = buktiKasUndoStack.pop()
+  if (!entry) {
+    toast('Nothing to undo')
+    return
+  }
+  try {
+    await buktiKasBatchApi.apply(entry.batch)
+    toast.success(`Undone: ${entry.label}`)
+  } catch (e) {
+    toast.error(`Couldn't undo: ${(e as Error).message}`)
+  } finally {
+    invalidateBuktiKas(qc)
+  }
+}
+
+function buktiKasUndoToast(label: string, qc: QueryClient) {
+  toast.success(t => createElement('span', { className: 'flex items-center gap-3' },
+    label,
+    createElement('button', {
+      className: 'text-navy-600 font-semibold hover:underline',
+      onClick: () => { toast.dismiss(t.id); undoLastBuktiKas(qc) },
+    }, 'Undo'),
+  ), { duration: 6000 })
+}
+
+function recordBuktiKasBatch(qc: QueryClient, label: string, result: BuktiKasBatchResult) {
+  invalidateBuktiKas(qc)
+  const inverse = inverseBuktiKasBatch(result)
+  if (isEmptyBuktiKasBatch(inverse)) {
+    toast.success(label)
+    return
+  }
+  buktiKasUndoStack.push({ label, batch: inverse })
+  if (buktiKasUndoStack.length > UNDO_DEPTH) buktiKasUndoStack.shift()
+  buktiKasUndoToast(label, qc)
+}
+
+export interface BuktiKasBatchRequest {
+  batch: BuktiKasBatch
+  label: string
+}
+
+export function useBuktiKasBatch() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ batch }: BuktiKasBatchRequest) => buktiKasBatchApi.apply(batch),
+    onSuccess: (res, { label }) => recordBuktiKasBatch(qc, label, res),
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+function buktiKasHeaderFor(row: { header_id: string; date: string; description: string }): BuktiKasHeader {
+  return { id: row.header_id, date: row.date, description: row.description }
+}
+
+export const buktiKasHooks = {
+  useList: () => useRows(BUKTI_KAS_HEADERS_KEY, buktiKasHeaderApi.list, BUKTI_KAS_ITEMS_KEY, buktiKasItemApi.grouped, toBuktiKasRows),
+
+  /** Adds one line, creating its Bukti Kas header first if it's new. */
+  useCreate: () => {
+    const batch = useBuktiKasBatch()
+    return {
+      ...batch,
+      mutate: (row: CreateBuktiKasRowRequest, opts?: MutateOpts) => batch.mutate({
+        label: `Added ${row.item_description || 'a line'} to ${row.header_id}`,
+        batch: {
+          headers: [buktiKasHeaderFor(row)],
+          item_create: [{
+            header_id: row.header_id, description: row.item_description,
+            price: row.price, order_id: row.order_id ?? null,
+          }],
+        },
+      }, opts),
+    }
+  },
+
+  useUpdate: () => {
+    const batch = useBuktiKasBatch()
+    return {
+      ...batch,
+      mutate: (args: { id: number; fields: Partial<Pick<BuktiKasItem, 'description' | 'price' | 'order_id'>> }, opts?: MutateOpts) => batch.mutate({
+        label: 'Updated a Bukti Kas line',
+        batch: { item_update: [{ id: args.id, fields: args.fields }] },
+      }, opts),
+    }
+  },
+
+  useDelete: () => {
+    const batch = useBuktiKasBatch()
+    return {
+      ...batch,
+      mutate: (id: number, opts?: MutateOpts) => batch.mutate({
+        label: 'Deleted a Bukti Kas line',
+        batch: { item_delete: [id] },
       }, opts),
     }
   },

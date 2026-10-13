@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   LayoutDashboard, ShoppingBag, ListOrdered, FileText,
-  Truck, Factory, Users, Wrench, BarChart3,
+  Truck, Factory, Users, Wrench, BarChart3, PiggyBank, Banknote,
   Building2, Circle, ChevronDown, ShieldCheck, X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -14,51 +15,54 @@ type RouteStatus = 'live' | 'stub'
 const SHOW_DEV_STATUS = import.meta.env.DEV
 
 interface NavItem {
-  label: string
+  labelKey: string
   path: string
   icon: LucideIcon
   status?: RouteStatus
 }
 
 interface NavGroup {
-  label: string
+  labelKey: string
   icon: LucideIcon
   items: NavItem[]
 }
 
 const STANDALONE: NavItem[] = [
-  { label: 'Dashboard', path: '/', icon: LayoutDashboard },
-  { label: 'Delivery', path: '/delivery', icon: Truck, status: 'live' },
+  { labelKey: 'sidebar.dashboard', path: '/', icon: LayoutDashboard },
+  { labelKey: 'sidebar.delivery', path: '/delivery', icon: Truck, status: 'live' },
 ]
 
 const GROUPS: NavGroup[] = [
   {
-    label: 'Orders',
+    labelKey: 'sidebar.ordersGroup',
     icon: ShoppingBag,
     items: [
-      { label: 'Clients',     path: '/clients',      icon: Building2,    status: 'live' },
-      { label: 'All Orders',  path: '/orders',      icon: ShoppingBag, status: 'live' },
-      { label: 'Order Items', path: '/items',        icon: ListOrdered, status: 'live' },
-      { label: 'Invoice', path: '/invoice',  icon: FileText,    status: 'live' },
+      { labelKey: 'sidebar.clients',     path: '/clients',      icon: Building2,    status: 'live' },
+      { labelKey: 'sidebar.allOrders',  path: '/orders',      icon: ShoppingBag, status: 'live' },
+      { labelKey: 'sidebar.orderItems', path: '/items',        icon: ListOrdered, status: 'live' },
+      { labelKey: 'sidebar.invoice', path: '/invoice',  icon: FileText,    status: 'live' },
     ],
   },
   {
-    label: 'Finances',
-    icon: Factory,
+    labelKey: 'sidebar.financeGroup',
+    icon: BarChart3,
     items: [
-      { label: 'Overview',   path: '/finance',    icon: BarChart3, status: 'live' },
-      { label: 'Suppliers',  path: '/suppliers',  icon: Users,   status: 'live' },
-      { label: 'Production', path: '/production', icon: Factory, status: 'live' },
-      { label: 'Operations', path: '/operations', icon: Wrench,  status: 'live' },
+      { labelKey: 'sidebar.overview',   path: '/finance',    icon: BarChart3, status: 'live' },
+      { labelKey: 'sidebar.production', path: '/production', icon: Factory, status: 'live' },
+      { labelKey: 'sidebar.operations', path: '/operations', icon: Wrench,  status: 'live' },
+      { labelKey: 'sidebar.buktiKas',  path: '/bukti-kas',  icon: Banknote, status: 'live' },
+      { labelKey: 'sidebar.budgetsAndRecurring', path: '/finance/budgets', icon: PiggyBank, status: 'live' },
+      { labelKey: 'sidebar.suppliers',  path: '/suppliers',  icon: Users,   status: 'live' },
     ],
   },
 ]
 
 function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
+  const { t } = useTranslation()
   return (
     <NavLink
       to={item.path}
-      end={item.path === '/'}
+      end={item.path === '/' || item.path === '/finance'}
       // Closes the mobile drawer on navigation (undefined on desktop).
       onClick={onNavigate}
       className={({ isActive }) =>
@@ -72,7 +76,7 @@ function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => v
       {({ isActive }) => (
         <>
           <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-gold-400' : 'text-navy-400 group-hover:text-navy-200'}`} />
-          <span className="flex-1">{item.label}</span>
+          <span className="flex-1">{t(item.labelKey)}</span>
           {SHOW_DEV_STATUS && item.status === 'live' && <Circle className="w-2 h-2 fill-green-400 text-green-400 shrink-0" />}
           {SHOW_DEV_STATUS && item.status === 'stub' && <Circle className="w-2 h-2 fill-amber-400 text-amber-400 shrink-0 opacity-60" />}
         </>
@@ -83,6 +87,7 @@ function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => v
 
 function NavGroupSection({ group, onNavigate }: { group: NavGroup; onNavigate?: () => void }) {
   const location = useLocation()
+  const { t } = useTranslation()
   const isAnyActive = group.items.some(i => location.pathname.startsWith(i.path) && i.path !== '/')
   const [open, setOpen] = useState(isAnyActive)
 
@@ -93,7 +98,7 @@ function NavGroupSection({ group, onNavigate }: { group: NavGroup; onNavigate?: 
         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-navy-300 hover:bg-white/5 hover:text-white transition-all duration-150 group"
       >
         <group.icon className="w-4 h-4 shrink-0 text-navy-400 group-hover:text-navy-200" />
-        <span className="flex-1 text-left">{group.label}</span>
+        <span className="flex-1 text-left">{t(group.labelKey)}</span>
         <ChevronDown
           className={`w-3.5 h-3.5 text-navy-500 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
         />
@@ -171,7 +176,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               same assumption as Topbar's AccountMenu. */}
           {user?.role === 'admin' && (
             <div className="pt-2 mt-2 border-t border-navy-800 space-y-0.5">
-              <NavItemLink item={{ label: 'Users', path: '/admin/users', icon: ShieldCheck }} onNavigate={onClose} />
+              <NavItemLink item={{ labelKey: 'sidebar.users', path: '/admin/users', icon: ShieldCheck }} onNavigate={onClose} />
             </div>
           )}
         </nav>

@@ -1,16 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, ArrowLeft, Building2, Users, Package, Printer, Image as ImageIcon } from 'lucide-react'
-import toast from 'react-hot-toast'
+import { AlertTriangle, ArrowLeft, Building2, Users, Printer } from 'lucide-react'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField, Spinner, UppercaseField } from '@/components/ui'
 import { clientHooks, clientContactHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
-import { formatThousands, stripCommas } from '@/utils/NumberFormat'
 import { ClientPriceListPrint } from './ClientPriceListPrint'
-import type {
-  ClientContact, CreateClientContactRequest,
-  ClientItem, CreateClientItemRequest, ClientItemPrice,
-} from '@/types'
+import { CatalogueTab } from './catalogue/CatalogueTab'
+import type { ClientContact, CreateClientContactRequest, ClientItemPrice } from '@/types'
 
 function ClientContactForm({ clientId, editing, onClose }: { clientId: number; editing: ClientContact | null; onClose: () => void }) {
   const create = clientContactHooks.useCreate()
@@ -80,128 +76,6 @@ function ClientContactForm({ clientId, editing, onClose }: { clientId: number; e
   )
 }
 
-// The photo cell links to the item's own page, where its photo is managed.
-function ClientItemPhotoCell({ item, clientId }: { item: ClientItem; clientId: number }) {
-  const navigate = useNavigate()
-  const [imgFailed, setImgFailed] = useState(false)
-  const go = (e: React.MouseEvent) => { e.stopPropagation(); navigate(`/clients/${clientId}/items/${item.id}`) }
-
-  if (item.photo_path && !imgFailed) {
-    return (
-      <button onClick={go} title="Open item page">
-        <img
-          src={item.photo_path}
-          alt={item.item_name}
-          className="w-9 h-9 rounded-lg object-cover border border-slate-200 hover:opacity-80"
-          onError={() => setImgFailed(true)}
-        />
-      </button>
-    )
-  }
-  return (
-    <button onClick={go} title="Open item page" className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-300 hover:bg-slate-200 hover:text-slate-400">
-      <ImageIcon size={16} />
-    </button>
-  )
-}
-
-function ClientItemForm({ clientId, editing, onClose }: { clientId: number; editing: ClientItem | null; onClose: () => void }) {
-  const create = clientItemHooks.useCreate()
-  const update = clientItemHooks.useUpdate()
-  const createPrice = clientItemPriceHooks.useCreate()
-
-  const [form, setForm] = useState<CreateClientItemRequest>({
-    client_id: clientId,
-    item_name: editing?.item_name ?? '',
-    size:      editing?.size      ?? null,
-    notes:     editing?.notes     ?? null,
-  })
-
-  // Initial price — new items only. Editing an existing item's price goes
-  // through the Year-by-Year spreadsheet/calculator instead, since a price
-  // there is always tied to a specific year, not "the" price.
-  const [priceDigits, setPriceDigits] = useState('') // raw digit string — see NumberFormat.ts
-  const [priceYear, setPriceYear] = useState(new Date().getFullYear())
-  const [priceEffectiveDate, setPriceEffectiveDate] = useState(() => new Date().toISOString().slice(0, 10))
-
-  const handleSubmit = () => {
-    if (editing) {
-      update.mutate({ id: editing.id, body: form }, { onSuccess: onClose })
-    } else {
-      create.mutate(form, {
-        onSuccess: (newItem) => {
-          if (!priceDigits) { onClose(); return }
-          // Close once the price is saved too (onSettled: the item exists either way),
-          // so a failed price save is reported, not silent.
-          createPrice.mutate(
-            {
-              client_item_id: newItem.id,
-              year: priceYear,
-              price: Number(priceDigits),
-              effective_date: priceEffectiveDate ? new Date(priceEffectiveDate).toISOString() : null,
-            },
-            {
-              onError: () => toast.error(`"${newItem.item_name}" was saved, but its initial price didn't — add it from the item's page.`),
-              onSettled: onClose,
-            }
-          )
-        },
-      })
-    }
-  }
-
-  const busy = create.isPending || update.isPending || createPrice.isPending
-
-  return (
-    <div className="space-y-4">
-      <FormField label="Item Name" required>
-        <UppercaseField className="field" placeholder="e.g. Kemeja Batik Lengan Panjang" value={form.item_name}
-          onChange={v => setForm(p => ({ ...p, item_name: v }))} />
-      </FormField>
-      <FormField label="Size">
-        <UppercaseField className="field" placeholder="e.g. XL" value={form.size ?? ''}
-          onChange={v => setForm(p => ({ ...p, size: v || null }))} />
-      </FormField>
-      <FormField label="Notes">
-        <UppercaseField as="textarea" className="field resize-none" rows={2} value={form.notes ?? ''}
-          onChange={v => setForm(p => ({ ...p, notes: v || null }))} />
-      </FormField>
-      <p className="text-xs text-slate-400 -mt-2">Product photo can be added after saving, from the item's own page.</p>
-
-      {!editing && (
-        <div className="border-t border-slate-100 pt-4 space-y-3">
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Initial Price (optional)</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <FormField label="Price">
-              <input className="field font-mono" inputMode="numeric" placeholder="e.g. 120,000"
-                value={formatThousands(priceDigits)}
-                onChange={e => setPriceDigits(stripCommas(e.target.value))} />
-            </FormField>
-            <FormField label="Year">
-              <input className="field" type="number" value={priceYear}
-                onChange={e => setPriceYear(Number(e.target.value) || priceYear)} />
-            </FormField>
-            <FormField label="Effective Date">
-              <input className="field" type="date" value={priceEffectiveDate}
-                onChange={e => setPriceEffectiveDate(e.target.value)} />
-            </FormField>
-          </div>
-          <p className="text-xs text-slate-400">
-            Leave Price blank to skip — you can always add a price later from the item's own page.
-          </p>
-        </div>
-      )}
-
-      <div className="flex gap-2 pt-1">
-        <button className="btn-primary" disabled={busy} onClick={handleSubmit}>
-          {busy ? 'Saving…' : editing ? 'Update Item' : 'Add Item'}
-        </button>
-        <button className="btn-secondary" onClick={onClose}>Cancel</button>
-      </div>
-    </div>
-  )
-}
-
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -213,11 +87,6 @@ export function ClientDetailPage() {
   const delContact = clientContactHooks.useDelete()
 
   const { data: catalogueItems = [], isLoading: itemsLoading, isError: itemsError, refetch: refetchItems } = clientItemHooks.useByClient(clientId)
-  const delItem = clientItemHooks.useDelete()
-
-  // Only fetched now to build pricesByItem for the print dialog below —
-  // the year-by-year spreadsheet/calculator that used to live on this page
-  // moved to ClientItemDetailPage, which fetches its own item's history.
   const { data: groupedPrices } = clientItemPriceHooks.useGrouped()
 
   // Above the early returns, for a stable hook order.
@@ -229,7 +98,8 @@ export function ClientDetailPage() {
     return map
   }, [catalogueItems, groupedPrices])
 
-  const [showPrint, setShowPrint] = useState(false)
+  // The year the price list is printed for; null: not printing.
+  const [printYear, setPrintYear] = useState<number | null>(null)
   // The tab lives in ?tab= so coming back from an item page keeps it.
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = searchParams.get('tab') === 'catalogue' ? 'catalogue' : 'contacts'
@@ -253,7 +123,7 @@ export function ClientDetailPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/clients')} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500" title="Back to clients">
@@ -266,7 +136,7 @@ export function ClientDetailPage() {
           </div>
         </div>
         <button
-          onClick={() => setShowPrint(true)}
+          onClick={() => setPrintYear(new Date().getFullYear())}
           disabled={catalogueItems.length === 0}
           className="btn-secondary inline-flex items-center gap-1.5 text-sm disabled:opacity-40"
         >
@@ -329,41 +199,25 @@ export function ClientDetailPage() {
       )}
 
       {tab === 'catalogue' && (
-        // The list; each item's prices and photo are on its own page.
-        <CrudPage<ClientItem>
-          title="Catalogue"
-          icon={Package}
-          data={catalogueItems}
+        <CatalogueTab
+          client={client}
+          items={catalogueItems}
           isLoading={itemsLoading}
           isError={itemsError}
           onRetry={refetchItems}
-          searchKeys={['item_name', 'size', 'notes']}
-          columns={[
-            { header: 'Photo', key: 'id',        render: r => <ClientItemPhotoCell item={r} clientId={clientId} /> },
-            { header: 'Item',  key: 'item_name', render: r => (
-              <button
-                onClick={(e) => { e.stopPropagation(); navigate(`/clients/${clientId}/items/${r.id}`) }}
-                className="font-medium text-navy-900 hover:text-navy-600 hover:underline text-left"
-              >
-                {r.item_name}
-              </button>
-            )},
-            { header: 'Size',  key: 'size',      render: r => <span className="text-slate-500">{r.size ?? '—'}</span> },
-            { header: 'Notes', key: 'notes',     render: r => <span className="text-slate-500">{r.notes ?? '—'}</span> },
-          ]}
-          formTitle={e => e ? 'Edit Item' : 'Add Item'}
-          renderForm={(editing, onClose) => <ClientItemForm clientId={clientId} editing={editing} onClose={onClose} />}
-          onDelete={id => delItem.mutate(id)}
-          deleteMessage={r => `Delete "${r.item_name}"? This also removes its price history.`}
+          allPrices={groupedPrices ?? {}}
+          pricesByItem={pricesByItem}
+          onPrint={setPrintYear}
         />
       )}
 
-      {showPrint && (
+      {printYear != null && (
         <ClientPriceListPrint
           client={client}
+          year={printYear}
           items={catalogueItems}
           pricesByItem={pricesByItem}
-          onClose={() => setShowPrint(false)}
+          onClose={() => setPrintYear(null)}
         />
       )}
     </div>

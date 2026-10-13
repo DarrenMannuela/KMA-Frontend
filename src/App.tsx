@@ -9,6 +9,7 @@ import { AdminRoute } from '@/components/auth/AdminRoute'
 import { MustChangePasswordRoute } from '@/components/auth/MustChangePasswordRoute'
 import { RedirectDirectAccess } from '@/components/auth/RedirectDirectAccess'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { FinanceSection } from '@/components/finance/FinanceSection'
 
 // Each page is its own chunk, loaded the first time its route is visited.
 const DashboardPage = lazy(() => import('@/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
@@ -27,7 +28,9 @@ const KwitansiPrintPage = lazy(() => import('@/pages/orders/KwitansiPrintPage').
 const ClientsPage = lazy(() => import('@/pages/client/ClientsPage').then(m => ({ default: m.ClientsPage })))
 const ClientDetailPage = lazy(() => import('@/pages/client/ClientDetailPage').then(m => ({ default: m.ClientDetailPage })))
 const ClientItemDetailPage = lazy(() => import('@/pages/client/ClientItemDetailPage').then(m => ({ default: m.ClientItemDetailPage })))
+const BudgetsPage = lazy(() => import('@/pages/finance/BudgetsPage').then(m => ({ default: m.BudgetsPage })))
 const FinancePage = lazy(() => import('@/pages/finance/FinancePage').then(m => ({ default: m.FinancePage })))
+const BuktiKasPage = lazy(() => import('@/pages/finance/BuktiKasPage').then(m => ({ default: m.BuktiKasPage })))
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage').then(m => ({ default: m.LoginPage })))
 const SetPasswordPage = lazy(() => import('@/pages/auth/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })))
 const ChangePasswordPage = lazy(() => import('@/pages/auth/ChangePasswordPage').then(m => ({ default: m.ChangePasswordPage })))
@@ -79,14 +82,18 @@ function AppShell() {
             <Route path="/invoice"              element={<InvoiceListPage />} />
             <Route path="/delivery"             element={<DeliveryPage />} />
             <Route path="/delivery/:id"         element={<DeliveryDetailPage />} />
-            <Route path="/production"           element={<ProductionPage />} />
-            <Route path="/suppliers"            element={<SuppliersPage />} />
-            <Route path="/operations"           element={<OperationsPage />} />
+            <Route element={<FinanceSection />}>
+              <Route path="/finance"            element={<FinancePage />} />
+              <Route path="/finance/budgets"    element={<BudgetsPage />} />
+              <Route path="/production"         element={<ProductionPage />} />
+              <Route path="/operations"         element={<OperationsPage />} />
+              <Route path="/bukti-kas"          element={<BuktiKasPage />} />
+              <Route path="/suppliers"          element={<SuppliersPage />} />
+            </Route>
             <Route path="/orders/:id"           element={<OrderDetailPage />} />
             <Route path="/clients"                        element={<ClientsPage />} />
             <Route path="/clients/:id"                    element={<ClientDetailPage />} />
             <Route path="/clients/:clientId/items/:itemId" element={<ClientItemDetailPage />} />
-            <Route path="/finance"                        element={<FinancePage />} />
             <Route path="/reports/yearly"                 element={<Navigate to="/finance" replace />} />
             <Route path="/admin/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
           </Routes>

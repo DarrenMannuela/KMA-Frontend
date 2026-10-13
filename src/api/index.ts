@@ -3,7 +3,8 @@ import { handleSessionExpired } from '@/api/authApi'
 import type {
   Order, Item, Invoice, Supplier, FinanceHeader, ProductionItem, OperationItem,
   FinanceBatch, FinanceBatchResult, Budget, RecurringCost,
-  Delivery, DeliveryItem, Client, ClientContact, ClientItem, ClientItemPrice,
+  BuktiKasHeader, BuktiKasItem, BuktiKasBatch, BuktiKasBatchResult,
+  Delivery, DeliveryItem, Client, ClientContact, ClientItem, ClientItemPrice, CatalogueBatch, CatalogueBatchResult,
   CreateOrderRequest, UpdateOrderRequest,
   CreateItemRequest, UpdateItemRequest,
   CreateInvoiceRequest, UpdateInvoiceRequest,
@@ -11,6 +12,8 @@ import type {
   CreateFinanceHeaderRequest, UpdateFinanceHeaderRequest,
   CreateProductionItemRequest, UpdateProductionItemRequest,
   CreateOperationItemRequest, UpdateOperationItemRequest,
+  CreateBuktiKasHeaderRequest, UpdateBuktiKasHeaderRequest,
+  CreateBuktiKasItemRequest, UpdateBuktiKasItemRequest,
   CreateDeliveryRequest, UpdateDeliveryRequest,
   CreateDeliveryItemRequest, UpdateDeliveryItemRequest,
   CreateClientRequest, UpdateClientRequest,
@@ -90,6 +93,19 @@ export const financeBatchApi = {
   apply: (batch: FinanceBatch) => http.post<FinanceBatchResult>('/finance/batch', batch).then(r => r.data),
 }
 
+// Bukti Kas — cash received, a separate header type from the Kas Bon
+// (FinanceHeader) above. Same crud/grouped/batch shape, own endpoints.
+export const buktiKasHeaderApi = crud<BuktiKasHeader, CreateBuktiKasHeaderRequest, UpdateBuktiKasHeaderRequest>('/bukti-kas-header')
+
+export const buktiKasItemApi = {
+  ...crud<BuktiKasItem, CreateBuktiKasItemRequest, UpdateBuktiKasItemRequest>('/bukti-kas-item'),
+  grouped: () => http.get<Record<string, BuktiKasItem[]>>('/bukti-kas-item/grouped').then(r => r.data),
+}
+
+export const buktiKasBatchApi = {
+  apply: (batch: BuktiKasBatch) => http.post<BuktiKasBatchResult>('/bukti-kas/batch', batch).then(r => r.data),
+}
+
 export const budgetApi = {
   list: () => http.get<Budget[]>('/budget').then(r => r.data),
   /** An amount of 0 removes the budget. */
@@ -141,4 +157,9 @@ export const clientItemPriceApi = {
   getByItem: (clientItemId: number | string) =>
     http.get<ClientItemPrice[]>(`/client-item-price/by-item?client_item_id=${encodeURIComponent(clientItemId)}`).then(r => r.data),
   grouped: () => http.get<Record<string, ClientItemPrice[]>>('/client-item-price/grouped').then(r => r.data),
+}
+
+// Several catalogue changes for one client in one transaction (see CatalogueBatch).
+export const catalogueApi = {
+  apply: (batch: CatalogueBatch) => http.post<CatalogueBatchResult>('/client-catalogue/batch', batch).then(r => r.data),
 }

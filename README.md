@@ -61,26 +61,34 @@ This builds the SPA and serves it via nginx on port 80 (see `Dockerfile`, `nginx
 
 Start the three stacks in order: KMA (it creates `kma_network`), KMA-Auth, then this one. After a code change, `docker compose up -d --build` again; there's no data here, so no backup is needed first.
 
-- **Who can reach it.** Port 80 is open on every network the Mac is on (the shop's Wi-Fi included) unless `.env` sets `KMA_WEB_BIND=127.0.0.1` (see `.env.example`). With that, it's reachable from this Mac and through `tailscale serve` only, which is the recommended setting: the tailnet address is HTTPS, while port 80 is plain HTTP.
+- **Who can reach it.**
+  - Without a `.env`, port 80 is open on every network the Mac is on, the shop's Wi-Fi included, over plain HTTP. Browsers mark that "Not secure" and won't install the app from it.
+  - The recommended `.env` is `KMA_WEB_BIND=127.0.0.1` and `KMA_WEB_PORT=8088` (see `.env.example`), with `tailscale serve --bg 8088`. Then it's reachable from this Mac and through the HTTPS tailnet address only.
+  - Use a port above 1023: Docker Desktop can't bind port 80 to 127.0.0.1 without its privileged helper.
 - **Staying up.** The container restarts after a crash while Docker Desktop runs; turn on Docker Desktop's **Start Docker Desktop when you sign in** so that also holds after the Mac restarts. Docker checks it every 30s, and its logs rotate (5 × 10 MB).
 - **When a backend is down** (stopped, restarting, being rebuilt), nginx answers `/api`, `/uploads` and `/auth` with a 503 and a JSON message the app shows ("The server is starting up or restarting. Try again in a moment."), instead of an HTML error page that reached the screen as "Request failed with status code 502". The topbar's health badge shows it as offline.
 - **After an update**, a tab that was open from before reloads itself once when it asks for a page from the old build, instead of showing the error screen (`src/main.tsx`). Built files under `/assets/` are cached for a year (their names change with every build); `index.html` and the manifest are checked for a new version every time.
 
 ## Features
 
-- **Dashboard** — AR receivable, recent orders, overdue invoices, this-month orders vs. costs.
-- **Clients** — company records, contacts, and a per-client catalogue (items + year-by-year price history, with a printable price list).
-- **Orders** — order + item management, linked to a client or freeform company info.
+- **Dashboard** — AR receivable; this month's orders, deliveries and costs (against last month); recent orders, overdue invoices, this-month orders vs. costs.
+- **Clients** — company records, contacts, and a per-client catalogue:
+  - Items grouped by name with their sizes, each size's price for a year next to the year before (edited in place), and what the client has ordered of it.
+  - Raise prices for a year in one go (by % or Rp, rounded up), add an item in all its sizes, copy another client's items, add items that were ordered but never listed, and Excel export/import in the same layout. Every change can be undone (toast or Ctrl+Z).
+  - Each item's page has its prices by year and every order of it next to that year's catalogue price; the printed price list is for a chosen year.
+  - Orders pick the catalogue price for the order's year, so prices already set for next year don't leak in.
+- **Orders** — order + item management, linked to a client or freeform company info; the list shows each order's value and payment status, newest first.
 - **Invoices** — DP/Pelunasan generation off an order, a print-ready invoice layout with manual/predicted page breaks, and a matching Kwitansi (receipt) print view.
 - **Delivery** — Delivery Order (DO) and Surat Jalan (SJ) tracking with per-box item packing, and a print view for both document types.
-- **Production / Operations** — Kas Bon–based spend tracking (materials by supplier, operating costs by category), with a monthly dashboard + spend bars and a spreadsheet of every line:
+- **Finance section** — one area with tabs: Overview · Production · Operations · Budgets & recurring · Suppliers.
+- **Production / Operations** — Kas Bon–based spend tracking (materials by supplier, operating costs by category). Each opens straight on its sheet, with the month's total, the comparison and budget on top, and spend per supplier/category as bars that filter the sheet:
   - search across all months, filter by supplier/category/order, group by Kas Bon, supplier/category or order, sort any column;
   - edit cells in place (arrow keys move, typing replaces), select rows (shift-click for a range) to move them to another Kas Bon, set a supplier/category/order, copy, export or delete them;
   - every change can be undone (the toast's Undo, or Ctrl+Z);
   - **New Kas Bon** enters a whole Kas Bon at once, production and operation lines together; Enter adds the next line;
   - copy rows in Excel and press Ctrl+V on the sheet (or into a line of the form) to bring them in;
   - **Import** reads .xlsx or .csv (Indonesian or English headings, "30.000", "2,5", 05/10/2026), lets you check the column mapping, adds unknown suppliers, and skips lines already saved; **Export** writes a real .xlsx of what's shown or selected.
-- **Finance** — the year month by month against last year, where the money goes (suppliers, bahan, operation categories; click through to the lines), cash in vs out with a running balance, who owes what by age, profit per client and per order (costs are linked to orders in the sheet's Order column), monthly budgets with progress, and recurring costs added each month with one click. Downloads as one Excel workbook.
+- **Finance overview** — what needs attention first (overdue invoices, budgets near their limit, recurring costs not added, bahan not linked to an order), then the year month by month against last year, where the money goes (suppliers, bahan, operation categories; click through to the lines), cash in vs out with a running balance, who owes what by age, profit per client and per order (costs are linked to orders in the sheet's Order column), monthly budgets with progress, and recurring costs added each month with one click. Downloads as one Excel workbook.
 - **Suppliers** — supplier records by category (Sablon, Embroidery, Merchandise, Uniform, General).
 - **Users (admin only)** — staff account provisioning, deactivation, and password resets. No self-signup — accounts are created by an admin and invited by email.
 

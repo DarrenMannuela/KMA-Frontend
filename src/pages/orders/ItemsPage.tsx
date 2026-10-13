@@ -1,5 +1,6 @@
 import { useState, useLayoutEffect, useRef } from 'react'
 import { ListOrdered } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField, formatRp, UppercaseField } from '@/components/ui'
 import { itemHooks, orderHooks } from '@/hooks'
@@ -36,6 +37,7 @@ function useFormattedNumberField(value: number, onValueChange: (n: number) => vo
 }
 
 function ItemForm({ editing, onClose }: { editing: Item | null; onClose: () => void }) {
+  const { t } = useTranslation()
   const create = itemHooks.useCreate()
   const update = itemHooks.useUpdate()
   const { data: orders = [] } = orderHooks.useList()
@@ -66,23 +68,23 @@ function ItemForm({ editing, onClose }: { editing: Item | null; onClose: () => v
 
   return (
     <div className="space-y-4">
-      <FormField label="Order" required>
+      <FormField label={t('items.form.order')} required>
         <select className="field" value={form.order_id}
           onChange={e => setForm(p => ({ ...p, order_id: e.target.value }))}>
-          <option value="">Select order…</option>
+          <option value="">{t('items.form.selectOrder')}</option>
           {orders.map(o => <option key={o.id} value={o.id}>{o.id} — {o.company}</option>)}
         </select>
       </FormField>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <FormField label="Item Name" required>
-          <UppercaseField className="field" placeholder="e.g. Apron" value={form.item_name}
+        <FormField label={t('items.form.itemName')} required>
+          <UppercaseField className="field" placeholder={t('items.form.itemNamePlaceholder')} value={form.item_name}
             onChange={v => setForm(p => ({ ...p, item_name: v }))} />
         </FormField>
-        <FormField label="Size">
-          <UppercaseField className="field" placeholder="e.g. S, M, L, XL" value={form.size ?? ''}
+        <FormField label={t('items.form.size')}>
+          <UppercaseField className="field" placeholder={t('items.form.sizePlaceholder')} value={form.size ?? ''}
             onChange={v => setForm(p => ({ ...p, size: v }))} />
         </FormField>
-        <FormField label="Amount" required>
+        <FormField label={t('items.form.amount')} required>
           {/* Whole items only; onChange also filters pasted text. */}
           <input
             className="field"
@@ -96,7 +98,7 @@ function ItemForm({ editing, onClose }: { editing: Item | null; onClose: () => v
             }}
           />
         </FormField>
-        <FormField label="Unit Price (Rp)" required>
+        <FormField label={t('items.form.unitPrice')} required>
           <input className="field font-mono" type="text" inputMode="numeric"
             ref={priceField.ref}
             value={priceField.display}
@@ -104,20 +106,21 @@ function ItemForm({ editing, onClose }: { editing: Item | null; onClose: () => v
         </FormField>
       </div>
       <div className="bg-slate-50 rounded-lg px-4 py-3 flex justify-between items-center">
-        <span className="text-sm text-slate-500">Subtotal</span>
+        <span className="text-sm text-slate-500">{t('items.form.subtotal')}</span>
         <span className="font-mono font-semibold text-navy-900">{formatRp(subTotal)}</span>
       </div>
       <div className="flex gap-2 pt-1">
         <button className="btn-primary" disabled={busy} onClick={handleSubmit}>
-          {busy ? 'Saving…' : editing ? 'Update Item' : 'Add Item'}
+          {busy ? t('common.saving') : editing ? t('items.form.updateItem') : t('items.form.addItem')}
         </button>
-        <button className="btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
       </div>
     </div>
   )
 }
 
 export function ItemsPage() {
+  const { t } = useTranslation()
   const { data, isLoading, isError, refetch } = itemHooks.useList()
   // The client name for an item comes from its order's company.
   const { data: orders = [] } = orderHooks.useList()
@@ -127,7 +130,7 @@ export function ItemsPage() {
 
   return (
     <CrudPage<Item>
-      title="Order Items"
+      title={t('items.title')}
       icon={ListOrdered}
       data={data}
       isLoading={isLoading}
@@ -135,20 +138,19 @@ export function ItemsPage() {
       onRetry={refetch}
       searchKeys={['item_name']}
       columns={[
-        { header: 'ID',        key: 'id' },
-        { header: 'Order ID',  key: 'order_id', render: r => <span className="font-mono text-xs text-slate-500">{r.order_id}</span> },
+        { header: t('items.columns.orderId'),  key: 'order_id', render: r => <span className="font-mono text-xs text-slate-500">{r.order_id}</span> },
         // A key of its own, distinct from the Order ID column's.
-        { header: 'Client',    key: 'client',   render: r => clientNameByOrderId.get(r.order_id) ?? '—' },
-        { header: 'Item',      key: 'item_name', primary: true, render: r => <span className="font-medium">{r.item_name}</span> },
-        { header: 'Size',      key: 'size',      render: r => r.size ? <span className="badge-slate">{r.size}</span> : '—' },
-        { header: 'Qty',       key: 'amount' },
-        { header: 'Price',     key: 'price',     render: r => <span className="currency">{formatRp(r.price)}</span> },
-        { header: 'Subtotal',  key: 'sub_total', render: r => <span className="currency font-semibold">{formatRp(r.sub_total)}</span> },
+        { header: t('items.columns.client'),    key: 'client',   render: r => clientNameByOrderId.get(r.order_id) ?? '—' },
+        { header: t('items.columns.item'),      key: 'item_name', primary: true, render: r => <span className="font-medium">{r.item_name}</span> },
+        { header: t('items.columns.size'),      key: 'size',      render: r => r.size ? <span className="badge-slate">{r.size}</span> : '—' },
+        { header: t('items.columns.qty'),       key: 'amount' },
+        { header: t('items.columns.price'),     key: 'price',     render: r => <span className="currency">{formatRp(r.price)}</span> },
+        { header: t('items.columns.subtotal'),  key: 'sub_total', render: r => <span className="currency font-semibold">{formatRp(r.sub_total)}</span> },
       ]}
-      formTitle={e => e ? 'Edit Item' : 'Add Item'}
+      formTitle={e => e ? t('items.formTitleEdit') : t('items.formTitleNew')}
       renderForm={(editing, onClose) => <ItemForm editing={editing} onClose={onClose} />}
       onDelete={id => del.mutate(id)}
-      deleteMessage={r => `Delete item "${r.item_name}"?`}
+      deleteMessage={r => t('items.deleteConfirm', { name: r.item_name })}
     />
   )
 }

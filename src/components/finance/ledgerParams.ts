@@ -2,8 +2,8 @@ import type { LedgerFilters } from './Ledger'
 import type { Period } from './ledgerModel'
 import { currentPeriod } from './PeriodPicker'
 
-// The sheet's starting filters travel in the URL (?view=sheet&group=12&period=2026-10),
-// so Back returns to the dashboard and other pages can link to a filtered sheet.
+// The sheet's starting filters travel in the URL (?group=12&period=2026-10), so
+// other pages can link to a filtered sheet.
 
 export function periodParam(p: Pick<Period, 'mode' | 'year' | 'month'>): string {
   if (p.mode === 'year') return String(p.year)
@@ -24,7 +24,7 @@ export function filtersFromParams(params: URLSearchParams): Partial<LedgerFilter
 }
 
 export function sheetParams(f: { group?: string; period?: string; q?: string; order?: string }): Record<string, string> {
-  const out: Record<string, string> = { view: 'sheet' }
+  const out: Record<string, string> = {}
   for (const [k, v] of Object.entries(f)) if (v) out[k] = v
   return out
 }

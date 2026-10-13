@@ -11,3 +11,8 @@ export function sortPricesByRecency(
     sign * (a.year - b.year) || sign * (a.effective_date ?? '').localeCompare(b.effective_date ?? '')
   )
 }
+/** The price that applies in a year: that year's, or else the latest before
+ *  it (a price set for next year doesn't apply yet). */
+export function priceForYear(prices: ClientItemPrice[], year: number): ClientItemPrice | undefined {
+  return sortPricesByRecency(prices, 'desc').find(p => p.year <= year)
+}

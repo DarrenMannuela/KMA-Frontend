@@ -1,6 +1,8 @@
+import { PageHeader, ErrorState } from './Page'
 import { useState } from 'react'
-import { Plus, Pencil, Trash2, Search, AlertTriangle } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog, Spinner, EmptyState } from '@/components/ui'
 import { useIsMobile } from '@/hooks/useIsMobile'
@@ -73,25 +75,21 @@ export function CrudPage<T extends { id: string | number }>({
   const closeModal = () => { setModalOpen(false); setEditing(null) }
   const isMobile = useIsMobile()
   const titleKey = columns.find(c => c.primary)?.key ?? columns[0]?.key
+  const { t } = useTranslation()
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6 fade-up">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-navy-900 flex items-center justify-center">
-            <Icon className="w-4 h-4 text-gold-400" />
-          </div>
-          <div>
-            <h2 className="font-display font-semibold text-navy-900">{title}</h2>
-            <p className="text-slate-400 text-xs">{filtered.length} record{filtered.length !== 1 ? 's' : ''}</p>
-          </div>
-        </div>
-        <button className="btn-primary" onClick={openCreate}>
-          <Plus className="w-4 h-4" />
-          Add New
-        </button>
-      </div>
+    <div className="p-4 md:p-6">
+      <PageHeader
+        icon={Icon}
+        title={title}
+        subtitle={`${t('common.record', { count: filtered.length })}${search ? ` ${t('common.matchingSearch', { search })}` : ''}`}
+        actions={
+          <button className="btn-primary" onClick={openCreate}>
+            <Plus className="w-4 h-4" />
+            {t('common.addNew')}
+          </button>
+        }
+      />
 
       {/* Search + optional filter bar */}
       {(searchKeys.length > 0 || filterBar) && (
@@ -101,7 +99,7 @@ export function CrudPage<T extends { id: string | number }>({
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
                 className="field !pl-9 !py-2 text-sm"
-                placeholder={`Search ${title.toLowerCase()}…`}
+                placeholder={t('common.searchPlaceholder', { what: title.toLowerCase() })}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -116,16 +114,11 @@ export function CrudPage<T extends { id: string | number }>({
         {isLoading ? (
           <Spinner />
         ) : isError ? (
-          <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-            <AlertTriangle className="w-10 h-10 mb-3 text-red-300" />
-            <p className="font-medium text-slate-500 text-sm">Couldn't load {title.toLowerCase()}</p>
-            <p className="text-xs text-slate-400 mt-1 mb-4">Check your connection and try again.</p>
-            {onRetry && (
-              <button className="btn-secondary btn-sm" onClick={onRetry}>Retry</button>
-            )}
-          </div>
+          <ErrorState what={title.toLowerCase()} onRetry={onRetry} />
         ) : filtered.length === 0 ? (
-          <EmptyState icon={Icon} title={`No ${title.toLowerCase()} yet`} subtitle="Click Add New to create one" />
+          search
+            ? <EmptyState icon={Icon} title={t('common.nothingMatches', { search })} subtitle={t('common.tryAnotherSearch')} />
+            : <EmptyState icon={Icon} title={t('common.noItemsYet', { items: title.toLowerCase() })} subtitle={t('common.clickAddNew')} />
         ) : isMobile ? (
           // Phone width: one card per row (title column first, the rest as
           // label: value), with the row actions as icons underneath.
@@ -169,7 +162,7 @@ export function CrudPage<T extends { id: string | number }>({
             <tr>
               {columns.map(c => <th key={String(c.key)}>{c.header}</th>)}
               <th>
-                <div className="flex items-center justify-end">Actions</div>
+                <div className="flex items-center justify-end">{t('common.actions')}</div>
               </th>
             </tr>
           </thead>
@@ -213,7 +206,7 @@ export function CrudPage<T extends { id: string | number }>({
       {/* Confirm delete */}
       {confirmRow && (
         <ConfirmDialog
-          message={deleteMessage ? deleteMessage(confirmRow) : `Delete this record?`}
+          message={deleteMessage ? deleteMessage(confirmRow) : t('common.deleteThisRecord')}
           onConfirm={() => { onDelete(confirmRow.id); setConfirmRow(null) }}
           onCancel={() => setConfirmRow(null)}
         />

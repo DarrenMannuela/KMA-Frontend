@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ShoppingBag, Eye, RotateCcw, Building2, ArrowRight } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
 import { CrudPage } from '@/components/ui/CrudPage'
-import { FormField, UppercaseField } from '@/components/ui'
-import { orderHooks, clientHooks } from '@/hooks'
+import { FormField, UppercaseField, formatRp } from '@/components/ui'
+import { orderPaymentStatus } from '@/utils/orderStatus'
+import { orderHooks, clientHooks, itemHooks, invoiceHooks } from '@/hooks'
+import { useDateLocale } from '@/i18n/dateLocale'
 import type { Order, CreateOrderRequest } from '@/types'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '@/api'
@@ -23,6 +26,7 @@ function suggestNextOrderId(orders: Order[]): string {
 }
 
 function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () => void }) {
+  const { t } = useTranslation()
   const create = orderHooks.useCreate()
   const update = orderHooks.useUpdate()
   const navigate = useNavigate()
@@ -108,11 +112,11 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
         onError: (err) => {
           // Someone else took this ID first: say so and offer the next free one.
           if (err instanceof ApiError && err.status === 409) {
-            toast.error('That order number was just taken by someone else — grabbing you a new one.')
+            toast.error(t('orders.idTakenRetry'))
             resetIdSuggestion()
             return
           }
-          toast.error('Could not create the order — please try again.')
+          toast.error(t('orders.createFailed'))
         },
       })
     }
@@ -122,11 +126,11 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
 
   return (
     <div className="space-y-4">
-      <FormField label="ID" required>
+      <FormField label={t('orders.id')} required>
         <div className="flex items-center gap-2">
           <UppercaseField
             className="field font-mono"
-            placeholder="001/KMA/26"
+            placeholder={t('orders.idPlaceholder')}
             value={form.id ?? ''}
             onChange={setId}
           />
@@ -134,7 +138,7 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
             <button
               type="button"
               className="btn-ghost btn-sm !px-2 shrink-0"
-              title="Reset to suggested next number"
+              title={t('orders.resetIdTitle')}
               onClick={resetIdSuggestion}
             >
               <RotateCcw size={14} />
@@ -143,36 +147,36 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
         </div>
         {idAlreadyExists ? (
           <p className="text-xs text-red-500 mt-1">
-            An order with this ID already exists — pick a different number.
+            {t('orders.idExists')}
           </p>
         ) : idChanged ? (
           <p className="text-xs text-amber-600 mt-1">
-            Renaming from {editing!.id} — linked items and invoices will move to the new ID automatically.
+            {t('orders.idRenaming', { id: editing!.id })}
           </p>
         ) : !editing ? (
           <p className="text-xs text-slate-400 mt-1">
-            Auto-suggested as next order number for {new Date().getFullYear()} — edit if needed.
+            {t('orders.idSuggested', { year: new Date().getFullYear() })}
           </p>
         ) : null}
       </FormField>
-      <FormField label="Client">
+      <FormField label={t('orders.client')}>
         <select className="field" value={form.client_id ?? ''} onChange={e => handleClientChange(e.target.value)}>
-          <option value="">No linked client (free-text company only)…</option>
+          <option value="">{t('orders.noLinkedClient')}</option>
           {clients.map(c => <option key={c.id} value={c.id}>{c.client_name}</option>)}
         </select>
         <p className="text-xs text-slate-400 mt-1">
-          Linking a client ties this order to their record in Clients — new clients can be added from the Clients page.
+          {t('orders.clientHint')}
         </p>
       </FormField>
-      <FormField label="Company" required>
-        <UppercaseField className="field" placeholder="e.g. Zenbu Restaurant" value={form.company ?? ''}
+      <FormField label={t('orders.company')} required>
+        <UppercaseField className="field" placeholder={t('orders.companyPlaceholder')} value={form.company ?? ''}
           onChange={v => setForm(p => ({ ...p, company: v }))} />
       </FormField>
-      <FormField label="PO Number">
-        <UppercaseField className="field font-mono" placeholder="e.g. P0000011" value={form.po_number ?? ''}
+      <FormField label={t('orders.poNumber')}>
+        <UppercaseField className="field font-mono" placeholder={t('orders.poPlaceholder')} value={form.po_number ?? ''}
           onChange={v => setForm(p => ({ ...p, po_number: v }))} />
       </FormField>
-      <FormField label="Order Date" required>
+      <FormField label={t('orders.orderDate')} required>
         <input className="field" type="date" value={form.date} onChange={set('date')} />
       </FormField>
       <div className="flex gap-2 pt-2">
@@ -181,52 +185,68 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
           disabled={busy || idAlreadyExists || !form.id.trim() || !form.company?.trim()}
           onClick={handleSubmit}
         >
-          {busy ? 'Saving…' : editing ? 'Update Order' : 'Create Order'}
+          {busy ? t('common.saving') : editing ? t('orders.updateOrder') : t('orders.createOrder')}
         </button>
-        <button className="btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
       </div>
     </div>
   )
 }
 
 export function OrdersPage() {
+  const { t } = useTranslation()
+  const dateLocale = useDateLocale()
   const { data, isLoading, isError, refetch } = orderHooks.useList()
+  const { data: items = [] } = itemHooks.useList()
+  const { data: invoices = [] } = invoiceHooks.useList()
   const del = orderHooks.useDelete()
   const navigate = useNavigate()
+  // Newest first, with each order's value and where its payment stands.
+  const rows = useMemo(() => [...(data ?? [])].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? '') || b.id.localeCompare(a.id)), [data])
+  const value = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const it of items) m.set(it.order_id, (m.get(it.order_id) ?? 0) + it.sub_total)
+    return m
+  }, [items])
 
   return (
     <CrudPage<Order>
-      title="Orders"
+      title={t('orders.title')}
       icon={ShoppingBag}
-      data={data}
+      data={rows}
       isLoading={isLoading}
       isError={isError}
       onRetry={refetch}
       searchKeys={['company', 'po_number']}
       columns={[
-        { header: 'Order ID',  key: 'id',         render: r => <span className="id-chip">{r.id}</span> },
-        { header: 'Company',   key: 'company',     render: r => <span className="font-medium text-navy-900">{r.company ?? '—'}</span> },
-        { header: 'Client',    key: 'client_id',   render: r => r.client_id ? (
+        { header: t('orders.columns.orderId'),  key: 'id',         render: r => <span className="id-chip">{r.id}</span> },
+        { header: t('orders.columns.company'),   key: 'company',     render: r => <span className="font-medium text-navy-900">{r.company ?? '—'}</span> },
+        { header: t('orders.columns.client'),    key: 'client_id',   render: r => r.client_id ? (
             <button
               onClick={(e) => { e.stopPropagation(); navigate(`/clients/${r.client_id}`) }}
               className="inline-flex items-center gap-1 text-sm font-medium text-navy-600 hover:text-navy-800"
-              title="Open client record"
+              title={t('orders.viewClientRecord')}
             >
-              <Building2 size={12} /> View <ArrowRight size={12} />
+              <Building2 size={12} /> {t('common.view')} <ArrowRight size={12} />
             </button>
-          ) : <span className="text-slate-300 text-xs">Not linked</span> },
-        { header: 'PO Number', key: 'po_number',   render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
-        { header: 'Date',      key: 'date',        render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy')}</span> : '—' },
+          ) : <span className="text-slate-300 text-xs">{t('orders.notLinked')}</span> },
+        { header: t('orders.columns.poNumber'), key: 'po_number',   render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
+        { header: t('orders.columns.date'),      key: 'date',        render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
+        { header: t('orders.columns.value'),     key: 'value', render: r => value.get(r.id) ? <span className="font-mono tabular-nums whitespace-nowrap">{formatRp(value.get(r.id)!)}</span> : <span className="text-slate-300 text-xs">{t('orders.noItems')}</span> },
+        { header: t('orders.columns.payment'),   key: 'payment', render: r => {
+            const st = orderPaymentStatus(r.id, invoices)
+            return <span className={`badge ${st.className}`}>{st.label}</span>
+          } },
       ]}
-      formTitle={e => e ? 'Edit Order' : 'New Order'}
+      formTitle={e => e ? t('orders.formTitleEdit') : t('orders.formTitleNew')}
       renderForm={(editing, onClose) => <OrderForm editing={editing} onClose={onClose} />}
       onDelete={id => del.mutate(id)}
-      deleteMessage={r => `Delete order ${r.id}?`}
+      deleteMessage={r => t('orders.deleteConfirm', { id: r.id })}
       rowActions={row => (
         <button
           className="btn-ghost btn-sm !px-2 hover:!text-gold-500"
           onClick={() => navigate(`/orders/${encodeURIComponent(row.id)}`)}
-          title="View items"
+          title={t('orders.viewItems')}
         >
           <Eye className="w-3.5 h-3.5" />
         </button>

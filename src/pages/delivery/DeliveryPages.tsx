@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Truck, Eye, RotateCcw, Printer, Building2, ArrowRight } from 'lucide-react'
 import { format } from 'date-fns'
+import { useTranslation } from 'react-i18next'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField, UppercaseField } from '@/components/ui'
 import { deliveryHooks, deliveryItemHooks, orderHooks, clientHooks, clientContactHooks } from '@/hooks'
 import { invoicesApi } from '@/api'
+import { useDateLocale } from '@/i18n/dateLocale'
 import type {
   Delivery, CreateDeliveryRequest, Order, Invoice,
 } from '@/types'
@@ -46,6 +48,7 @@ function suggestSJDocuments(order: Order | undefined, orderInvoices: Invoice[]):
 }
 
 function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose: () => void }) {
+  const { t } = useTranslation()
   const create = deliveryHooks.useCreate()
   const update = deliveryHooks.useUpdate()
   const createItem = deliveryItemHooks.useCreate()
@@ -216,43 +219,42 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
     <div className="space-y-4">
       {/* Type selector */}
       {!editing && (
-        <FormField label="Delivery Type" required>
+        <FormField label={t('delivery.form.deliveryType')} required>
           <select className="field" value={type} onChange={e => {
-            const t = e.target.value as 'DO' | 'SJ'
-            setType(t)
-            setForm(p => ({ ...p, type: t, order_id: t === 'SJ' ? null : p.order_id }))
+            const newType = e.target.value as 'DO' | 'SJ'
+            setType(newType)
+            setForm(p => ({ ...p, type: newType, order_id: newType === 'SJ' ? null : p.order_id }))
           }}>
-            <option value="DO">DO — Delivery Order (item delivery, per box)</option>
-            <option value="SJ">SJ — Surat Jalan (documents: mock ups, invoices, receipts)</option>
+            <option value="DO">{t('delivery.form.doOption')}</option>
+            <option value="SJ">{t('delivery.form.sjOption')}</option>
           </select>
         </FormField>
       )}
 
       {type === 'DO' && (
-        <FormField label="Order" required>
+        <FormField label={t('delivery.form.order')} required>
           <select
             className="field"
             value={form.order_id ?? ''}
             onChange={e => applyOrderSelection(e.target.value || null)}
           >
-            <option value="">Select order…</option>
+            <option value="">{t('delivery.form.selectOrder')}</option>
             {orders.map(o => <option key={o.id} value={o.id}>{o.id} — {o.company}</option>)}
           </select>
           <p className="text-xs text-slate-400 mt-1">
-            Box contents can only be picked from this order's items, up to what's left to deliver.
-            Company, PO Number, and Client below fill in from the order — edit them directly if this delivery needs different values.
+            {t('delivery.form.doOrderHint')}
           </p>
         </FormField>
       )}
 
       {type === 'SJ' && (
-        <FormField label="Order (optional)">
+        <FormField label={t('delivery.form.orderOptional')}>
           <select
             className="field"
             value={form.order_id ?? ''}
             onChange={e => applyOrderSelection(e.target.value || null)}
           >
-            <option value="">No linked order…</option>
+            <option value="">{t('delivery.form.noLinkedOrder')}</option>
             {orders.map(o => <option key={o.id} value={o.id}>{o.id} — {o.company}</option>)}
           </select>
           {form.order_id ? (() => {
@@ -261,25 +263,25 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
             const preview = suggestSJDocuments(linkedOrder, orderInvoices)
             return preview.length > 0 ? (
               <div className="text-xs text-slate-500 mt-1.5 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                Will auto-add on create:
+                {t('delivery.form.willAutoAdd')}
                 <ul className="mt-1 space-y-0.5">
                   {preview.map(doc => <li key={doc.item_name} className="font-mono">· {doc.item_name}</li>)}
                 </ul>
               </div>
             ) : (
               <p className="text-xs text-amber-600 mt-1">
-                No invoices found yet for this order, and it has no PO number — nothing will be auto-added.
+                {t('delivery.form.noInvoicesNoAutoAdd')}
               </p>
             )
           })() : (
             <p className="text-xs text-slate-400 mt-1">
-              Linking an order auto-adds its kwitansi, invoice, and PO copy as documents once created.
+              {t('delivery.form.sjOrderHint')}
             </p>
           )}
         </FormField>
       )}
 
-      <FormField label={type === 'DO' ? 'Delivery Order No.' : 'Surat Jalan No.'} required>
+      <FormField label={type === 'DO' ? t('delivery.form.doNumber') : t('delivery.form.sjNumber')} required>
         <div className="flex items-center gap-2">
           <UppercaseField
             className="field font-mono"
@@ -292,7 +294,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
             <button
               type="button"
               className="btn-ghost btn-sm !px-2 shrink-0"
-              title="Reset to suggested next number"
+              title={t('delivery.form.resetIdTitle')}
               onClick={resetIdSuggestion}
             >
               <RotateCcw size={14} />
@@ -301,73 +303,73 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
         </div>
         {isDeliveriesError ? (
           <p className="text-xs text-amber-600 mt-1">
-            Couldn't check existing delivery numbers — this ID isn't verified as unique yet. The server will still reject a duplicate on submit.
+            {t('delivery.form.idUnverified')}
           </p>
         ) : idAlreadyExists ? (
           <p className="text-xs text-red-500 mt-1">
-            A delivery with this ID already exists — pick a different number.
+            {t('delivery.form.idExists')}
           </p>
         ) : !editing ? (
           <p className="text-xs text-slate-400 mt-1">
-            Auto-suggested as next {type} number for {new Date().getFullYear()} — edit if needed.
+            {t('delivery.form.idSuggested', { type, year: new Date().getFullYear() })}
           </p>
         ) : null}
       </FormField>
 
-      <FormField label="Client">
+      <FormField label={t('delivery.form.client')}>
         <select className="field" value={form.client_id ?? ''} onChange={e => handleClientChange(e.target.value)}>
-          <option value="">No linked client (free-text company only)…</option>
+          <option value="">{t('delivery.form.noLinkedClient')}</option>
           {clients.map(c => <option key={c.id} value={c.id}>{c.client_name}</option>)}
         </select>
         <p className="text-xs text-slate-400 mt-1">
           {form.order_id
-            ? "Filled in from the linked order above — change it here if this delivery's client differs."
-            : 'Linking a client ties this delivery to their record in Clients.'}
+            ? t('delivery.form.clientHintFromOrder')
+            : t('delivery.form.clientHint')}
         </p>
       </FormField>
 
       {form.client_id && contacts.length > 0 && (
-        <FormField label="Contact (optional)">
+        <FormField label={t('delivery.form.contactOptional')}>
           <select className="field" value={form.client_contact_id ?? ''} onChange={e => handleContactChange(e.target.value)}>
-            <option value="">No specific contact…</option>
+            <option value="">{t('delivery.form.noSpecificContact')}</option>
             {contacts.map(c => (
               <option key={c.id} value={c.id}>
-                {c.name}{c.role ? ` — ${c.role}` : ''}{c.is_primary ? ' (Primary)' : ''}
+                {c.name}{c.role ? ` — ${c.role}` : ''}{c.is_primary ? ` (${t('delivery.form.primary')})` : ''}
               </option>
             ))}
           </select>
           <p className="text-xs text-slate-400 mt-1">
-            Fills in Contact Person, Phone Number, and Delivery Address (if this contact has one saved) below — still editable, or leave unpicked to type them directly.
+            {t('delivery.form.contactHint')}
           </p>
         </FormField>
       )}
 
-      <FormField label="Company (NAMA)" required>
-        <UppercaseField className="field" placeholder="e.g. The 101 Darmawangsa"
+      <FormField label={t('delivery.form.companyLabel')} required>
+        <UppercaseField className="field" placeholder={t('delivery.form.companyPlaceholder')}
           value={form.company ?? ''} onChange={setCompany} />
       </FormField>
 
-      <FormField label="Delivery Address" required>
-        <UppercaseField className="field" placeholder="e.g. Jl. Hayam Wuruk No. 1"
+      <FormField label={t('delivery.form.address')} required>
+        <UppercaseField className="field" placeholder={t('delivery.form.addressPlaceholder')}
           value={form.address} onChange={setAddress} />
       </FormField>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {type === 'DO' && (
-          <FormField label="PO Number">
+          <FormField label={t('delivery.form.poNumber')}>
             <UppercaseField className="field font-mono" placeholder="P0000011"
               value={form.po_number ?? ''} onChange={setPoNumber} />
           </FormField>
         )}
-        <FormField label="Delivery Date">
+        <FormField label={t('delivery.form.deliveryDate')}>
           <input className="field" type="date"
             value={form.date} onChange={setStr('date')} />
         </FormField>
-        <FormField label="Contact Person">
-          <UppercaseField className="field" placeholder="e.g. Ibu Tuti"
+        <FormField label={t('delivery.form.contactPerson')}>
+          <UppercaseField className="field" placeholder={t('delivery.form.contactPersonPlaceholder')}
             value={form.contact_person ?? ''} onChange={setContactPerson} />
         </FormField>
-        <FormField label="Phone Number">
+        <FormField label={t('delivery.form.phoneNumber')}>
           <input className="field font-mono" placeholder="081219201007"
             value={form.phone_number ?? ''} onChange={setStr('phone_number')} />
         </FormField>
@@ -380,8 +382,8 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
           : 'bg-amber-50 text-amber-700 border border-amber-100'
       }`}>
         {type === 'DO'
-          ? 'After creating, go to Delivery Orders to add item contents per box.'
-          : 'After creating, go to Surat Jalan to list the documents included (mock ups, invoices, receipts).'}
+          ? t('delivery.form.doNoteAfterCreate')
+          : t('delivery.form.sjNoteAfterCreate')}
       </div>
 
       <div className="flex gap-2 pt-1">
@@ -390,22 +392,24 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
           disabled={busy || idAlreadyExists || !form.id.trim() || !form.address?.trim() || !form.company?.trim() || (type === 'DO' && !form.order_id)}
           onClick={handleSubmit}
         >
-          {busy ? 'Saving…' : editing ? 'Update Delivery' : `Create ${type === 'DO' ? 'Delivery Order' : 'Surat Jalan'}`}
+          {busy ? t('common.saving') : editing ? t('delivery.form.updateDelivery') : (type === 'DO' ? t('delivery.form.createDeliveryOrder') : t('delivery.form.createSuratJalan'))}
         </button>
-        <button className="btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
       </div>
     </div>
   )
 }
 
 export function DeliveryPage() {
+  const { t } = useTranslation()
+  const dateLocale = useDateLocale()
   const { data, isLoading, isError, refetch } = deliveryHooks.useList()
   const del = deliveryHooks.useDelete()
-  const navigate = useNavigate() 
+  const navigate = useNavigate()
 
   return (
     <CrudPage<Delivery>
-      title="Delivery"
+      title={t('delivery.title')}
       icon={Truck}
       data={data}
       isLoading={isLoading}
@@ -413,39 +417,43 @@ export function DeliveryPage() {
       onRetry={refetch}
       searchKeys={['company', 'address', 'contact_person', 'po_number']}
       columns={[
-        { header: 'Delivery ID',     key: 'id',             render: r => <span className="id-chip">{r.id}</span> },
-        { header: 'Company',         key: 'company',        render: r => <span className="font-semibold text-navy-900">{r.company ?? '—'}</span> },
-        { header: 'Client',          key: 'client_id',      render: r => r.client_id ? (
+        { header: t('delivery.columns.deliveryId'),     key: 'id',             render: r => <span className="id-chip">{r.id}</span> },
+        { header: t('delivery.columns.company'),         key: 'company',        render: r => <span className="font-semibold text-navy-900">{r.company ?? '—'}</span> },
+        { header: t('delivery.columns.client'),          key: 'client_id',      render: r => r.client_id ? (
             <button
               onClick={(e) => { e.stopPropagation(); navigate(`/clients/${r.client_id}`) }}
               className="inline-flex items-center gap-1 text-sm font-medium text-navy-600 hover:text-navy-800"
-              title="Open client record"
+              title={t('delivery.viewClientRecord')}
             >
-              <Building2 size={12} /> View <ArrowRight size={12} />
+              <Building2 size={12} /> {t('common.view')} <ArrowRight size={12} />
             </button>
-          ) : <span className="text-slate-300 text-xs">Not linked</span> },
-        { header: 'Address',         key: 'address',        render: r => <span className="font-medium">{r.address}</span> },
-        { header: 'Contact',         key: 'contact_person', render: r => r.contact_person ?? '—' },
-        { header: 'Phone',           key: 'phone_number',   render: r => <span className="font-mono text-xs">{r.phone_number ?? '—'}</span> },
-        { header: 'PO',              key: 'po_number',      render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
-        { header: 'Date',            key: 'date',           render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy')}</span> : '—' },
+          ) : <span className="text-slate-300 text-xs">{t('delivery.notLinked')}</span> },
+        { header: t('delivery.columns.address'),         key: 'address',        render: r => <span className="font-medium">{r.address}</span> },
+        { header: t('delivery.columns.contact'),         key: 'contact_person', render: r => r.contact_person || r.phone_number ? (
+            <div className="leading-tight">
+              {r.contact_person && <div>{r.contact_person}</div>}
+              {r.phone_number && <div className="font-mono text-xs text-slate-400">{r.phone_number}</div>}
+            </div>
+          ) : '—' },
+        { header: t('delivery.columns.po'),              key: 'po_number',      render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
+        { header: t('delivery.columns.date'),            key: 'date',           render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
       ]}
-      formTitle={e => e ? 'Edit Delivery' : 'New Delivery'}
+      formTitle={e => e ? t('delivery.formTitleEdit') : t('delivery.formTitleNew')}
       renderForm={(editing, onClose) => <DeliveryForm editing={editing} onClose={onClose} />}
       onDelete={id => del.mutate(id)}
-      deleteMessage={r => `Delete delivery ${r.id}?`}
+      deleteMessage={r => t('delivery.deleteConfirm', { id: r.id })}
       rowActions={row => (
         <>
           <button
             className="btn-ghost btn-sm !px-2 hover:!text-gold-500"
             onClick={() => navigate(`/delivery/${encodeURIComponent(row.id)}`)}
-            title="View contents">
+            title={t('delivery.viewContents')}>
             <Eye className="w-3.5 h-3.5" />
           </button>
           <button
             className="btn-ghost btn-sm !px-2 hover:!text-gold-500"
             onClick={() => navigate(`/delivery/${encodeURIComponent(row.id)}/print`)}
-            title="Print delivery order">
+            title={t('delivery.printDeliveryOrder')}>
             <Printer className="w-3.5 h-3.5" />
           </button>
         </>

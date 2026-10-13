@@ -1,12 +1,16 @@
 import { invoiceAmount } from '@/utils/invoiceAmount'
+import { orderPaymentStatus } from '@/utils/orderStatus'
+import { LoadingState, ErrorState } from '@/components/ui/Page'
 import { ShoppingBag, Truck, Factory, Wrench, Users, TrendingUp, ArrowUpRight, Package, AlertTriangle, Receipt, BarChart3 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { formatRp, Spinner } from '@/components/ui'
+import { useTranslation } from 'react-i18next'
+import { formatRp } from '@/components/ui'
 import { orderHooks, deliveryHooks, productionHooks, operationHooks, invoiceHooks } from '@/hooks'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { format, differenceInCalendarDays } from 'date-fns'
 import { isInMonth } from '@/utils/MonthUtils'
 import { StackedBarChart } from '@/components/ui/Charts'
+import { useDateLocale } from '@/i18n/dateLocale'
 import type { Order, Invoice, ProductionRow, OperationRow } from '@/types'
 
 // Overdue from the day after the due date, in calendar days.
@@ -89,6 +93,8 @@ function StackedCostRow({ label, value, icon: Icon, sub }: KpiCardProps) {
 
 export function DashboardPage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
+  const dateLocale = useDateLocale()
   const isMobile = useIsMobile()
   const orderQuery      = orderHooks.useList()
   const deliveryQuery   = deliveryHooks.useList()
@@ -117,8 +123,6 @@ export function DashboardPage() {
   // to paid it shouldn't keep inflating this KPI.
   const unpaidInvoices = (safeInvoices as Invoice[]).filter(i => i.status !== 'paid')
   const totalAR       = unpaidInvoices.reduce((s, r) => s + invoiceAmountDue(r), 0)
-  const totalProdCost = (safeProductions as ProductionRow[]).reduce((s, p) => s + (p.price * p.amount), 0)
-  const totalOpsCost  = (safeOperations as OperationRow[]).reduce((s, o) => s + o.price, 0)
   const recentOrders  = (safeOrders as Order[]).slice(-5).reverse()
 
   // ── This month: orders vs costs on one scale; the gap is the profit ──
@@ -139,14 +143,14 @@ export function DashboardPage() {
   // One segment list for both bars: orders fill paid/unpaid, costs fill
   // production/operations.
   const ORDERS_VS_COSTS_SEGMENTS = [
-    { key: 'paid',        label: 'Paid',        color: '#34d399' },
-    { key: 'unpaid',       label: 'Unpaid',       color: '#f87171' },
-    { key: 'production',  label: 'Production',  color: '#2dd4bf' },
-    { key: 'operations',  label: 'Operations',  color: '#fbbf24' },
+    { key: 'paid',        label: t('common.paid'),        color: '#34d399' },
+    { key: 'unpaid',       label: t('common.unpaid'),       color: '#f87171' },
+    { key: 'production',  label: t('common.production'),  color: '#2dd4bf' },
+    { key: 'operations',  label: t('common.operations'),  color: '#fbbf24' },
   ]
   const ordersVsCostsData = [
-    { category: 'Orders', values: { paid: paidThisMonth, unpaid: unpaidThisMonth } },
-    { category: 'Costs',  values: { production: prodCostThisMonth, operations: opsCostThisMonth } },
+    { category: t('dashboard.ordersCategory'), values: { paid: paidThisMonth, unpaid: unpaidThisMonth } },
+    { category: t('dashboard.costsCategory'),  values: { production: prodCostThisMonth, operations: opsCostThisMonth } },
   ]
 
   // Overdue first (oldest due date first), then upcoming, then no due date.
@@ -160,49 +164,42 @@ export function DashboardPage() {
   // The overdue part, oldest first; the same rule as the Overdue KPI.
   const overdueInvoices = arBreakdown.filter(i => isOverdue(i.due_date))
 
-  // An order's invoice status, from its 0-2 invoices (DP and pelunasan).
-  function orderInvoiceStatus(orderId: string): { label: string; className: string } {
-    const orderInvoices = (safeInvoices as Invoice[]).filter(i => i.order_id === orderId)
-    const dp = orderInvoices.find(i => i.type === 'dp')
-    const pelunasan = orderInvoices.find(i => i.type === 'pelunasan')
+  const orderInvoiceStatus = (orderId: string) => orderPaymentStatus(orderId, safeInvoices as Invoice[])
 
-    if (!dp) return { label: 'Not Invoiced', className: 'bg-slate-100 text-slate-500' }
-    if (dp.status !== 'paid') return { label: 'Awaiting DP', className: 'bg-red-50 text-red-600' }
-    if (!pelunasan) return { label: 'Awaiting Pelunasan', className: 'bg-amber-50 text-amber-600' }
-    if (pelunasan.status !== 'paid') return { label: 'Awaiting Pelunasan', className: 'bg-amber-50 text-amber-600' }
-    return { label: 'Fully Paid', className: 'bg-green-50 text-green-700' }
+  // This month's costs against last month's, to the same day while it runs.
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const upToToday = (d: string) => Number(d.slice(8, 10)) <= now.getDate()
+  const prodLastMonth = (safeProductions as ProductionRow[]).filter(p => isInMonth(p.date, lastMonth.getFullYear(), lastMonth.getMonth()) && upToToday(p.date)).reduce((s, p) => s + p.price * p.amount, 0)
+  const opsLastMonth = (safeOperations as OperationRow[]).filter(o => isInMonth(o.date, lastMonth.getFullYear(), lastMonth.getMonth()) && upToToday(o.date)).reduce((s, o) => s + o.price, 0)
+  const vsLastMonth = (nowAmt: number, before: number) => {
+    const month = format(now, 'MMMM', { locale: dateLocale })
+    if (!before) return t('dashboard.soFar', { month })
+    const d = Math.round(((nowAmt - before) / before) * 100)
+    return t('dashboard.soFarVsLastMonth', { month, arrow: d > 0 ? '▲' : d < 0 ? '▼' : '', percent: Math.abs(d) })
   }
+  const ordersThisMonth = (safeOrders as Order[]).filter(o => isInMonth(o.date, now.getFullYear(), now.getMonth())).length
+  const deliveriesThisMonth = deliveries.filter(d => isInMonth(d.date, now.getFullYear(), now.getMonth())).length
 
-  if (isLoading) {
-    return <Spinner />
-  }
-  if (isError) {
-    return (
-      <div className="p-8 text-center">
-        <AlertTriangle className="w-8 h-8 text-red-300 mx-auto mb-3" />
-        <p className="text-red-400 mb-3">Couldn't load dashboard data — check your connection and try again.</p>
-        <button onClick={retryAll} className="btn-secondary">Retry</button>
-      </div>
-    )
-  }
+  if (isLoading) return <LoadingState label={t('dashboard.loading')} />
+  if (isError) return <div className="p-4 md:p-6"><div className="card"><ErrorState what={t('dashboard.errorWhat')} onRetry={retryAll} /></div></div>
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px]">
+    <div className="p-4 md:p-6 space-y-6 max-w-[1400px]">
 
       {/* ── KPI row ─────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
         {/* AR spans 2 cols and is accented */}
         <div className="col-span-2 h-full">
           <KpiCard
-            label="AR Receivable"
+            label={t('dashboard.arReceivable')}
             value={formatRp(totalAR)}
             icon={TrendingUp}
             accent
-            sub="Total outstanding receivables"
+            sub={t('dashboard.totalOutstandingReceivables')}
           />
         </div>
-        <KpiCard label="Orders"      value={orders.length}     icon={ShoppingBag} sub="Total orders" />
-        <KpiCard label="Deliveries"  value={deliveries.length} icon={Truck}       sub="Total deliveries" />
+        <KpiCard label={t('dashboard.ordersThisMonth')} value={ordersThisMonth} icon={ShoppingBag} sub={t('common.inAllCount', { count: orders.length })} />
+        <KpiCard label={t('dashboard.deliveriesThisMonth')} value={deliveriesThisMonth} icon={Truck} sub={t('common.inAllCount', { count: deliveries.length })} />
         {/* Production + Operations stacked in one card rather than two
             side-by-side cards — they're both "cost" figures and read
             fine as a compact pair instead of each claiming a full slot. */}
@@ -211,31 +208,31 @@ export function DashboardPage() {
             short ("PRODUCTIO…"). */}
         <div className="col-span-2 xl:col-span-1 h-full">
           <StackedCostCard
-            top={{ label: 'Production Cost', value: formatRp(totalProdCost), icon: Factory, sub: 'Materials purchased' }}
-            bottom={{ label: 'Operations Cost', value: formatRp(totalOpsCost), icon: Wrench, sub: 'Operational spend' }}
+            top={{ label: t('common.production'), value: formatRp(prodCostThisMonth), icon: Factory, sub: vsLastMonth(prodCostThisMonth, prodLastMonth) }}
+            bottom={{ label: t('common.operations'), value: formatRp(opsCostThisMonth), icon: Wrench, sub: vsLastMonth(opsCostThisMonth, opsLastMonth) }}
           />
         </div>
       </div>
 
       {/* ── Second row: recent orders + supplier count ───────── */}
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 xl:items-start">
 
         {/* Recent orders table — takes 3 cols */}
         <div className="xl:col-span-3 bg-white rounded-2xl border border-slate-100 shadow-card overflow-hidden fade-up delay-1">
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ShoppingBag className="w-4 h-4 text-navy-400" />
-              <h3 className="font-semibold text-navy-900 text-sm">Recent Orders</h3>
+              <h3 className="font-semibold text-navy-900 text-sm">{t('dashboard.recentOrders')}</h3>
             </div>
             <a href="/orders" className="flex items-center gap-1 text-xs text-navy-500 hover:text-navy-800 transition-colors font-medium">
-              View all <ArrowUpRight className="w-3 h-3" />
+              {t('common.viewAll')} <ArrowUpRight className="w-3 h-3" />
             </a>
           </div>
           {recentOrders.length === 0 ? (
             <div className="flex flex-col items-center py-10 text-slate-300">
               <Package className="w-8 h-8 mb-2 opacity-40" />
-              <p className="text-sm text-slate-400">No orders yet</p>
-              <p className="text-xs text-slate-300 mt-0.5">Orders will appear here once created</p>
+              <p className="text-sm text-slate-400">{t('dashboard.noOrdersYet')}</p>
+              <p className="text-xs text-slate-300 mt-0.5">{t('dashboard.ordersWillAppearHere')}</p>
             </div>
           ) : isMobile ? (
             // Phone width: one card per order instead of the 5-column table.
@@ -255,7 +252,7 @@ export function DashboardPage() {
                     <div className="font-medium text-navy-900 text-sm truncate">{o.company ?? '—'}</div>
                     <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
                       <span className="font-mono truncate">{o.po_number ?? '—'}</span>
-                      <span className="whitespace-nowrap shrink-0">{o.date ? format(new Date(o.date), 'dd MMM yyyy') : '—'}</span>
+                      <span className="whitespace-nowrap shrink-0">{o.date ? format(new Date(o.date), 'dd MMM yyyy', { locale: dateLocale }) : '—'}</span>
                     </div>
                   </button>
                 )
@@ -266,11 +263,11 @@ export function DashboardPage() {
               <table className="kma-table">
                 <thead>
                   <tr>
-                    <th>Order ID</th>
-                    <th>Company</th>
-                    <th>PO Number</th>
-                    <th>Date</th>
-                    <th>Status</th>
+                    <th>{t('common.orderId')}</th>
+                    <th>{t('common.company')}</th>
+                    <th>{t('common.poNumber')}</th>
+                    <th>{t('common.date')}</th>
+                    <th>{t('common.status')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -286,7 +283,7 @@ export function DashboardPage() {
                         <td className="font-medium text-navy-900">{o.company ?? '—'}</td>
                         <td className="font-mono text-xs text-slate-500">{o.po_number ?? '—'}</td>
                         <td className="text-xs text-slate-500 whitespace-nowrap">
-                          {o.date ? format(new Date(o.date), 'dd MMM yyyy') : '—'}
+                          {o.date ? format(new Date(o.date), 'dd MMM yyyy', { locale: dateLocale }) : '—'}
                         </td>
                         <td>
                           <span className={`badge ${status.className}`}>{status.label}</span>
@@ -306,14 +303,14 @@ export function DashboardPage() {
           <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 fade-up delay-1">
             <div className="flex items-center gap-2 mb-1">
               <BarChart3 className="w-4 h-4 text-navy-400 shrink-0" />
-              <h3 className="font-semibold text-navy-900 text-sm truncate">{format(now, 'MMMM')} — Orders vs Costs</h3>
+              <h3 className="font-semibold text-navy-900 text-sm truncate">{t('dashboard.ordersVsCosts', { month: format(now, 'MMMM', { locale: dateLocale }) })}</h3>
             </div>
             <div className="flex items-center justify-between gap-2 mb-3">
               <span className={`font-semibold text-xs tabular-nums ${profitThisMonth >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                {profitThisMonth >= 0 ? 'Profit' : 'Loss'}: {formatRp(Math.abs(profitThisMonth))}
+                {profitThisMonth >= 0 ? t('common.profit') : t('common.loss')}: {formatRp(Math.abs(profitThisMonth))}
               </span>
               <a href="/finance" className="flex items-center gap-1 text-xs text-navy-500 hover:text-navy-800 transition-colors font-medium shrink-0">
-                Yearly <ArrowUpRight className="w-3 h-3" />
+                {t('dashboard.yearly')} <ArrowUpRight className="w-3 h-3" />
               </a>
             </div>
             <StackedBarChart
@@ -321,14 +318,14 @@ export function DashboardPage() {
               segments={ORDERS_VS_COSTS_SEGMENTS}
               height={110}
               maxBarWidth={80}
-              emptyLabel="No activity yet this month"
+              emptyLabel={t('dashboard.noActivityThisMonth')}
             />
           </div>
 
           {/* Overdue invoices, oldest first; a click opens the invoice. */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 fade-up delay-2">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Overdue Invoices</span>
+              <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">{t('dashboard.overdueInvoices')}</span>
               <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center">
                 <AlertTriangle className="w-4 h-4 text-red-500" />
               </div>
@@ -336,7 +333,7 @@ export function DashboardPage() {
             {overdueInvoices.length === 0 ? (
               <div className="flex flex-col items-center py-6 text-slate-300">
                 <Receipt className="w-6 h-6 mb-1.5 opacity-40" />
-                <p className="text-xs text-slate-400">Nothing overdue</p>
+                <p className="text-xs text-slate-400">{t('dashboard.nothingOverdue')}</p>
               </div>
             ) : (
               <div className="space-y-1">
@@ -351,7 +348,7 @@ export function DashboardPage() {
                     >
                       <span className="min-w-0">
                         <span className="block text-sm font-medium text-navy-900 truncate">{inv.kepada_yth}</span>
-                        <span className="block text-xs text-red-600">{days === 1 ? '1 day' : `${days} days`} overdue</span>
+                        <span className="block text-xs text-red-600">{t('dashboard.overdueBy', { count: days })}</span>
                       </span>
                       <span className="font-mono text-xs font-semibold text-navy-900 shrink-0">
                         {formatRp(invoiceAmountDue(inv))}
@@ -360,7 +357,7 @@ export function DashboardPage() {
                   )
                 })}
                 {overdueInvoices.length > 4 && (
-                  <p className="text-xs text-slate-400 pt-1 px-2">+{overdueInvoices.length - 4} more</p>
+                  <p className="text-xs text-slate-400 pt-1 px-2">{t('common.moreCount', { count: overdueInvoices.length - 4 })}</p>
                 )}
               </div>
             )}
@@ -368,14 +365,14 @@ export function DashboardPage() {
 
           {/* Quick links */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 fade-up delay-3">
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Quick Actions</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">{t('dashboard.quickActions')}</p>
             <div className="space-y-1.5">
               {[
-                { label: 'New Order',      href: '/orders',     icon: ShoppingBag },
-                { label: 'New Delivery',   href: '/delivery',   icon: Truck },
-                { label: 'Add Production', href: '/production', icon: Factory },
-                { label: 'Add Supplier',   href: '/suppliers',  icon: Users },
-                { label: 'Finance',  href: '/finance', icon: BarChart3 },
+                { label: t('dashboard.newOrder'),      href: '/orders',     icon: ShoppingBag },
+                { label: t('dashboard.newDelivery'),   href: '/delivery',   icon: Truck },
+                { label: t('dashboard.addProduction'), href: '/production', icon: Factory },
+                { label: t('dashboard.addSupplier'),  href: '/suppliers',  icon: Users },
+                { label: t('dashboard.finance'),  href: '/finance', icon: BarChart3 },
               ].map(({ label, href, icon: Icon }) => (
                 <a
                   key={href}
@@ -398,17 +395,17 @@ export function DashboardPage() {
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-navy-400" />
-            <h3 className="font-semibold text-navy-900 text-sm">AR Receivable Breakdown</h3>
+            <h3 className="font-semibold text-navy-900 text-sm">{t('dashboard.arBreakdown')}</h3>
           </div>
           <a href="/invoice" className="flex items-center gap-1 text-xs text-navy-500 hover:text-navy-800 transition-colors font-medium">
-            View all <ArrowUpRight className="w-3 h-3" />
+            {t('common.viewAll')} <ArrowUpRight className="w-3 h-3" />
           </a>
         </div>
         {arBreakdown.length === 0 ? (
           <div className="flex flex-col items-center py-10 text-slate-300">
             <Receipt className="w-8 h-8 mb-2 opacity-40" />
-            <p className="text-sm text-slate-400">No outstanding receivables</p>
-            <p className="text-xs text-slate-300 mt-0.5">Everything's paid up</p>
+            <p className="text-sm text-slate-400">{t('dashboard.noOutstandingReceivables')}</p>
+            <p className="text-xs text-slate-300 mt-0.5">{t('dashboard.everythingPaidUp')}</p>
           </div>
         ) : isMobile ? (
           // Phone width: cards, with who and how much on the first line.
@@ -424,7 +421,7 @@ export function DashboardPage() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="id-chip font-mono">{inv.id}</span>
                     <span className={`badge ${TYPE_BADGE[inv.type] ?? 'bg-slate-100 text-slate-600'}`}>
-                      {inv.type === 'dp' ? 'Down Payment' : 'Pelunasan'}
+                      {inv.type === 'dp' ? t('common.downPayment') : 'Pelunasan'}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
@@ -432,8 +429,8 @@ export function DashboardPage() {
                     <span className="currency font-semibold text-sm shrink-0">{formatRp(invoiceAmountDue(inv))}</span>
                   </div>
                   <div className={`text-xs ${overdue ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
-                    {inv.due_date ? format(new Date(inv.due_date), 'dd MMM yyyy') : '—'}
-                    {overdue && ' (overdue)'}
+                    {inv.due_date ? format(new Date(inv.due_date), 'dd MMM yyyy', { locale: dateLocale }) : '—'}
+                    {overdue && ` ${t('dashboard.overdueParenthetical')}`}
                   </div>
                 </button>
               )
@@ -444,11 +441,11 @@ export function DashboardPage() {
             <table className="kma-table">
               <thead>
                 <tr>
-                  <th>Invoice No.</th>
-                  <th>Client</th>
-                  <th>Type</th>
-                  <th>Amount Due</th>
-                  <th>Due Date</th>
+                  <th>{t('common.invoiceNo')}</th>
+                  <th>{t('common.client')}</th>
+                  <th>{t('common.type')}</th>
+                  <th>{t('dashboard.amountDue')}</th>
+                  <th>{t('common.dueDate')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -464,13 +461,13 @@ export function DashboardPage() {
                       <td className="font-medium text-navy-900">{inv.kepada_yth}</td>
                       <td>
                         <span className={`badge ${TYPE_BADGE[inv.type] ?? 'bg-slate-100 text-slate-600'}`}>
-                          {inv.type === 'dp' ? 'Down Payment' : 'Pelunasan'}
+                          {inv.type === 'dp' ? t('common.downPayment') : 'Pelunasan'}
                         </span>
                       </td>
                       <td className="currency font-semibold">{formatRp(invoiceAmountDue(inv))}</td>
                       <td className={`text-xs ${overdue ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
-                        <span className="whitespace-nowrap">{inv.due_date ? format(new Date(inv.due_date), 'dd MMM yyyy') : '—'}</span>
-                        {overdue && ' (overdue)'}
+                        <span className="whitespace-nowrap">{inv.due_date ? format(new Date(inv.due_date), 'dd MMM yyyy', { locale: dateLocale }) : '—'}</span>
+                        {overdue && ` ${t('dashboard.overdueParenthetical')}`}
                       </td>
                     </tr>
                   )

@@ -1,12 +1,17 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Printer, Building2 } from 'lucide-react'
 import { format } from 'date-fns'
+import { useTranslation } from 'react-i18next'
 import { deliveryHooks } from '@/hooks'
+import { LoadingState, ErrorState } from '@/components/ui/Page'
+import { useDateLocale } from '@/i18n/dateLocale'
 import { DeliveryItemsManager } from './DeliveryItemsManager'
 
 export function DeliveryDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { t } = useTranslation()
+  const dateLocale = useDateLocale()
   const deliveryId = decodeURIComponent(id ?? '')
 
   const {
@@ -18,52 +23,47 @@ export function DeliveryDetailPage() {
 
   const isDO = delivery?.type === 'DO'
 
-  if (deliveryLoading) return <div className="p-8 text-slate-400">Loading…</div>
+  if (deliveryLoading) return <div className="p-4 md:p-6"><LoadingState label={t('delivery.loading')} /></div>
   // A failed fetch shows Retry, not "Delivery not found".
   if (deliveryError) {
-    return (
-      <div className="p-8 text-center">
-        <p className="text-red-400 mb-3">Couldn't load this delivery — check your connection and try again.</p>
-        <button onClick={() => refetchDelivery()} className="btn-secondary">Retry</button>
-      </div>
-    )
+    return <div className="p-4 md:p-6"><ErrorState what={t('delivery.errorWhat')} onRetry={() => refetchDelivery()} /></div>
   }
-  if (!delivery) return <div className="p-8 text-red-400">Delivery not found.</div>
+  if (!delivery) return <div className="p-4 md:p-6"><ErrorState what={t('delivery.errorWhat')} /></div>
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-5">
       {/* min-w-0 lets the title shrink and wrap so Print stays on screen. */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={() => navigate('/delivery')} className="btn-secondary flex items-center gap-1">
-          <ArrowLeft size={14} /> Back
+      <div className="flex items-center gap-3 flex-wrap fade-up">
+        <button onClick={() => navigate('/delivery')} className="btn-secondary !px-2.5 shrink-0" title={t('delivery.backToDelivery')}>
+          <ArrowLeft size={14} />
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-bold text-navy-900">{delivery.id}</h1>
+            <h1 className="font-display font-semibold text-navy-900 leading-tight">{delivery.id}</h1>
             <span className={`badge text-xs ${isDO ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
-              {isDO ? 'Delivery Order' : 'Surat Jalan'}
+              {isDO ? t('delivery.deliveryOrder') : t('delivery.suratJalan')}
             </span>
           </div>
-          <p className="text-sm text-slate-500">
+          <p className="text-slate-400 text-xs truncate">
             {delivery.address}
             {delivery.contact_person && ` · ${delivery.contact_person}`}
-            {delivery.date && ` · ${format(new Date(delivery.date), 'dd MMM yyyy')}`}
+            {delivery.date && ` · ${format(new Date(delivery.date), 'dd MMM yyyy', { locale: dateLocale })}`}
             {delivery.client_id && (
               <>
                 {' · '}
                 <button
-                  className="inline-flex items-center gap-1 text-navy-600 hover:underline"
+                  className="inline-flex items-center gap-1 text-navy-500 hover:underline"
                   onClick={() => navigate(`/clients/${delivery.client_id}`)}
                 >
-                  <Building2 size={12} /> Client record
+                  <Building2 size={11} /> {t('common.clientRecord')}
                 </button>
               </>
             )}
             {delivery.order_id && (
               <>
-                {' · Order '}
+                {' · '}{t('delivery.viewOrder')}{' '}
                 <button
-                  className="font-mono text-navy-600 hover:underline"
+                  className="font-mono text-navy-500 hover:underline"
                   onClick={() => navigate(`/orders/${encodeURIComponent(delivery.order_id!)}`)}
                 >
                   {delivery.order_id}
@@ -74,9 +74,9 @@ export function DeliveryDetailPage() {
         </div>
         <button
           onClick={() => navigate(`/delivery/${encodeURIComponent(delivery.id)}/print`)}
-          className="btn-secondary flex items-center gap-1.5"
+          className="btn-secondary flex items-center gap-1.5 shrink-0"
         >
-          <Printer size={14} /> Print
+          <Printer size={14} /> {t('delivery.print')}
         </button>
       </div>
 

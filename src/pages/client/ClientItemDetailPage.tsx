@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, Package, Image as ImageIcon, Pencil, X, Check } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, Image as ImageIcon, Pencil, X, Check, Tag, Trash2, ShoppingBag } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { FormField, Spinner, formatRp, UppercaseField } from '@/components/ui'
+import { EditableCell, FormField, formatRp, UppercaseField } from '@/components/ui'
+import { Card, ErrorState, LoadingState } from '@/components/ui/Page'
 import { clientHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
+import { useCatalogueBatch, undoCatalogue, useClientSales } from '@/hooks/catalogue'
 import { formatThousands, stripCommas } from '@/utils/NumberFormat'
-import { sortPricesByRecency } from '@/utils/PriceHistory'
-import { ClientItemPriceSpreadsheet } from './ClientItemPriceSpreadsheet'
-import type { ClientItem, ClientItemPrice, UpdateClientItemRequest } from '@/types'
-import type { ClientItemPriceRow } from '@/hooks'
+import { priceForYear } from '@/utils/PriceHistory'
+import { formatDateShort } from '@/utils/MonthUtils'
+import { isTyping } from '@/utils/isTyping'
+import type { Client, ClientItem, ClientItemPrice, UpdateClientItemRequest } from '@/types'
+import { adjustPrice, compareSizes, itemKey, itemLabel, pctChange, yearStart } from './catalogue/catalogueModel'
 
-// Big photo panel for one item — same upload/replace/remove affordances as
-// the old inline table cell (ClientItemPhotoCell in ClientDetailPage), just
-// scaled up now that it has a whole page to itself instead of a 36px cell.
+// The item's photo: upload, replace, remove.
 function ItemPhotoPanel({ item }: { item: ClientItem }) {
   const upload = clientItemHooks.useUploadPhoto()
   const remove = clientItemHooks.useDeletePhoto()
@@ -81,8 +83,7 @@ function ItemPhotoPanel({ item }: { item: ClientItem }) {
   )
 }
 
-// Name/size/notes, editable in place — no modal needed since this page is
-// already scoped to exactly one item.
+// Name, size and notes, edited in place.
 function ItemDetailsPanel({ item }: { item: ClientItem }) {
   const update = clientItemHooks.useUpdate()
   const [editing, setEditing] = useState(false)
@@ -142,74 +143,146 @@ function ItemDetailsPanel({ item }: { item: ClientItem }) {
   )
 }
 
-// Same calculator as before, minus the item picker — this page IS the
-// item, so "which item" is never in question. Every new price recorded
-// here writes straight into this item's history below.
-function ItemPriceHikeCalculator({ item, prices }: { item: ClientItem; prices: ClientItemPrice[] }) {
-  const create = clientItemPriceHooks.useCreate()
-  const [pct, setPct] = useState('')
-  const [priceDigits, setPriceDigits] = useState('')
-  const [year, setYear] = useState(new Date().getFullYear())
-  const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().slice(0, 10))
-
-  // Most-recent-first — see sortPricesByRecency for why the effective_date
-  // tie-break matters (a price can be revised mid-year, and year alone
-  // can't tell two same-year entries apart).
-  const last = sortPricesByRecency(prices, 'desc')[0]
-
-  useEffect(() => {
-    const pctNum = Number(pct)
-    if (last && pct !== '' && !isNaN(pctNum)) {
-      setPriceDigits(String(Math.round(last.price * (1 + pctNum / 100))))
-    }
-    // Also recompute when the last price changes (prices refetch in the background).
-  }, [pct, last])
-
-  const priceNum = priceDigits ? Number(priceDigits) : null
-
-  const handleSave = () => {
-    if (priceNum == null) return
-    // Clear the inputs only when the save succeeds; a failure keeps them and says so.
-    create.mutate(
-      { client_item_id: item.id, year, price: priceNum, effective_date: effectiveDate ? new Date(effectiveDate).toISOString() : null },
-      {
-        onSuccess: () => { setPct(''); setPriceDigits('') },
-        onError: () => toast.error("Couldn't save this price — check your connection and try again."),
-      }
-    )
+/** The item's price for each year, newest first: edit in place, add a year,
+ *  remove one. Saved through the catalogue batch, so Ctrl+Z undoes it. */
+function ItemPrices({ item, prices }: { item: ClientItem; prices: ClientItemPrice[] }) {
+  const save = useCatalogueBatch()
+  const rows = [...prices].sort((a, b) => b.year - a.year)
+  const [newYear, setNewYear] = useState(() => (rows[0]?.year ?? new Date().getFullYear() - 1) + 1)
+  const [newPrice, setNewPrice] = useState('')
+  const set = (year: number, price: number, effective: string | null, label: string) => save.mutate({
+    label, batch: { client_id: item.client_id, set_prices: [{ client_item_id: item.id, year, price, effective_date: effective }] },
+  })
+  const remove = (year: number) => save.mutate({
+    label: `Removed the ${year} price`, batch: { client_id: item.client_id, delete_prices: [{ client_item_id: item.id, year }] },
+  })
+  const add = () => {
+    const existing = rows.find(r => r.year === newYear)
+    set(newYear, Number(newPrice), existing?.effective_date ?? yearStart(newYear), `${newYear}: ${formatRp(Number(newPrice))}`)
+    setNewPrice('')
+    setNewYear(y => y + 1)
   }
+  const last = rows[0]
 
   return (
-    <div className="card p-4 mb-4">
-      <h3 className="text-sm font-semibold text-slate-700 mb-3">Price Hike Calculator</h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 items-end">
-        <FormField label="Last Price">
-          <input className="field font-mono bg-slate-50 text-slate-500 cursor-not-allowed" readOnly
-            value={last ? `${formatRp(last.price)} (${last.year})` : 'No history yet'} />
-        </FormField>
-        <FormField label="Hike %">
-          <input className="field" type="number" placeholder="e.g. 15" value={pct}
-            onChange={e => setPct(e.target.value)} disabled={!last}
-            title={!last ? 'No previous price to hike from — type the price directly instead' : undefined} />
-        </FormField>
-        <FormField label="New Price" required>
-          <input className="field font-mono" inputMode="numeric" placeholder="e.g. 120,000"
-            value={formatThousands(priceDigits)}
-            onChange={e => setPriceDigits(stripCommas(e.target.value))} />
-        </FormField>
-        <FormField label="For Year">
-          <input className="field" type="number" value={year} onChange={e => setYear(Number(e.target.value) || year)} />
-        </FormField>
-        <FormField label="Effective Date">
-          <input className="field" type="date" value={effectiveDate} onChange={e => setEffectiveDate(e.target.value)} />
-        </FormField>
-      </div>
-      <div className="flex justify-end mt-3">
-        <button className="btn-primary !py-1.5 !px-3 text-sm" disabled={priceNum == null || create.isPending} onClick={handleSave}>
-          {create.isPending ? 'Saving…' : 'Save This Price'}
-        </button>
-      </div>
-    </div>
+    <Card title="Prices by year" icon={Tag} bodyClassName="p-0 pt-2">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-xs text-slate-400 border-b border-slate-100">
+            <th className="text-left font-medium px-5 py-2 w-20">Year</th>
+            <th className="text-right font-medium px-2 py-2">Price</th>
+            <th className="text-right font-medium px-2 py-2 w-24">vs year before</th>
+            <th className="text-left font-medium px-4 py-2 w-40">From</th>
+            <th className="w-10" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((p, i) => {
+            const prev = rows[i + 1]
+            const pct = prev ? pctChange(prev.price, p.price) : null
+            return (
+              <tr key={p.id} className="group border-t border-slate-50">
+                <td className="px-5 py-1 font-mono text-slate-600">{p.year}</td>
+                <td className="px-1 py-0.5 text-right font-mono">
+                  <EditableCell type="number" value={p.price}
+                    format={v => <span className="font-semibold text-navy-900">{formatRp(Number(v))}</span>}
+                    onSave={v => (Number(v) ? set(p.year, Number(v), p.effective_date, `${p.year}: ${formatRp(Number(v))}`) : remove(p.year))} />
+                </td>
+                <td className={`px-2 py-1 text-right text-xs ${pct == null ? 'text-slate-300' : pct > 0 ? 'text-green-700' : pct < 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                  {pct == null ? '' : pct === 0 ? 'same' : `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`}
+                </td>
+                <td className="px-3 py-0.5 text-slate-500">
+                  <EditableCell type="date" value={p.effective_date?.slice(0, 10) ?? null}
+                    format={v => formatDateShort(String(v))}
+                    onSave={v => set(p.year, p.price, v ? new Date(String(v)).toISOString() : null, `${p.year} price date changed`)} />
+                </td>
+                <td className="pr-3">
+                  <button className="btn-ghost !p-1.5 opacity-0 group-hover:opacity-100 focus:opacity-100" title={`Remove the ${p.year} price`} onClick={() => remove(p.year)}>
+                    <Trash2 size={13} />
+                  </button>
+                </td>
+              </tr>
+            )
+          })}
+          <tr className="border-t border-slate-100 bg-slate-50/60">
+            <td className="px-5 py-2">
+              <input className="field !py-1 !px-2 font-mono w-20" type="number" value={newYear}
+                onChange={e => setNewYear(Number(e.target.value) || newYear)} />
+            </td>
+            <td className="px-2 py-2" colSpan={3}>
+              <div className="flex items-center gap-2 justify-end">
+                <input className="field !py-1 font-mono text-right max-w-[160px]" inputMode="numeric"
+                  placeholder={last ? formatThousands(String(last.price)) : 'price'}
+                  value={formatThousands(newPrice)} onChange={e => setNewPrice(stripCommas(e.target.value))}
+                  onKeyDown={e => e.key === 'Enter' && newPrice && add()} />
+                {last && [5, 10].map(pct => (
+                  <button key={pct} className="btn-ghost btn-sm" title={`${pct}% over ${last.year}, rounded up to Rp 1,000`}
+                    onClick={() => setNewPrice(String(adjustPrice(last.price, { mode: 'pct', amount: pct, roundTo: 1000 })))}>
+                    +{pct}%
+                  </button>
+                ))}
+                <button className="btn-primary btn-sm" disabled={!newPrice || save.isPending} onClick={add}>
+                  {rows.some(r => r.year === newYear) ? 'Replace' : 'Add'}
+                </button>
+              </div>
+            </td>
+            <td />
+          </tr>
+        </tbody>
+      </table>
+      {!rows.length && <p className="px-5 pb-3 text-xs text-slate-400">No prices yet: add this item's price for a year above.</p>}
+    </Card>
+  )
+}
+
+/** Every order of this item by this client, with the price it went at next
+ *  to the catalogue price for that year. */
+function ItemSales({ item, prices, client }: { item: ClientItem; prices: ClientItemPrice[]; client: Client | undefined }) {
+  const { sales, isLoading } = useClientSales(client)
+  const lines = sales.get(itemKey(item.item_name, item.size)) ?? []
+  const byYear = new Map<number, number>()
+  for (const s of lines) byYear.set(new Date(s.date).getFullYear(), (byYear.get(new Date(s.date).getFullYear()) ?? 0) + s.qty)
+
+  return (
+    <Card title="Orders" icon={ShoppingBag} bodyClassName="p-0 pt-2"
+      actions={byYear.size > 0 && (
+        <span className="text-xs text-slate-500">
+          {[...byYear].sort((a, b) => b[0] - a[0]).map(([y, q]) => `${y}: ${q.toLocaleString('id-ID')} pcs`).join(' · ')}
+        </span>
+      )}>
+      {isLoading ? <LoadingState /> : !lines.length ? (
+        <p className="px-5 pb-4 text-sm text-slate-400">{client ? `${client.client_name} hasn't ordered this yet.` : 'Not ordered yet.'}</p>
+      ) : (
+        <div className="max-h-80 overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs text-slate-400 border-b border-slate-100">
+                <th className="text-left font-medium px-5 py-2">Order</th>
+                <th className="text-left font-medium px-2 py-2">Date</th>
+                <th className="text-right font-medium px-2 py-2">Qty</th>
+                <th className="text-right font-medium px-2 py-2">Price</th>
+                <th className="text-right font-medium px-5 py-2">Catalogue</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((s, i) => {
+                const listed = priceForYear(prices, new Date(s.date).getFullYear())
+                const off = listed && listed.price !== s.price
+                return (
+                  <tr key={`${s.orderId}-${i}`} className="border-t border-slate-50">
+                    <td className="px-5 py-1.5"><Link to={`/orders/${encodeURIComponent(s.orderId)}`} className="text-navy-700 hover:underline font-mono text-xs">{s.orderId}</Link></td>
+                    <td className="px-2 py-1.5 text-slate-500">{formatDateShort(s.date)}</td>
+                    <td className="px-2 py-1.5 text-right font-mono">{s.qty.toLocaleString('id-ID')}</td>
+                    <td className={`px-2 py-1.5 text-right font-mono ${off ? 'text-amber-700' : 'text-navy-900'}`}>{formatRp(s.price)}</td>
+                    <td className="px-5 py-1.5 text-right font-mono text-slate-400">{listed ? formatRp(listed.price) : '—'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   )
 }
 
@@ -222,37 +295,49 @@ export function ClientItemDetailPage() {
   const { data: client } = clientHooks.useGet(clientId)
   const { data: item, isLoading: itemLoading, isError: itemError, refetch: refetchItem } = clientItemHooks.useGet(itemId)
   const { data: prices = [], isLoading: pricesLoading, isError: pricesError, refetch: refetchPrices } = clientItemPriceHooks.useByItem(itemId)
+  const { data: catalogue = [] } = clientItemHooks.useByClient(clientId)
+  const qc = useQueryClient()
 
-  if (itemLoading) return <Spinner />
-  // A failed fetch shows Retry, not "Item not found".
-  if (itemError) {
-    return (
-      <div className="p-8 text-center">
-        <p className="text-red-400 mb-3">Couldn't load this item — check your connection and try again.</p>
-        <button onClick={() => refetchItem()} className="btn-secondary">Retry</button>
-      </div>
-    )
-  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey && !isTyping(e.target)) {
+        e.preventDefault()
+        undoCatalogue(qc)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [qc])
+
+  if (itemLoading) return <LoadingState />
+  if (itemError) return <ErrorState what="this item" onRetry={() => refetchItem()} />
   if (!item) return <div className="p-8 text-red-400">Item not found.</div>
 
-  // Reuses the existing spreadsheet component — grouped by client_item_id,
-  // which here always resolves to this one item, so it renders as a
-  // single-group table instead of needing a stripped-down variant.
-  const rows: ClientItemPriceRow[] = prices.map(p => ({ ...p, item_name: item.item_name, size: item.size }))
+  const sizes = catalogue.filter(i => i.item_name === item.item_name).sort((a, b) => compareSizes(a.size, b.size))
+  const back = `/clients/${clientId}?tab=catalogue`
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-5">
       <div className="flex items-center gap-3">
-        <button onClick={() => navigate(`/clients/${clientId}?tab=catalogue`)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500" title="Back to catalogue">
+        <button onClick={() => navigate(back)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500" title="Back to catalogue">
           <ArrowLeft size={18} />
         </button>
-        <Package className="text-navy-600" size={20} />
-        <div>
+        <div className="min-w-0">
           <p className="text-xs text-slate-400">
-            <Link to={`/clients/${clientId}?tab=catalogue`} className="hover:underline">{client?.client_name ?? 'Client'}</Link> / Catalogue
+            <Link to={back} className="hover:underline">{client?.client_name ?? 'Client'}</Link> / Catalogue
           </p>
-          <h2 className="text-lg font-semibold text-slate-800">{item.item_name}{item.size ? ` (${item.size})` : ''}</h2>
+          <h2 className="font-display font-semibold text-navy-900 leading-tight">{itemLabel(item)}</h2>
         </div>
+        {sizes.length > 1 && (
+          <div className="ml-auto flex flex-wrap gap-1">
+            {sizes.map(s => (
+              <Link key={s.id} to={`/clients/${clientId}/items/${s.id}`}
+                className={`px-2.5 py-1 rounded-lg text-xs border ${s.id === item.id ? 'bg-navy-900 text-white border-navy-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}>
+                {s.size || 'one size'}
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 items-stretch">
@@ -262,21 +347,13 @@ export function ClientItemDetailPage() {
         <ItemDetailsPanel item={item} />
       </div>
 
-      <div className="card p-4">
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">Price History</h3>
-        {pricesLoading ? (
-          <Spinner />
-        ) : pricesError ? (
-          <div className="p-6 text-center">
-            <p className="text-red-400 mb-3">Couldn't load price history — check your connection and try again.</p>
-            <button onClick={() => refetchPrices()} className="btn-secondary">Retry</button>
-          </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+        {pricesLoading ? <LoadingState /> : pricesError ? (
+          <ErrorState what="the prices" onRetry={() => refetchPrices()} />
         ) : (
-          <>
-            <ItemPriceHikeCalculator item={item} prices={prices} />
-            <ClientItemPriceSpreadsheet data={rows} items={[item]} />
-          </>
+          <ItemPrices item={item} prices={prices} />
         )}
+        <ItemSales item={item} prices={prices} client={client} />
       </div>
     </div>
   )

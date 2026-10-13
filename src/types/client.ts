@@ -56,3 +56,30 @@ export type UpdateClientItemRequest = Partial<CreateClientItemRequest>
 
 export type CreateClientItemPriceRequest = Omit<ClientItemPrice, 'id'>
 export type UpdateClientItemPriceRequest = Partial<CreateClientItemPriceRequest>
+
+// ─── POST /client-catalogue/batch ──────────────────────────────────────────
+// Changes to one client's catalogue saved together; the result is enough to
+// undo them.
+export interface CataloguePriceIn {
+  client_item_id?: number
+  year: number
+  price: number
+  effective_date: string | null
+}
+
+export interface CatalogueBatch {
+  client_id: number
+  /** Found by name and size, or added; their prices are set. */
+  upsert_items?: { item_name: string; size: string; notes?: string | null; prices: CataloguePriceIn[] }[]
+  set_prices?: CataloguePriceIn[]
+  delete_prices?: { client_item_id: number; year: number }[]
+  delete_items?: number[]
+}
+
+export interface CatalogueBatchResult {
+  items_created: ClientItem[] | null
+  items_deleted: ClientItem[] | null
+  /** Each touched (item, year) as it was; existed false: there was no price. */
+  prices_before: { client_item_id: number; year: number; existed: boolean; price: number; effective_date: string | null }[] | null
+  prices: ClientItemPrice[] | null
+}

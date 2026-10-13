@@ -10,10 +10,10 @@ export { deliveryHooks, deliveryItemHooks } from './delivery'
 export {
   useFinanceHeaders, productionHooks, operationHooks, useFinanceBatch, recordBatches, undoLast,
   useBudgets, useSetBudget, useRecurringCosts, useSaveRecurringCost, useDeleteRecurringCost, usePostRecurringMonth,
+  buktiKasHooks, useBuktiKasBatch, undoLastBuktiKas,
 } from './finance'
-export type { BatchRequest } from './finance'
+export type { BatchRequest, BuktiKasBatchRequest } from './finance'
 
 export {
   clientHooks, clientContactHooks, clientItemHooks, clientItemPriceHooks,
 } from './client'
-export type { ClientItemPriceRow } from './client'

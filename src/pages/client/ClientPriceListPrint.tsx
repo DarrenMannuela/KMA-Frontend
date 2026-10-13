@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { X, Printer } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatRp } from '@/components/ui'
-import { sortPricesByRecency } from '@/utils/PriceHistory'
+import { priceForYear, sortPricesByRecency } from '@/utils/PriceHistory'
 import type { Client, ClientItem, ClientItemPrice } from '@/types'
 
 interface ClientPriceListPrintProps {
   client: Client
+  /** Prices as they are in this year (a later year's aren't shown). */
+  year: number
   items: ClientItem[]
   /** ClientItem.id -> that item's full price history (any order). */
   pricesByItem: Record<number, ClientItemPrice[]>
@@ -32,20 +34,20 @@ function PrintPhotoCell({ item }: { item: ClientItem }) {
   )
 }
 
-export function ClientPriceListPrint({ client, items, pricesByItem, onClose }: ClientPriceListPrintProps) {
+export function ClientPriceListPrint({ client, year, items, pricesByItem, onClose }: ClientPriceListPrintProps) {
   type Row = { item: ClientItem; latest: ClientItemPrice | undefined; previous: ClientItemPrice | undefined }
 
   const allRows = useMemo(() => {
     return items
       .map((item): Row => {
-        // Oldest first, so the last two are previous and latest (see
-        // sortPricesByRecency for same-year revisions).
-        const history = sortPricesByRecency(pricesByItem[item.id] ?? [], 'asc')
-        return { item, latest: history[history.length - 1], previous: history[history.length - 2] }
+        const history = pricesByItem[item.id] ?? []
+        const latest = priceForYear(history, year)
+        const previous = latest && sortPricesByRecency(history, 'desc').find(p => p.year < latest.year)
+        return { item, latest, previous }
       })
       .filter((r): r is { item: ClientItem; latest: ClientItemPrice; previous: ClientItemPrice | undefined } => !!r.latest)
       .sort((a, b) => a.item.item_name.localeCompare(b.item.item_name))
-  }, [items, pricesByItem])
+  }, [items, pricesByItem, year])
 
   // Which items go on this list; all at first. Prices load separately, so new
   // rows keep being selected until the user changes a checkbox.
@@ -85,7 +87,7 @@ export function ClientPriceListPrint({ client, items, pricesByItem, onClose }: C
 
       <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl print:shadow-none print:rounded-none print:max-w-none">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 print:hidden">
-          <h2 className="font-display font-semibold text-navy-900">Price List — {client.client_name}</h2>
+          <h2 className="font-display font-semibold text-navy-900">Price List {year} — {client.client_name}</h2>
           <div className="flex items-center gap-2">
             <button onClick={() => window.print()} className="btn-primary !py-1.5 !px-3 text-sm inline-flex items-center gap-1.5">
               <Printer size={15} /> Print
@@ -121,7 +123,7 @@ export function ClientPriceListPrint({ client, items, pricesByItem, onClose }: C
         <div className="print-area px-8 py-8">
           <div className="text-center mb-8">
             <p className="text-xs uppercase tracking-widest text-slate-400 font-mono">Kreasi Makmur Abadi</p>
-            <h1 className="text-xl font-display font-bold text-navy-900 mt-1">Price List — {client.client_name}</h1>
+            <h1 className="text-xl font-display font-bold text-navy-900 mt-1">Price List {year} — {client.client_name}</h1>
             <p className="text-sm text-slate-400 mt-1">{today}</p>
           </div>
 

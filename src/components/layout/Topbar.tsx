@@ -1,39 +1,60 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Zap, AlertCircle, ChevronDown, LogOut, User as UserIcon, KeyRound, Menu } from 'lucide-react'
+import { Bell, Zap, AlertCircle, ChevronDown, LogOut, User as UserIcon, KeyRound, Menu, Languages } from 'lucide-react'
 import { format } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
+import { useTranslation } from 'react-i18next'
+import { useDateLocale } from '@/i18n/dateLocale'
 import { useAuth } from '@/contexts/AuthContext'
 
 // The stub/live route banners are for development builds only.
 const SHOW_DEV_STATUS = import.meta.env.DEV
 
-const TITLES: Record<string, string> = {
-  '/':                'Dashboard',
-  '/clients':         'Clients',
-  '/orders':          'Orders',
-  '/items':           'Order Items',
-  '/invoice':     'Invoice',
-  '/delivery':        'Delivery',
-  '/delivery-orders': 'Delivery Orders',
-  '/surat-jalan':     'Surat Jalan',
-  '/production':      'Production',
-  '/suppliers':       'Suppliers',
-  '/operations':      'Operations',
-  '/finance':         'Finance',
-  '/admin/users':     'Users',
+const TITLE_KEYS: Record<string, string> = {
+  '/':                'topbar.titles.dashboard',
+  '/clients':         'topbar.titles.clients',
+  '/orders':          'topbar.titles.orders',
+  '/items':           'topbar.titles.items',
+  '/invoice':     'topbar.titles.invoice',
+  '/delivery':        'topbar.titles.delivery',
+  '/delivery-orders': 'topbar.titles.deliveryOrders',
+  '/surat-jalan':     'topbar.titles.suratJalan',
+  '/production':      'topbar.titles.production',
+  '/suppliers':       'topbar.titles.suppliers',
+  '/operations':      'topbar.titles.operations',
+  '/finance':         'topbar.titles.finance',
+  '/admin/users':     'topbar.titles.users',
 }
 
-// Longest matching prefix, so detail routes (/orders/:id) get their section's title.
-function titleFor(pathname: string): string {
+// Longest matching prefix, so detail routes (/orders/:id) get their section's title key.
+function titleKeyFor(pathname: string): string | null {
   let best: string | null = null
-  for (const path of Object.keys(TITLES)) {
+  for (const path of Object.keys(TITLE_KEYS)) {
     if ((pathname === path || pathname.startsWith(`${path}/`)) && (best === null || path.length > best.length)) {
       best = path
     }
   }
-  return best ? TITLES[best] : 'KMA'
+  return best ? TITLE_KEYS[best] : null
+}
+
+// A toggle button showing the OTHER language — click "ID" to switch to
+// Bahasa Indonesia, click "EN" to switch back. Persisted via
+// i18next-browser-languagedetector's localStorage cache (see i18n/config.ts).
+function LanguageToggle() {
+  const { i18n, t } = useTranslation()
+  const next = i18n.resolvedLanguage?.startsWith('id') ? 'en' : 'id'
+  const nextLabel = next === 'id' ? t('common.languageIndonesian') : t('common.languageEnglish')
+  return (
+    <button
+      className="btn-ghost !px-2 flex items-center gap-1"
+      onClick={() => i18n.changeLanguage(next)}
+      title={t('common.switchToLanguage', { language: nextLabel })}
+    >
+      <Languages className="w-4 h-4" />
+      <span className="hidden sm:inline text-xs font-semibold">{next.toUpperCase()}</span>
+    </button>
+  )
 }
 
 // Routes that are fully wired to real DB handlers in main.go
@@ -47,6 +68,7 @@ const STUB_ROUTES = new Set()
 function AccountMenu() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -100,14 +122,14 @@ function AccountMenu() {
             className="w-full flex items-center gap-2 px-3.5 py-2 text-sm text-navy-700 hover:bg-slate-50 transition-colors"
           >
             <KeyRound className="w-4 h-4" />
-            Change password
+            {t('topbar.changePassword')}
           </button>
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-2 px-3.5 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
           >
             <LogOut className="w-4 h-4" />
-            Log out
+            {t('topbar.logOut')}
           </button>
         </div>
       )}
@@ -117,7 +139,10 @@ function AccountMenu() {
 
 export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { pathname } = useLocation()
-  const title = titleFor(pathname)
+  const { t } = useTranslation()
+  const dateLocale = useDateLocale()
+  const titleKey = titleKeyFor(pathname)
+  const title = titleKey ? t(titleKey) : t('common.appName')
 
   // The unauthenticated health endpoint: is the backend up at all.
   const { data: isUp } = useQuery({
@@ -137,15 +162,15 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           {/* Opens the Sidebar's mobile drawer — md:hidden because the
               sidebar is permanently visible from that breakpoint up, where
               this button would have nothing to do. */}
-          <button onClick={onMenuClick} className="md:hidden btn-ghost !px-2 shrink-0" title="Open menu">
+          <button onClick={onMenuClick} className="md:hidden btn-ghost !px-2 shrink-0" title={t('topbar.openMenu')}>
             <Menu className="w-4 h-4" />
           </button>
           <div className="min-w-0">
             <h2 className="font-display font-semibold text-navy-900 text-base truncate">{title}</h2>
             <p className="text-slate-400 text-xs font-mono truncate">
               {/* Short on phones, where the full date was cut off. */}
-              <span className="sm:hidden">{format(new Date(), 'EEE, d MMM yyyy')}</span>
-              <span className="hidden sm:inline">{format(new Date(), 'EEEE, d MMMM yyyy')}</span>
+              <span className="sm:hidden">{format(new Date(), 'EEE, d MMM yyyy', { locale: dateLocale })}</span>
+              <span className="hidden sm:inline">{format(new Date(), 'EEEE, d MMMM yyyy', { locale: dateLocale })}</span>
             </p>
           </div>
         </div>
@@ -161,9 +186,11 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
               isUp === false ? 'bg-red-500' : 'bg-slate-400'
             }`} />
             <span className="hidden sm:inline">
-              {isUp === true ? 'Backend live' : isUp === false ? 'Backend offline' : 'Connecting…'}
+              {isUp === true ? t('topbar.backendLive') : isUp === false ? t('topbar.backendOffline') : t('topbar.connecting')}
             </span>
           </div>
+
+          <LanguageToggle />
 
           <button className="btn-ghost !px-2">
             <Bell className="w-4 h-4" />

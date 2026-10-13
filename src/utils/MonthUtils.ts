@@ -1,3 +1,5 @@
+import i18n from '@/i18n/config'
+
 export function isInMonth(dateStr: string | null | undefined, year: number, month: number): boolean {
   if (!dateStr) return false
   const d = new Date(dateStr)
@@ -15,8 +17,13 @@ export function isInYear(dateStr: string | null | undefined, year: number): bool
   return d.getFullYear() === year
 }
 
+// Reads the language straight off the i18next singleton rather than taking
+// a param — every call site is inside a component that already renders
+// through useTranslation() for its own strings, so it re-renders (and this
+// re-evaluates) whenever the language toggle changes, with no extra wiring.
 export function monthLabel(year: number, month: number): string {
-  return new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const locale = i18n.resolvedLanguage?.startsWith('id') ? 'id-ID' : 'en-US'
+  return new Date(year, month, 1).toLocaleDateString(locale, { month: 'long', year: 'numeric' })
 }
 
 /** Short 3-letter month name for chart axis labels, e.g. "Jan". Separate

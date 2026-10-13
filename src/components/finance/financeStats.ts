@@ -1,11 +1,17 @@
-import type { Client, Invoice, Item, Order } from '@/types'
+import type { Budget, BuktiKasRow, Client, Invoice, Item, Order } from '@/types'
 import { invoiceAmount } from '@/utils/invoiceAmount'
 import { inPeriod, type LedgerRow, type Period } from './ledgerModel'
 
 // The numbers on the Finance page. Money earned is what's invoiced (see
 // invoiceAmount), counted in the
 // month it's dated; money spent is every Kas Bon line, on its Kas Bon's date.
-// Cash in is an invoice once paid, on the day it was paid.
+// Cash in is an invoice once paid (on the day it was paid), plus every
+// Bukti Kas line (on its Bukti Kas's date) — cash can come in either as a
+// reconciled invoice payment or as its own voucher, and both count the
+// same way here. `buktiKas` defaults to [] rather than being required:
+// every caller below already passes it, but keeping it optional means a
+// future caller that doesn't have Bukti Kas data to hand yet degrades to
+// "just invoices" instead of a hard type error.
 
 export { invoiceAmount }
 
@@ -24,7 +30,7 @@ export interface MonthStat {
   cashIn: number
 }
 
-export function monthly(year: number, invoices: Invoice[], costs: LedgerRow[]): MonthStat[] {
+export function monthly(year: number, invoices: Invoice[], costs: LedgerRow[], buktiKas: BuktiKasRow[] = []): MonthStat[] {
   const rows: MonthStat[] = Array.from({ length: 12 }, (_, month) => ({ month, invoiced: 0, production: 0, operation: 0, cost: 0, profit: 0, cashIn: 0 }))
   const monthOf = (d: string) => (d.slice(0, 4) === String(year) ? Number(d.slice(5, 7)) - 1 : -1)
   for (const inv of invoices) {
@@ -32,6 +38,10 @@ export function monthly(year: number, invoices: Invoice[], costs: LedgerRow[]): 
     if (m >= 0) rows[m].invoiced += invoiceAmount(inv)
     const p = isPaid(inv) ? monthOf(paidOn(inv)) : -1
     if (p >= 0) rows[p].cashIn += invoiceAmount(inv)
+  }
+  for (const b of buktiKas) {
+    const m = monthOf(day(b.date))
+    if (m >= 0) rows[m].cashIn += b.price
   }
   for (const c of costs) {
     const m = monthOf(day(c.date))
@@ -47,12 +57,13 @@ export function monthly(year: number, invoices: Invoice[], costs: LedgerRow[]): 
 
 export interface Totals { invoiced: number; cost: number; production: number; operation: number; cashIn: number; profit: number }
 
-export function totals(period: Period, invoices: Invoice[], costs: LedgerRow[]): Totals {
+export function totals(period: Period, invoices: Invoice[], costs: LedgerRow[], buktiKas: BuktiKasRow[] = []): Totals {
   const t: Totals = { invoiced: 0, cost: 0, production: 0, operation: 0, cashIn: 0, profit: 0 }
   for (const inv of invoices) {
     if (inPeriod(day(inv.tanggal), period)) t.invoiced += invoiceAmount(inv)
     if (isPaid(inv) && inPeriod(paidOn(inv), period)) t.cashIn += invoiceAmount(inv)
   }
+  for (const b of buktiKas) if (inPeriod(day(b.date), period)) t.cashIn += b.price
   for (const c of costs) if (inPeriod(c.date, period)) t[c.kind] += c.total
   t.cost = t.production + t.operation
   t.profit = t.invoiced - t.cost
@@ -67,7 +78,7 @@ const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 
 /** Buckets covering the period: weeks (from Monday) for a month or a short
  *  range, months otherwise. */
-export function cashFlow(period: Period, invoices: Invoice[], costs: LedgerRow[], allDates: string[]): FlowBucket[] {
+export function cashFlow(period: Period, invoices: Invoice[], costs: LedgerRow[], allDates: string[], buktiKas: BuktiKasRow[] = []): FlowBucket[] {
   let from: Date, to: Date
   if (period.mode === 'month') { from = new Date(period.year, period.month, 1); to = new Date(period.year, period.month + 1, 0) }
   else if (period.mode === 'year') { from = new Date(period.year, 0, 1); to = new Date(period.year, 11, 31) }
@@ -99,6 +110,7 @@ export function cashFlow(period: Period, invoices: Invoice[], costs: LedgerRow[]
     return hit
   }
   for (const inv of invoices) if (isPaid(inv)) { const b = find(paidOn(inv)); if (b) b.cashIn += invoiceAmount(inv) }
+  for (const bk of buktiKas) { const b = find(day(bk.date)); if (b) b.cashIn += bk.price }
   for (const c of costs) { const b = find(day(c.date)); if (b) b.cashOut += c.total }
   return buckets
 }
@@ -185,3 +197,23 @@ export function clientStats(stats: OrderStat[], open: Receivable[], orders: Orde
   }
   return [...by.values()].sort((a, b) => b.value - a.value)
 }
+
+// ── Budgets ──────────────────────────────────────────────────────────────────
+
+export interface BudgetUse { budget: Budget; label: string; spent: number; share: number }
+
+/** Each budget against what was spent in the month `key` ("2026-10"). */
+export function budgetUsage(budgets: Budget[], costs: LedgerRow[], key: string): BudgetUse[] {
+  const spent = { production: 0, operation: 0, byCategory: new Map<string, number>() }
+  for (const c of costs) {
+    if (c.date.slice(0, 7) !== key) continue
+    spent[c.kind] += c.total
+    if (c.kind === 'operation') spent.byCategory.set(c.category, (spent.byCategory.get(c.category) ?? 0) + c.total)
+  }
+  return budgets.map(b => {
+    const s = b.category ? spent.byCategory.get(b.category) ?? 0 : spent[b.scope]
+    return { budget: b, label: b.category || (b.scope === 'production' ? 'All production' : 'All operations'), spent: s, share: b.amount ? s / b.amount : 0 }
+  }).sort((a, b) => Number(!!a.budget.category) - Number(!!b.budget.category) || b.share - a.share)
+}
+
+export const monthKey = (year: number, month: number) => `${year}-${String(month + 1).padStart(2, '0')}`

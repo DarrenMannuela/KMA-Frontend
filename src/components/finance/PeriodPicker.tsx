@@ -1,20 +1,26 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { monthLabel } from '@/utils/MonthUtils'
+import i18n from '@/i18n/config'
 import type { Period, PeriodMode } from './ledgerModel'
 
-const MODES: { mode: PeriodMode; label: string }[] = [
-  { mode: 'month', label: 'Month' },
-  { mode: 'year', label: 'Year' },
-  { mode: 'all', label: 'All' },
-  { mode: 'range', label: 'Dates' },
+const MODE_KEYS: { mode: PeriodMode; labelKey: string }[] = [
+  { mode: 'month', labelKey: 'finance.periodPicker.month' },
+  { mode: 'year', labelKey: 'finance.periodPicker.year' },
+  { mode: 'all', labelKey: 'finance.periodPicker.all' },
+  { mode: 'range', labelKey: 'finance.periodPicker.dates' },
 ]
 
+// Not a component — called from render bodies and from export helpers
+// (Excel/print filenames) alike, so it reads the i18next singleton directly
+// rather than taking a locale param. See monthLabel's comment in
+// MonthUtils.ts for why that's safe here too.
 export function periodLabel(p: Period): string {
   switch (p.mode) {
     case 'month': return monthLabel(p.year, p.month)
     case 'year': return String(p.year)
     case 'range': return `${p.from || '…'} – ${p.to || '…'}`
-    default: return 'All time'
+    default: return i18n.t('finance.periodPicker.allTime')
   }
 }
 
@@ -38,6 +44,7 @@ export function PeriodPicker({ value, onChange, modes = ['month', 'year', 'all',
   onChange: (p: Period) => void
   modes?: PeriodMode[]
 }) {
+  const { t } = useTranslation()
   const step = (delta: number) => {
     if (value.mode === 'month') {
       const d = new Date(value.year, value.month + delta, 1)
@@ -48,8 +55,8 @@ export function PeriodPicker({ value, onChange, modes = ['month', 'year', 'all',
   }
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="inline-flex rounded-lg bg-slate-100 p-0.5" role="tablist" aria-label="Period">
-        {MODES.filter(m => modes.includes(m.mode)).map(m => (
+      <div className="inline-flex rounded-lg bg-slate-100 p-0.5" role="tablist" aria-label={t('finance.periodPicker.periodLabel')}>
+        {MODE_KEYS.filter(m => modes.includes(m.mode)).map(m => (
           <button
             key={m.mode}
             role="tab"
@@ -57,26 +64,26 @@ export function PeriodPicker({ value, onChange, modes = ['month', 'year', 'all',
             onClick={() => onChange({ ...value, mode: m.mode })}
             className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${value.mode === m.mode ? 'bg-white text-navy-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            {m.label}
+            {t(m.labelKey)}
           </button>
         ))}
       </div>
       {(value.mode === 'month' || value.mode === 'year') && (
         <div className="flex items-center">
-          <button onClick={() => step(-1)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500" aria-label="Previous">
+          <button onClick={() => step(-1)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500" aria-label={t('finance.periodPicker.previous')}>
             <ChevronLeft size={16} />
           </button>
           <span className="text-sm font-semibold text-slate-700 min-w-[7.5rem] text-center tabular-nums">{periodLabel(value)}</span>
-          <button onClick={() => step(1)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500" aria-label="Next">
+          <button onClick={() => step(1)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500" aria-label={t('finance.periodPicker.next')}>
             <ChevronRight size={16} />
           </button>
         </div>
       )}
       {value.mode === 'range' && (
         <div className="flex items-center gap-1.5">
-          <input type="date" className="field !py-1 !w-auto text-xs" value={value.from} onChange={e => onChange({ ...value, from: e.target.value })} aria-label="From" />
-          <span className="text-slate-400 text-xs">to</span>
-          <input type="date" className="field !py-1 !w-auto text-xs" value={value.to} onChange={e => onChange({ ...value, to: e.target.value })} aria-label="To" />
+          <input type="date" className="field !py-1 !w-auto text-xs" value={value.from} onChange={e => onChange({ ...value, from: e.target.value })} aria-label={t('finance.periodPicker.from')} />
+          <span className="text-slate-400 text-xs">{t('finance.periodPicker.to')}</span>
+          <input type="date" className="field !py-1 !w-auto text-xs" value={value.to} onChange={e => onChange({ ...value, to: e.target.value })} aria-label={t('finance.periodPicker.toDate')} />
         </div>
       )}
     </div>

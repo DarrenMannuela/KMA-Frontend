@@ -3,15 +3,19 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Plus, FileText, Copy, Pencil, Building2, PackageSearch, ChevronDown, ChevronRight } from 'lucide-react'
 import { format } from 'date-fns'
+import { useTranslation } from 'react-i18next'
 import { ConfirmDialog, FormField, formatRp, UppercaseField } from '@/components/ui'
+import { LoadingState, ErrorState } from '@/components/ui/Page'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { orderHooks, itemHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
 import { itemsApi, invoicesApi } from '@/api'
+import { useDateLocale } from '@/i18n/dateLocale'
 import type { Item, CreateItemRequest } from '@/types'
 import { GenerateInvoiceForm } from './GenerateInvoiceForm'
 import { Modal } from '@/components/ui/Modal'
 import { OrderCosts } from '@/components/finance/OrderCosts'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
+import { priceForYear } from '@/utils/PriceHistory'
 
 // Keeps the caret in place while thousands separators come and go, by
 // restoring how many digits are to its left.
@@ -45,16 +49,19 @@ function useFormattedNumberField(value: number, onValueChange: (n: number) => vo
 function ItemForm({
   orderId,
   clientId,
+  orderYear,
   editing,
   prefill,
   onClose,
 }: {
   orderId: string
   clientId: number | null
+  orderYear: number
   editing: Item | null
   prefill?: Item
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const create = itemHooks.useCreate()
   const update = itemHooks.useUpdate()
 
@@ -63,11 +70,8 @@ function ItemForm({
   const { data: catalogue = [] } = clientItemHooks.useByClient(clientId ?? undefined)
   const { data: pricesGrouped = {} } = clientItemPriceHooks.useGrouped()
 
-  const latestPriceFor = (clientItemId: number) => {
-    const history = pricesGrouped[String(clientItemId)] ?? []
-    if (history.length === 0) return undefined
-    return [...history].sort((a, b) => b.year - a.year)[0].price
-  }
+  // The catalogue price for the order's year, not one already set for next year.
+  const latestPriceFor = (clientItemId: number) => priceForYear(pricesGrouped[String(clientItemId)] ?? [], orderYear)?.price
 
   // The picked catalogue entry, only to keep the select controlled: the fields
   // it fills stay editable.
@@ -121,35 +125,35 @@ function ItemForm({
     <div className="space-y-4">
       {prefill && !editing && (
         <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-700">
-          Duplicated from <span className="font-semibold">{prefill.item_name} ({prefill.size ?? 'no size'})</span> — modify as needed.
+          {t('orders.itemForm.duplicatedFrom', { name: prefill.item_name, size: prefill.size || t('orders.itemForm.noSize') })}
         </div>
       )}
       {catalogue.length > 0 && (
-        <FormField label="Pick from Catalogue (optional)">
+        <FormField label={t('orders.itemForm.pickFromCatalogue')}>
           <div className="relative">
             <PackageSearch size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <select className="field pl-8" value={catalogueItemId} onChange={e => handlePickCatalogueItem(e.target.value)}>
-              <option value="">Type manually instead…</option>
+              <option value="">{t('orders.itemForm.typeManually')}</option>
               {catalogue.map(c => (
                 <option key={c.id} value={c.id}>{c.item_name}{c.size ? ` (${c.size})` : ''}</option>
               ))}
             </select>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Fills in the name, size, and latest catalogue price below — everything stays editable, or just skip this and type the item directly.
+            {t('orders.itemForm.catalogueHint')}
           </p>
         </FormField>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <FormField label="Item Name" required>
-          <UppercaseField className="field" placeholder="e.g. Kemeja Server" value={form.item_name}
+        <FormField label={t('orders.itemForm.itemName')} required>
+          <UppercaseField className="field" placeholder={t('orders.itemForm.itemNamePlaceholder')} value={form.item_name}
             onChange={v => setForm(p => ({ ...p, item_name: v }))} />
         </FormField>
-        <FormField label="Size">
-          <UppercaseField className="field" placeholder="e.g. S, M, L" value={form.size ?? ''}
+        <FormField label={t('orders.itemForm.size')}>
+          <UppercaseField className="field" placeholder={t('orders.itemForm.sizePlaceholder')} value={form.size ?? ''}
             onChange={v => setForm(p => ({ ...p, size: v }))} />
         </FormField>
-        <FormField label="Qty" required>
+        <FormField label={t('orders.itemForm.qty')} required>
           {/* Whole items only; onChange also filters pasted text. */}
           <input
             className="field"
@@ -163,7 +167,7 @@ function ItemForm({
             }}
           />
         </FormField>
-        <FormField label="Unit Price (Rp)" required>
+        <FormField label={t('orders.itemForm.unitPrice')} required>
           <input className="field font-mono" type="text" inputMode="numeric"
             ref={priceField.ref}
             value={priceField.display}
@@ -171,14 +175,14 @@ function ItemForm({
         </FormField>
       </div>
       <div className="bg-slate-50 rounded-lg px-4 py-3 flex justify-between">
-        <span className="text-sm text-slate-500">Subtotal</span>
+        <span className="text-sm text-slate-500">{t('orders.itemForm.subtotal')}</span>
         <span className="font-mono font-semibold">{formatRp(subTotal)}</span>
       </div>
       <div className="flex gap-2">
         <button className="btn-primary" disabled={busy} onClick={handleSubmit}>
-          {busy ? 'Saving…' : editing ? 'Update Item' : 'Add Item'}
+          {busy ? t('common.saving') : editing ? t('orders.itemForm.updateItem') : t('orders.itemForm.addItem')}
         </button>
-        <button className="btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
       </div>
     </div>
   )
@@ -190,6 +194,8 @@ export function OrderDetailPage() {
   const location = useLocation()
   const orderId = decodeURIComponent(id ?? '')
   const isMobile = useIsMobile()
+  const { t } = useTranslation()
+  const dateLocale = useDateLocale()
 
   const { data: order, isLoading: orderLoading, isError: orderError, refetch: refetchOrder } = orderHooks.useGet(orderId)
   const {
@@ -288,36 +294,35 @@ export function OrderDetailPage() {
     setDuplicating(null)
   }
 
-  if (orderLoading || itemsLoading || invoicesLoading) return <div className="p-8 text-slate-400">Loading…</div>
+  if (orderLoading || itemsLoading || invoicesLoading) return <div className="p-4 md:p-6"><LoadingState label={t('orders.detail.loading')} /></div>
   // A failed fetch shows Retry, not "Order not found".
   if (orderError || itemsError || invoicesError) {
     return (
-      <div className="p-8 text-center">
-        <p className="text-red-400 mb-3">Couldn't load this order — check your connection and try again.</p>
-        <button onClick={() => { refetchOrder(); refetchItems(); refetchInvoices() }} className="btn-secondary">Retry</button>
+      <div className="p-4 md:p-6">
+        <ErrorState what={t('orders.detail.errorWhat')} onRetry={() => { refetchOrder(); refetchItems(); refetchInvoices() }} />
       </div>
     )
   }
-  if (!order) return <div className="p-8 text-red-400">Order not found.</div>
+  if (!order) return <div className="p-4 md:p-6"><ErrorState what={t('orders.detail.errorWhat')} /></div>
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate('/orders')} className="btn-secondary flex items-center gap-1">
-          <ArrowLeft size={14} /> Back
+    <div className="p-4 md:p-6 space-y-5">
+      <div className="flex items-center gap-3 fade-up">
+        <button onClick={() => navigate('/orders')} className="btn-secondary !px-2.5 shrink-0" title={t('orders.backToOrders')}>
+          <ArrowLeft size={14} />
         </button>
-        <div>
-          <h1 className="text-xl font-bold text-navy-900">{order.id}</h1>
-          <p className="text-sm text-slate-500">
-            {order.company} · {order.date ? format(new Date(order.date), 'dd MMM yyyy') : '—'}
+        <div className="min-w-0">
+          <h1 className="font-display font-semibold text-navy-900 leading-tight">{order.id}</h1>
+          <p className="text-slate-400 text-xs truncate">
+            {order.company} · {order.date ? format(new Date(order.date), 'dd MMM yyyy', { locale: dateLocale }) : '—'}
             {order.client_id && (
               <>
                 {' · '}
                 <button
-                  className="inline-flex items-center gap-1 text-navy-600 hover:underline"
+                  className="inline-flex items-center gap-1 text-navy-500 hover:underline"
                   onClick={() => navigate(`/clients/${order.client_id}`)}
                 >
-                  <Building2 size={12} /> Client record
+                  <Building2 size={11} /> {t('common.clientRecord')}
                 </button>
               </>
             )}
@@ -328,25 +333,25 @@ export function OrderDetailPage() {
       <div className="card">
         {/* Wraps so the up to four buttons fit at phone width. */}
         <div className="flex items-center justify-between gap-2 p-4 border-b border-slate-100 flex-wrap">
-          <h2 className="font-semibold text-navy-900">Order Items ({orderItems.length})</h2>
+          <h2 className="font-semibold text-navy-900">{t('orders.detail.orderItems', { count: orderItems.length })}</h2>
           <div className="flex items-center gap-2 flex-wrap">
             <button className="btn-primary flex items-center gap-1" onClick={openAdd}>
-              <Plus size={14} /> Add Item
+              <Plus size={14} /> {t('orders.detail.addItem')}
             </button>
             {/* COD is a starting choice that makes a 0% DP invoice; after that there's only
                Update Invoice. */}
             {!dpInvoice && (
               <button className="btn-secondary flex items-center gap-1" onClick={() => setInvoiceFormType('cod')}>
-                <FileText size={14} /> Generate COD Invoice
+                <FileText size={14} /> {t('orders.detail.generateCodInvoice')}
               </button>
             )}
             <button className="btn-secondary flex items-center gap-1" onClick={() => setInvoiceFormType('dp')}>
               <FileText size={14} />
-              {!dpInvoice ? 'Generate DP Invoice' : dpIsFullPayment ? 'Update Invoice' : 'Update DP Invoice'}
+              {!dpInvoice ? t('orders.detail.generateDpInvoice') : dpIsFullPayment ? t('orders.detail.updateInvoice') : t('orders.detail.updateDpInvoice')}
             </button>
             {dpInvoice && !dpIsFullPayment && (
               <button className="btn-secondary flex items-center gap-1" onClick={() => setInvoiceFormType('pelunasan')}>
-                <FileText size={14} /> {pelunasanInvoice ? 'Update Pelunasan Invoice' : 'Generate Pelunasan Invoice'}
+                <FileText size={14} /> {pelunasanInvoice ? t('orders.detail.updatePelunasanInvoice') : t('orders.detail.generatePelunasanInvoice')}
               </button>
             )}
           </div>
@@ -355,12 +360,13 @@ export function OrderDetailPage() {
         {/* On phones the item form opens as a popup instead of pushing the list down. */}
         {showForm && isMobile && (
           <Modal
-            title={editing ? 'Edit Item' : duplicating ? 'Duplicate Item' : 'Add Item'}
+            title={editing ? t('items.formTitleEdit') : duplicating ? t('orders.detail.duplicateItemTitle') : t('orders.detail.addItem')}
             onClose={closeForm}
           >
             <ItemForm
               orderId={orderId}
               clientId={order.client_id}
+              orderYear={order.date ? new Date(order.date).getFullYear() : new Date().getFullYear()}
               editing={editing}
               prefill={duplicating ?? undefined}
               onClose={closeForm}
@@ -372,6 +378,7 @@ export function OrderDetailPage() {
             <ItemForm
               orderId={orderId}
               clientId={order.client_id}
+              orderYear={order.date ? new Date(order.date).getFullYear() : new Date().getFullYear()}
               editing={editing}
               prefill={duplicating ?? undefined}
               onClose={closeForm}
@@ -382,30 +389,30 @@ export function OrderDetailPage() {
         {isMobile ? (
           <div className="max-h-[420px] overflow-y-auto divide-y divide-slate-50">
             {orderItems.length === 0 ? (
-              <p className="text-center text-slate-400 py-8">No items yet — add one above</p>
+              <p className="text-center text-slate-400 py-8">{t('orders.detail.noItemsYetAddOne')}</p>
             ) : itemGroups.map(group => {
               const rowActions = (item: Item) => (
                 <div className="flex items-center gap-3 mt-2" onClick={e => e.stopPropagation()}>
                   <button
                     className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1"
                     onClick={() => openDuplicate(item)}
-                    title="Duplicate item"
+                    title={t('orders.detail.duplicateTooltip')}
                   >
-                    <Copy size={12} /> Copy
+                    <Copy size={12} /> {t('orders.detail.copy')}
                   </button>
                   <button
                     className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1"
                     onClick={() => openEdit(item)}
-                    title="Edit item"
+                    title={t('orders.detail.editTooltip')}
                   >
-                    <Pencil size={12} /> Edit
+                    <Pencil size={12} /> {t('orders.detail.edit')}
                   </button>
                   <button
                     className="text-slate-400 hover:text-red-500 text-xs disabled:opacity-50"
                     onClick={() => setConfirmDeleteItem(item)}
                     disabled={del.isPending}
                   >
-                    Delete
+                    {t('orders.detail.delete')}
                   </button>
                 </div>
               )
@@ -441,12 +448,12 @@ export function OrderDetailPage() {
                     <span className="flex items-center gap-1.5 min-w-0">
                       {expanded ? <ChevronDown size={14} className="text-slate-400 shrink-0" /> : <ChevronRight size={14} className="text-slate-400 shrink-0" />}
                       <span className="font-medium truncate">{group.name}</span>
-                      <span className="text-xs text-slate-400 shrink-0">({group.items.length} sizes)</span>
+                      <span className="text-xs text-slate-400 shrink-0">({t('orders.detail.sizesCount', { count: group.items.length })})</span>
                     </span>
                     <span className="text-right shrink-0">
                       <div className="font-mono font-semibold">{formatRp(groupSubtotal)}</div>
                       <div className="text-xs text-slate-400">
-                        {groupQty} pcs{uniquePrices.size === 1 ? ` · ${formatRp(group.items[0].price)}` : ''}
+                        {t('common.pcs', { count: groupQty })}{uniquePrices.size === 1 ? ` · ${formatRp(group.items[0].price)}` : ''}
                       </div>
                     </span>
                   </button>
@@ -471,17 +478,17 @@ export function OrderDetailPage() {
           <table className="w-full text-sm min-w-[560px]">
             <thead>
               <tr className="text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100 sticky top-0 bg-white z-10">
-                <th className="text-left p-4">Item</th>
-                <th className="text-left p-4">Size</th>
-                <th className="text-right p-4">Qty</th>
-                <th className="text-right p-4">Price</th>
-                <th className="text-right p-4">Subtotal</th>
+                <th className="text-left p-4">{t('orders.detail.item')}</th>
+                <th className="text-left p-4">{t('orders.detail.size')}</th>
+                <th className="text-right p-4">{t('orders.detail.qty')}</th>
+                <th className="text-right p-4">{t('orders.detail.price')}</th>
+                <th className="text-right p-4">{t('orders.detail.subtotal')}</th>
                 <th className="p-4" />
               </tr>
             </thead>
             <tbody>
               {orderItems.length === 0 ? (
-                <tr><td colSpan={6} className="text-center text-slate-400 py-8">No items yet — add one above</td></tr>
+                <tr><td colSpan={6} className="text-center text-slate-400 py-8">{t('orders.detail.noItemsYetAddOne')}</td></tr>
               ) : itemGroups.map(group => {
                 // A single-size item (the common case for one-off items) —
                 // no size variants to collapse, so it's just a plain row,
@@ -500,23 +507,23 @@ export function OrderDetailPage() {
                           <button
                             className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1"
                             onClick={() => openDuplicate(item)}
-                            title="Duplicate item"
+                            title={t('orders.detail.duplicateTooltip')}
                           >
-                            <Copy size={12} /> Copy
+                            <Copy size={12} /> {t('orders.detail.copy')}
                           </button>
                           <button
                             className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1"
                             onClick={() => openEdit(item)}
-                            title="Edit item"
+                            title={t('orders.detail.editTooltip')}
                           >
-                            <Pencil size={12} /> Edit
+                            <Pencil size={12} /> {t('orders.detail.edit')}
                           </button>
                           <button
                             className="text-slate-400 hover:text-red-500 text-xs disabled:opacity-50"
                             onClick={() => setConfirmDeleteItem(item)}
                             disabled={del.isPending}
                           >
-                            Delete
+                            {t('orders.detail.delete')}
                           </button>
                         </div>
                       </td>
@@ -543,7 +550,7 @@ export function OrderDetailPage() {
                           {group.name}
                         </div>
                       </td>
-                      <td className="p-4 text-slate-400 text-xs">{group.items.length} sizes</td>
+                      <td className="p-4 text-slate-400 text-xs">{t('orders.detail.sizesCount', { count: group.items.length })}</td>
                       <td className="p-4 text-right">{groupQty}</td>
                       <td className="p-4 text-right font-mono">{uniquePrices.size === 1 ? formatRp(group.items[0].price) : '—'}</td>
                       <td className="p-4 text-right font-mono font-semibold">{formatRp(groupSubtotal)}</td>
@@ -561,23 +568,23 @@ export function OrderDetailPage() {
                             <button
                               className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1"
                               onClick={() => openDuplicate(item)}
-                              title="Duplicate item"
+                              title={t('orders.detail.duplicateTooltip')}
                             >
-                              <Copy size={12} /> Copy
+                              <Copy size={12} /> {t('orders.detail.copy')}
                             </button>
                             <button
                               className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1"
                               onClick={() => openEdit(item)}
-                              title="Edit item"
+                              title={t('orders.detail.editTooltip')}
                             >
-                              <Pencil size={12} /> Edit
+                              <Pencil size={12} /> {t('orders.detail.edit')}
                             </button>
                             <button
                               className="text-slate-400 hover:text-red-500 text-xs disabled:opacity-50"
                               onClick={() => setConfirmDeleteItem(item)}
                               disabled={del.isPending}
                             >
-                              Delete
+                              {t('orders.detail.delete')}
                             </button>
                           </div>
                         </td>
@@ -592,7 +599,7 @@ export function OrderDetailPage() {
         )}
         {orderItems.length > 0 && (
           <div className="flex items-center justify-between bg-navy-900 text-white p-4">
-            <span className="font-semibold">Total</span>
+            <span className="font-semibold">{t('orders.detail.total')}</span>
             <span className="font-mono font-bold">{formatRp(total)}</span>
           </div>
         )}
@@ -604,10 +611,10 @@ export function OrderDetailPage() {
         <Modal
           title={
             invoiceFormType === 'cod'
-              ? 'Generate COD Invoice'
+              ? t('orders.detail.generateCodInvoice')
               : invoiceFormType === 'dp'
-                ? (!dpInvoice ? 'Generate DP Invoice' : dpIsFullPayment ? 'Update Invoice' : 'Update DP Invoice')
-                : (pelunasanInvoice ? 'Update Pelunasan Invoice' : 'Generate Pelunasan Invoice')
+                ? (!dpInvoice ? t('orders.detail.generateDpInvoice') : dpIsFullPayment ? t('orders.detail.updateInvoice') : t('orders.detail.updateDpInvoice'))
+                : (pelunasanInvoice ? t('orders.detail.updatePelunasanInvoice') : t('orders.detail.generatePelunasanInvoice'))
           }
           onClose={() => setInvoiceFormType(null)}
           size="lg"
@@ -627,7 +634,7 @@ export function OrderDetailPage() {
 
       {confirmDeleteItem && (
         <ConfirmDialog
-          message={`Delete "${confirmDeleteItem.item_name}${confirmDeleteItem.size ? ` (${confirmDeleteItem.size})` : ''}" from this order?`}
+          message={t('orders.detail.deleteConfirm', { name: `${confirmDeleteItem.item_name}${confirmDeleteItem.size ? ` (${confirmDeleteItem.size})` : ''}` })}
           onConfirm={() => { del.mutate(confirmDeleteItem.id); setConfirmDeleteItem(null) }}
           onCancel={() => setConfirmDeleteItem(null)}
         />

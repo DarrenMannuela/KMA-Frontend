@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { clientApi, clientContactApi, clientItemApi, clientItemPriceApi } from '@/api'
-import type { ClientItemPrice } from '@/types'
 import { makeCrudHooks } from './crud'
 
 // Client catalogue items and their yearly prices: plain CRUD. Invalidating
@@ -60,10 +59,4 @@ export const clientItemPriceHooks = {
       queryFn: () => clientItemPriceApi.getByItem(clientItemId as number),
       enabled: clientItemId !== undefined,
     }),
-}
-
-// A client's price history with each item's name and size alongside.
-export interface ClientItemPriceRow extends ClientItemPrice {
-  item_name: string
-  size: string | null
 }

@@ -7,10 +7,12 @@ services:
     restart: unless-stopped
     ports:
       # KMA_WEB_BIND=127.0.0.1 in .env keeps the app off the local
-      # network (Wi-Fi), reachable only from this Mac — and through
-      # `tailscale serve`, which connects from this Mac too. Empty: every
-      # network the Mac is on, as before.
-      - "${KMA_WEB_BIND:-0.0.0.0}:80:80"
+      # network (Wi-Fi), reachable only from this computer, and through
+      # `tailscale serve`, which connects from this computer too. Empty:
+      # every network the computer is on. KMA_WEB_PORT picks the port; use
+      # one above 1023 with 127.0.0.1 (e.g. 8088), since Docker Desktop
+      # can't bind port 80 to one address without its privileged helper.
+      - "${KMA_WEB_BIND:-0.0.0.0}:${KMA_WEB_PORT:-80}:80"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
       interval: 30s

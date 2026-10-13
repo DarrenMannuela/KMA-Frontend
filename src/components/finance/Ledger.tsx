@@ -2,10 +2,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {
-  AlertTriangle, ArrowDown, ArrowUp, ChevronRight, Download, FileUp, Link2, Plus, Search, Trash2, X,
+  ArrowDown, ArrowUp, ChevronRight, Download, FileUp, Link2, Plus, Search, Trash2, X,
   ArrowRightLeft, Tag, Copy, CheckSquare,
 } from 'lucide-react'
-import { EditableCell, formatRp, Spinner } from '@/components/ui'
+import type { LucideIcon } from 'lucide-react'
+import { EditableCell, formatRp } from '@/components/ui'
+import { PageHeader, LoadingState, ErrorState } from '@/components/ui/Page'
 import { ConfirmDialog } from '@/components/ui'
 import {
   productionHooks, operationHooks, supplierHooks, orderHooks, useFinanceHeaders, useFinanceBatch, undoLast, useBudgets,
@@ -28,6 +30,7 @@ import { MoveDialog, SetFieldDialog, LineEditor } from './LedgerDialogs'
 import { ledgerSheet, exportLedger } from './ledgerExport'
 import { guessColumns, readRows } from './columnGuess'
 import type { Grid } from '@/utils/tableText'
+import { isTyping } from '@/utils/isTyping'
 
 export type GroupBy = 'kasbon' | 'group' | 'order' | 'none'
 type SortKey = 'header_id' | 'date' | 'name' | 'group' | 'qty' | 'price' | 'total' | 'order_id'
@@ -61,19 +64,14 @@ function loadPrefs(kind: Kind): Partial<LedgerFilters> {
   }
 }
 
-const isTyping = (el: EventTarget | null) =>
-  el instanceof HTMLElement && (el.isContentEditable || ['TEXTAREA', 'SELECT'].includes(el.tagName) ||
-    (el instanceof HTMLInputElement && !['checkbox', 'radio', 'button'].includes(el.type)))
-
 /** The Production or Operations spreadsheet: every Kas Bon line, searchable
  *  across months, editable in place, with bulk changes, paste from Excel,
  *  import/export and undo. */
-export function Ledger({ kind, initial, title, icon, onBack }: {
+export function Ledger({ kind, initial, title, icon }: {
   kind: Kind
   initial?: Partial<LedgerFilters>
   title: string
-  icon: React.ReactNode
-  onBack?: () => void
+  icon: LucideIcon
 }) {
   const isMobile = useIsMobile()
   const qc = useQueryClient()
@@ -132,19 +130,28 @@ export function Ledger({ kind, initial, title, icon, onBack }: {
 
   // ── Filtering ──────────────────────────────────────────────────────────────
   const texts = useMemo(() => new Map(allRows.map(r => [r.id, searchText(r, suppliers, orders)])), [allRows, suppliers, orders])
-  const passes = useCallback((r: LedgerRow, period: Period) => {
+  const groupOf = useCallback((r: LedgerRow) => (kind === 'production' ? String(r.supplier_id) : r.category), [kind])
+  const passesBase = useCallback((r: LedgerRow, period: Period) => {
     if (!inPeriod(r.date, period)) return false
-    if (filters.group && (kind === 'production' ? String(r.supplier_id) : r.category) !== filters.group) return false
     if (filters.order === 'none' && r.order_id) return false
     if (filters.order === 'linked' && !r.order_id) return false
     if (!['any', 'none', 'linked'].includes(filters.order) && r.order_id !== filters.order) return false
     return !filters.q || matchesSearch(texts.get(r.id) ?? '', filters.q)
-  }, [filters, kind, texts])
+  }, [filters, texts])
+  const passes = useCallback((r: LedgerRow, period: Period) =>
+    passesBase(r, period) && (!filters.group || groupOf(r) === filters.group), [passesBase, filters.group, groupOf])
 
   // A search looks through every month; the period still applies otherwise.
   const searching = !!filters.q.trim() && filters.period.mode === 'month'
   const searchPeriod = useMemo<Period>(() => (searching ? { ...filters.period, mode: 'all' } : filters.period), [searching, filters.period])
   const visible = useMemo(() => allRows.filter(r => passes(r, searchPeriod)), [allRows, passes, searchPeriod])
+  // Spend per supplier (or category) for everything else in the filters, to
+  // pick one from.
+  const groupTotals = useMemo(() => {
+    const sums = new Map<string, number>()
+    for (const r of allRows) if (passesBase(r, searchPeriod)) sums.set(groupOf(r), (sums.get(groupOf(r)) ?? 0) + r.total)
+    return [...sums.entries()].sort((a, b) => b[1] - a[1])
+  }, [allRows, passesBase, searchPeriod, groupOf])
   const prev = useMemo(() => previousPeriod(searchPeriod), [searchPeriod])
   // While a month is still running, compare it with the same days of the
   // month before (1–6 Oct against 1–6 Sep), not the whole of it.
@@ -393,16 +400,8 @@ export function Ledger({ kind, initial, title, icon, onBack }: {
   const sortBy = (key?: SortKey) => key && setSort(s => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'date' || key === 'total' || key === 'price' ? 'desc' : 'asc' }))
 
   // ── Rendering ──────────────────────────────────────────────────────────────
-  if (source.isLoading) return <Spinner />
-  if (source.isError) {
-    return (
-      <div className="p-8 text-center">
-        <AlertTriangle className="w-8 h-8 text-red-300 mx-auto mb-3" />
-        <p className="text-red-400 mb-3">Couldn't load the {kind} lines. Check the connection and try again.</p>
-        <button onClick={() => source.refetch()} className="btn-secondary">Retry</button>
-      </div>
-    )
-  }
+  if (source.isLoading) return <LoadingState label={`Loading the ${kind} lines…`} />
+  if (source.isError) return <div className="p-4 md:p-6"><div className="card"><ErrorState what={`the ${kind} lines`} onRetry={() => source.refetch()} /></div></div>
 
   const groupHeader = (key: string, rows: LedgerRow[]) => {
     const sum = rows.reduce((n, r) => n + r.total, 0)
@@ -438,24 +437,21 @@ export function Ledger({ kind, initial, title, icon, onBack }: {
 
   return (
     <div className="p-4 md:p-6 space-y-4" onPaste={onPaste}>
-      {/* Title and actions */}
-      <div className="flex flex-wrap items-center gap-3">
-        {onBack && (
-          <button onClick={onBack} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500" title="Back to dashboard">
-            <ChevronRight size={18} className="rotate-180" />
-          </button>
-        )}
-        {icon}
-        <h2 className="text-lg font-semibold text-slate-800">{title}</h2>
-        <div className="ml-auto flex items-center gap-2">
-          <button className="btn-secondary btn-sm" onClick={() => setImportGrid(null)} title="Import from Excel or CSV"><FileUp size={14} /><span className="hidden sm:inline">Import</span></button>
-          <button className="btn-secondary btn-sm" onClick={() => exportRows(sorted)} disabled={!visible.length} title="Download what's shown as Excel"><Download size={14} /><span className="hidden sm:inline">Export</span></button>
-          <button className="btn-primary btn-sm" onClick={() => setForm({})} title="New Kas Bon (N)"><Plus size={14} /> New Kas Bon</button>
-        </div>
-      </div>
+      <PageHeader
+        icon={icon}
+        title={title}
+        subtitle={kind === 'production' ? 'Bahan bought, Kas Bon by Kas Bon' : 'Running costs, Kas Bon by Kas Bon'}
+        actions={
+          <>
+            <button className="btn-secondary btn-sm" onClick={() => setImportGrid(null)} title="Import from Excel or CSV"><FileUp size={14} /><span className="hidden sm:inline">Import</span></button>
+            <button className="btn-secondary btn-sm" onClick={() => exportRows(sorted)} disabled={!visible.length} title="Download what's shown as Excel"><Download size={14} /><span className="hidden sm:inline">Export</span></button>
+            <button className="btn-primary btn-sm" onClick={() => setForm({})} title="New Kas Bon (N)"><Plus size={14} /> New Kas Bon</button>
+          </>
+        }
+      />
 
       {/* Filters */}
-      <div className="card p-3 flex flex-wrap items-center gap-2">
+      <div className="card p-3.5 flex flex-wrap items-center gap-2.5">
         <div className="relative flex-1 min-w-[12rem]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -487,25 +483,53 @@ export function Ledger({ kind, initial, title, icon, onBack }: {
         </select>
       </div>
 
-      {/* Summary */}
-      <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 px-1">
-        <span className="text-2xl font-semibold text-navy-900 font-mono tabular-nums">{formatRp(total)}</span>
-        <span className="text-sm text-slate-500">
-          {visible.length} line{visible.length === 1 ? '' : 's'} · {kasBonCount} Kas Bon · {searching ? 'all months' : periodLabel(searchPeriod)}
-        </span>
-        {change != null && Number.isFinite(change) && (
-          <span className={`text-xs font-medium ${change > 0 ? 'text-red-600' : 'text-green-600'}`}>
-            {change > 0 ? '▲' : '▼'} {Math.abs(change)}% vs {prevName}
+      {/* Summary: the total, how it compares, and where it went */}
+      <div className="card p-4 space-y-3">
+        <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
+          <span className="text-2xl font-semibold text-navy-900 font-mono tabular-nums">{formatRp(total)}</span>
+          <span className="text-sm text-slate-500">
+            {visible.length} line{visible.length === 1 ? '' : 's'} · {kasBonCount} Kas Bon · {searching ? 'all months' : periodLabel(searchPeriod)}
           </span>
-        )}
-        {budget != null && (
-          <span className="flex items-center gap-2 text-xs text-slate-500 min-w-[14rem]">
-            Budget {formatRp(budget)}
-            <span className="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden">
-              <span className={`block h-full rounded-full ${total > budget ? 'bg-red-500' : total > budget * 0.8 ? 'bg-amber-400' : 'bg-green-500'}`} style={{ width: `${Math.min(100, (total / budget) * 100)}%` }} />
+          {change != null && Number.isFinite(change) && (
+            <span className={`text-xs font-medium ${change > 0 ? 'text-red-600' : 'text-green-600'}`}>
+              {change > 0 ? '▲' : '▼'} {Math.abs(change)}% vs {prevName}
             </span>
-            <span className={total > budget ? 'text-red-600 font-medium' : ''}>{Math.round((total / budget) * 100)}%</span>
-          </span>
+          )}
+          {budget != null && (
+            <span className="flex items-center gap-2 text-xs text-slate-500 min-w-[14rem] ml-auto">
+              Budget {formatRp(budget)}
+              <span className="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden">
+                <span className={`block h-full rounded-full ${total > budget ? 'bg-red-500' : total > budget * 0.8 ? 'bg-amber-400' : 'bg-green-500'}`} style={{ width: `${Math.min(100, (total / budget) * 100)}%` }} />
+              </span>
+              <span className={total > budget ? 'text-red-600 font-medium' : ''}>{Math.round((total / budget) * 100)}%</span>
+            </span>
+          )}
+        </div>
+        {groupTotals.length > 1 && (
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-2">
+            {groupTotals.slice(0, 12).map(([key, sum]) => {
+              const on = filters.group === key
+              const max = groupTotals[0][1] || 1
+              const s = kind === 'production' ? suppliers.find(x => x.id === Number(key)) : undefined
+              return (
+                <button
+                  key={key || 'none'}
+                  onClick={() => setFilter('group', on ? '' : key)}
+                  className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${on ? 'border-navy-900 bg-navy-50' : 'border-transparent hover:border-slate-200 hover:bg-slate-50'}`}
+                  title={on ? 'Show all again' : `Only ${kind === 'production' ? 'this supplier' : 'this category'}`}
+                >
+                  <span className="flex items-center gap-1.5 text-xs text-slate-600 truncate">
+                    {s && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: CATEGORY_COLORS[s.supplier_category] }} />}
+                    <span className="truncate">{kind === 'production' ? supplierLabel(suppliers, Number(key)) : key || 'Uncategorized'}</span>
+                  </span>
+                  <span className="block font-mono text-sm tabular-nums text-navy-900">{formatRp(sum)}</span>
+                  <span className="block h-1 mt-1 rounded-full bg-slate-100 overflow-hidden">
+                    <span className="block h-full rounded-full bg-navy-500" style={{ width: `${(sum / max) * 100}%` }} />
+                  </span>
+                </button>
+              )
+            })}
+          </div>
         )}
       </div>
 
@@ -562,10 +586,16 @@ export function Ledger({ kind, initial, title, icon, onBack }: {
       ) : (
         <div className="card overflow-hidden">
           <div className="overflow-auto max-h-[70vh]">
-            <table className="w-full text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
+            <table className="min-w-full text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
               <colgroup>
                 <col style={{ width: '2.25rem' }} />
-                {columns.map(c => <col key={c.key} style={c.width === 'auto' ? undefined : { width: c.width }} />)}
+                {/* 'auto' (Bahan/Item) gets a floor, not left unconstrained: with
+                    table-layout:fixed and the table only min-width:100% (not a
+                    hard 100%), an unconstrained column can still collapse to ~0
+                    when the fixed columns alone already fill the container —
+                    its header text then overflows into the next column instead
+                    of the table just growing wider and scrolling. */}
+                {columns.map(c => <col key={c.key} style={c.width === 'auto' ? { minWidth: '12rem' } : { width: c.width }} />)}
                 <col style={{ width: '2.25rem' }} />
               </colgroup>
               <thead className="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_#f1f5f9]">
@@ -574,7 +604,7 @@ export function Ledger({ kind, initial, title, icon, onBack }: {
                     <input type="checkbox" aria-label="Select everything shown" checked={allVisibleSelected} onChange={e => setMany(visible, e.target.checked)} />
                   </th>
                   {columns.map(c => (
-                    <th key={c.key} className={`px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 ${c.align === 'right' ? 'text-right' : 'text-left'}`}>
+                    <th key={c.key} className={`px-2 py-2.5 overflow-hidden whitespace-nowrap text-ellipsis text-[11px] font-semibold uppercase tracking-wider text-slate-400 ${c.align === 'right' ? 'text-right' : 'text-left'}`}>
                       {c.sortKey ? (
                         <button className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-slate-700 ${sort.key === c.sortKey ? 'text-navy-700' : ''}`} onClick={() => sortBy(c.sortKey)}>
                           {c.header}
@@ -593,11 +623,14 @@ export function Ledger({ kind, initial, title, icon, onBack }: {
                   return (
                     <React.Fragment key={group.key || 'all'}>
                       {filters.groupBy !== 'none' && (
-                        <tr className="bg-slate-50/90 border-y border-slate-100 group/gh">
-                          <td className="px-2 py-2">
-                            <input type="checkbox" aria-label="Select this group" checked={allIn} onChange={e => setMany(group.rows, e.target.checked)} />
+                        <tr className="bg-slate-50/60 border-b border-slate-100 group/gh">
+                          <td className="px-2 py-2.5">
+                            <input
+                              type="checkbox" aria-label="Select this group" checked={allIn} onChange={e => setMany(group.rows, e.target.checked)}
+                              className={`block transition-opacity ${allIn ? '' : 'opacity-0 group-hover/gh:opacity-100 focus:opacity-100'}`}
+                            />
                           </td>
-                          <td colSpan={columns.length} className="px-2 py-2">
+                          <td colSpan={columns.length} className="px-2 py-2.5">
                             <div className="flex items-center gap-2.5 text-sm min-w-0">
                               <button onClick={() => setCollapsed(c => { const n = new Set(c); n.has(group.key) ? n.delete(group.key) : n.add(group.key); return n })} className="text-slate-400 hover:text-slate-700" aria-label={isCollapsed ? 'Expand' : 'Collapse'}>
                                 <ChevronRight size={14} className={`transition-transform ${isCollapsed ? '' : 'rotate-90'}`} />
@@ -616,11 +649,14 @@ export function Ledger({ kind, initial, title, icon, onBack }: {
                       )}
                       {rows.map(r => (
                         <tr key={r.id} className={`border-b border-slate-50 group ${selected.has(r.id) ? 'bg-navy-50/70' : 'hover:bg-slate-50/60'}`}>
-                          <td className="px-2 py-1">
-                            <input type="checkbox" aria-label="Select line" checked={selected.has(r.id)} onChange={() => undefined} onClick={e => toggle(r.id, e.shiftKey)} />
+                          <td className="px-2 py-1.5">
+                            <input
+                              type="checkbox" aria-label="Select line" checked={selected.has(r.id)} onChange={() => undefined} onClick={e => toggle(r.id, e.shiftKey)}
+                              className={`block transition-opacity ${selected.has(r.id) ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
+                            />
                           </td>
                           {columns.map((c, ci) => (
-                            <td key={c.key} className={`px-1 py-0.5 truncate ${c.align === 'right' ? 'text-right' : ''}`}>
+                            <td key={c.key} className={`px-1 py-1 truncate ${c.align === 'right' ? 'text-right' : ''}`}>
                               {c.field ? (
                                 <EditableCell
                                   value={c.value(r)}
