@@ -25,7 +25,8 @@ export function PageHeader({ icon: Icon, title, subtitle, actions }: {
 }
 
 /** A white card, optionally with a title row (and actions on its right). */
-export function Card({ title, icon: Icon, actions, children, className = '', bodyClassName = 'p-5' }: {
+export function Card({ id, title, icon: Icon, actions, children, className = '', bodyClassName = 'p-5' }: {
+  id?: string
   title?: ReactNode
   icon?: LucideIcon
   actions?: ReactNode
@@ -34,7 +35,7 @@ export function Card({ title, icon: Icon, actions, children, className = '', bod
   bodyClassName?: string
 }) {
   return (
-    <section className={`card ${className}`}>
+    <section id={id} className={`card ${className}`}>
       {(title || actions) && (
         <div className="flex flex-wrap items-center gap-2 px-5 pt-4">
           {Icon && <Icon className="w-4 h-4 text-navy-500" />}

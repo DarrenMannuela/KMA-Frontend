@@ -324,7 +324,7 @@ function DeliverySlipContent({
       ) : (
         <>
           <div style={{ fontWeight: 'bold', textDecoration: 'underline', marginBottom: '5px', fontSize: '11px' }}>ITEMS</div>
-          <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '10.5px' }}>
+          <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '10.5px', listStyleType: 'disc' }}>
             {items.map(item => (
               <li key={item.id} style={{ marginBottom: '3px' }}>
                 {item.item_name}{item.amount > 1 ? ` (${item.amount})` : ''}

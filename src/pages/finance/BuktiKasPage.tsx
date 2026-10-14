@@ -6,7 +6,7 @@ import { PageHeader, LoadingState, ErrorState } from '@/components/ui/Page'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { buktiKasHooks, orderHooks } from '@/hooks'
 import { suggestNextBuktiKasId } from '@/utils/BuktiKasId'
-import { todayISODate } from '@/utils/MonthUtils'
+import { todayISODate, formatDateShort } from '@/utils/MonthUtils'
 import { orderLabel } from '@/components/finance/ledgerModel'
 import type { BuktiKasRow } from '@/types'
 
@@ -69,7 +69,7 @@ export function BuktiKasPage() {
                   <div className="min-w-0">
                     <span className="id-chip font-mono">{h.header_id}</span>
                     <span className="ml-2 text-sm text-navy-900 font-medium">{h.description}</span>
-                    <span className="ml-2 text-xs text-slate-400">{h.date}</span>
+                    <span className="ml-2 text-xs font-medium text-slate-600">{formatDateShort(h.date)}</span>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <span className="font-mono font-semibold text-navy-900">{formatRp(total)}</span>

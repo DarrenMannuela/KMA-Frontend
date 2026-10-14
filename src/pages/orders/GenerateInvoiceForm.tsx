@@ -143,9 +143,14 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
     }))
   }
 
-  // A Pelunasan takes what the DP invoice collected, as saved on it.
+  // A Pelunasan takes what the DP invoice collected — prefillFrom is always
+  // the current DP invoice (see OrderDetailPage), so this stays live even when
+  // editing an existing Pelunasan whose own stored down_payment is a snapshot
+  // from when it was created or last saved and may have since gone stale if
+  // the DP invoice was corrected afterwards. Only falls back to the Pelunasan's
+  // own value if its DP invoice can't be found at all.
   const alreadyPaidAmount = forcedType === 'pelunasan'
-    ? (existingInvoice?.down_payment ?? prefillFrom?.down_payment ?? 0)
+    ? (prefillFrom?.down_payment ?? existingInvoice?.down_payment ?? 0)
     : 0
 
   const downPayment = forcedType === 'pelunasan'

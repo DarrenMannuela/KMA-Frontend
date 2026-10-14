@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, ArrowLeft, Building2, Users, Printer } from 'lucide-react'
+import { ArrowLeft, Users, Printer } from 'lucide-react'
 import { CrudPage } from '@/components/ui/CrudPage'
-import { FormField, Spinner, UppercaseField } from '@/components/ui'
+import { FormField, UppercaseField } from '@/components/ui'
+import { LoadingState, ErrorState } from '@/components/ui/Page'
 import { clientHooks, clientContactHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
 import { ClientPriceListPrint } from './ClientPriceListPrint'
 import { CatalogueTab } from './catalogue/CatalogueTab'
@@ -106,33 +107,26 @@ export function ClientDetailPage() {
   const setTab = (next: 'contacts' | 'catalogue') => setSearchParams({ tab: next }, { replace: true })
 
   if (clientLoading) {
-    return <Spinner />
+    return <div className="p-4 md:p-6"><LoadingState label="Loading client…" /></div>
   }
   // A failed fetch shows Retry, not "Client not found".
   if (clientError) {
-    return (
-      <div className="p-8 text-center">
-        <AlertTriangle className="w-8 h-8 text-red-300 mx-auto mb-3" />
-        <p className="text-red-400 mb-3">Couldn't load this client — check your connection and try again.</p>
-        <button onClick={() => refetchClient()} className="btn-secondary">Retry</button>
-      </div>
-    )
+    return <div className="p-4 md:p-6"><ErrorState what="this client" onRetry={() => refetchClient()} /></div>
   }
   if (!client) {
-    return <div className="p-8 text-red-400">Client not found.</div>
+    return <div className="p-4 md:p-6"><ErrorState what="this client" /></div>
   }
 
   return (
     <div className="p-4 md:p-6 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/clients')} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500" title="Back to clients">
-            <ArrowLeft size={18} />
+          <button onClick={() => navigate('/clients')} className="btn-secondary !px-2.5 shrink-0" title="Back to clients">
+            <ArrowLeft size={14} />
           </button>
-          <Building2 className="text-navy-600" size={20} />
           <div>
-            <h2 className="text-lg font-semibold text-slate-800">{client.client_name}</h2>
-            {client.address && <p className="text-xs text-slate-400">{client.address}</p>}
+            <h1 className="font-display font-semibold text-navy-900 leading-tight">{client.client_name}</h1>
+            {client.address && <p className="text-slate-400 text-xs">{client.address}</p>}
           </div>
         </div>
         <button

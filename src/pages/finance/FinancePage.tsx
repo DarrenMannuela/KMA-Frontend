@@ -13,7 +13,7 @@ import { fromProduction, fromOperation, inPeriod, orderLabel, type Period } from
 import { PeriodPicker, periodLabel, periodSlug, currentPeriod } from '@/components/finance/PeriodPicker'
 import { periodParam, sheetParams } from '@/components/finance/ledgerParams'
 import {
-  monthly, totals, cashFlow, receivables, orderStats, clientStats, invoiceAmount, dueOn, AGING, budgetUsage, monthKey,
+  monthly, totals, cashFlow, receivables, orderStats, clientStats, dueOn, AGING, budgetUsage, monthKey,
 } from '@/components/finance/financeStats'
 import { TrendChart, TREND_LEGEND, CashFlowChart, CASH_LEGEND, Legend, RankBars, SplitBar, shortRp } from '@/components/finance/FinanceCharts'
 import { ledgerSheet, exportLedger } from '@/components/finance/ledgerExport'
@@ -257,12 +257,17 @@ export function FinancePage() {
         </Card>
       </div>
 
-      <div className="card p-5 scroll-mt-20" id="owed">
-        <div className="flex flex-wrap items-baseline gap-3 mb-3">
-          <h3 className="font-semibold text-navy-900 text-sm">Owed to you</h3>
-          <span className="font-mono text-sm text-slate-600">{formatRp(owed)}</span>
-          <span className="text-xs text-slate-400">{open.length} unpaid invoice{open.length === 1 ? '' : 's'}</span>
-        </div>
+      <Card
+        id="owed"
+        className="scroll-mt-20"
+        title={
+          <span className="inline-flex flex-wrap items-baseline gap-3">
+            Owed to you
+            <span className="font-mono font-normal text-slate-600">{formatRp(owed)}</span>
+            <span className="text-xs font-normal text-slate-400">{open.length} unpaid invoice{open.length === 1 ? '' : 's'}</span>
+          </span>
+        }
+      >
         <SplitBar parts={aging} />
         {open.length > 0 && (
           <div className="mt-4 overflow-x-auto">
@@ -276,7 +281,7 @@ export function FinancePage() {
                     <td className="font-mono text-xs">{r.invoice.order_id}</td>
                     <td className="text-xs">{dueOn(r.invoice)}</td>
                     <td className={`!text-right text-xs ${r.daysLate > 30 ? 'text-red-600 font-semibold' : r.daysLate > 0 ? 'text-amber-600' : 'text-slate-400'}`}>{r.daysLate > 0 ? `${r.daysLate} days` : 'not due'}</td>
-                    <td className="!text-right font-mono tabular-nums">{formatRp(invoiceAmount(r.invoice))}</td>
+                    <td className="!text-right font-mono tabular-nums">{formatRp(r.amount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -284,11 +289,10 @@ export function FinancePage() {
             {open.length > 12 && <p className="mt-2 text-xs text-slate-400">and {open.length - 12} more in the Excel download</p>}
           </div>
         )}
-      </div>
+      </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
-        <div className="card p-5 overflow-x-auto">
-          <h3 className="font-semibold text-navy-900 text-sm mb-3">Clients · {periodLabel(period)}</h3>
+        <Card title={`Clients · ${periodLabel(period)}`} bodyClassName="p-5 overflow-x-auto">
           {!byClient.length ? <p className="py-6 text-center text-sm text-slate-400">No orders in this period</p> : (
             <table className="kma-table text-xs [&_td]:!px-2 [&_th]:!px-2 [&_td]:whitespace-nowrap">
               <thead><tr><th>Client</th><th className="!text-right">Orders</th><th className="!text-right">Value</th><th className="!text-right">Costs</th><th className="!text-right">Profit</th><th className="!text-right">Owed</th></tr></thead>
@@ -306,12 +310,8 @@ export function FinancePage() {
               </tbody>
             </table>
           )}
-        </div>
-        <div className="card p-5 overflow-x-auto">
-          <div className="flex items-baseline gap-2 mb-3">
-            <h3 className="font-semibold text-navy-900 text-sm">Orders · profit after linked costs</h3>
-            <PiggyBank size={14} className="text-slate-300" />
-          </div>
+        </Card>
+        <Card title="Orders · profit after linked costs" icon={PiggyBank} bodyClassName="p-5 overflow-x-auto">
           {!periodStats.length ? <p className="py-6 text-center text-sm text-slate-400">No orders in this period</p> : (
             <table className="kma-table text-xs [&_td]:!px-2 [&_th]:!px-2 [&_td]:whitespace-nowrap">
               <thead><tr><th>Order</th><th className="!text-right">Value</th><th className="!text-right">Costs</th><th className="!text-right">Profit</th><th className="!text-right">Paid</th></tr></thead>
@@ -328,7 +328,7 @@ export function FinancePage() {
               </tbody>
             </table>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   )

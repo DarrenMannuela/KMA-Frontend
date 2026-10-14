@@ -223,8 +223,10 @@ export function EditableCell({
       onClick={() => startEditing()}
       onKeyDown={handleDisplayKeyDown}
       // The dotted underline marks the cell editable on touch screens, where hover
-      // doesn't exist; the focus border marks the active cell.
-      className="px-2 py-1 min-h-[1.75rem] cursor-cell border border-transparent border-b-slate-200 [border-bottom-style:dotted] hover:border-slate-300 hover:bg-slate-50 hover:[border-bottom-style:solid] focus:outline-none focus:border-navy-400 focus:bg-navy-50/50 focus:[border-bottom-style:solid] transition-colors break-words"
+      // doesn't exist; on a mouse/trackpad it only shows on hover, so a dense table
+      // of many editable cells doesn't read as a grid of boxes at rest. The focus
+      // border marks the active cell.
+      className="px-2.5 py-1.5 min-h-[2rem] cursor-cell border border-transparent [border-bottom-style:dotted] [@media(hover:none)]:border-b-slate-200 hover:border-slate-300 hover:bg-slate-50 hover:[border-bottom-style:solid] focus:outline-none focus:border-navy-400 focus:bg-navy-50/50 focus:[border-bottom-style:solid] transition-colors break-words"
     >
       {isEmpty
         ? <span className="text-slate-300 italic">{placeholder ?? 'click to fill'}</span>

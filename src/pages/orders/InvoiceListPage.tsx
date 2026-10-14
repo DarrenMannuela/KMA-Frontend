@@ -113,7 +113,10 @@ export function InvoiceListPage() {
           }},
         { header: 'Amount Due',   key: 'total',
           render: r => {
-            const due = invoiceAmount(r)
+            // The unfiltered list, not filteredData: a Pelunasan's sibling DP
+            // invoice may be 'paid' and hidden under the Unpaid filter, but
+            // still needs to be found for the live amount (see invoiceAmount).
+            const due = invoiceAmount(r, data)
             return (
               <div>
                 <span className="font-mono">{formatRp(due)}</span>

@@ -1,4 +1,4 @@
-import { balanceDue } from '@/utils/invoiceAmount'
+import { liveDownPayment as resolveLiveDownPayment, balanceDue } from '@/utils/invoiceAmount'
 import { useRef, useLayoutEffect, useEffect, useState, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -8,7 +8,7 @@ import { invoicesApi, ordersApi, itemsApi } from '@/api'
 import { formatRp, FormField } from '@/components/ui'
 import { Modal } from '@/components/ui/Modal'
 import { useRekening } from '@/utils/RekeningStore'
-import { itemHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
+import { itemHooks, clientItemHooks, clientItemPriceHooks, invoiceHooks } from '@/hooks'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useScaleToFit } from '@/hooks/useScaleToFit'
 import { usePaperFormat, PAPER_FORMATS, type PaperFormat } from '@/utils/PaperFormatStore'
@@ -22,8 +22,10 @@ type ColumnKey = 'no' | 'size' | 'qty' | 'hargaNet' | 'jumlah'
 // ─── Multi-page policy ─────────────────────────────────────────────────────
 // The document paginates naturally, as printed HTML tables do: <thead> repeats
 // on every page, `#invoice tr { page-break-inside: avoid }` keeps rows whole,
-// and the closing block (signature/copy/footer) is one unbreakable unit. A
-// short invoice prints on one page; a long one takes as many as it needs.
+// and the notes (SYARAT & KETENTUAN) and closing block (signature/copy/footer)
+// are wrapped together as one unbreakable unit, so the signature never prints
+// alone on a page by itself. A short invoice prints on one page; a long one
+// takes as many as it needs.
 // (An earlier shrink-to-fit-one-page approach, driven by JS measurement,
 // broke whenever its guess differed from the print engine.)
 const MM_TO_PX = 96 / 25.4
@@ -342,6 +344,14 @@ export function InvoicePrintPage() {
     enabled: !!invoice?.order_id,
   })
 
+  // All invoices, so liveDownPayment/balanceDue below can find this order's DP
+  // invoice by order_id. A Pelunasan's own down_payment is a snapshot from
+  // when it was created (or last saved) — if the DP invoice is corrected
+  // afterwards, this live lookup is what keeps the printed D/P and Sisa
+  // figures in sync instead of printing the stale snapshot (same live-lookup
+  // pattern KwitansiPrintPage uses).
+  const { data: allInvoices = [] } = invoiceHooks.useList()
+
   // Add Row creates a real item on the order, so it shows up everywhere. A quick
   // one-line form; editing stays on the order's pages.
   const createItem = itemHooks.useCreate()
@@ -464,7 +474,7 @@ export function InvoicePrintPage() {
   const hasMeasurements = measured.top > 0 || Object.keys(measured.groups).length > 0
   const predictedBreaks = new Set<string>()
   let predictedTailNewPage = false
-  let tailSpillsAt: 'totals' | 'notes' | 'closing' | null = null
+  let tailSpillsAt: 'totals' | 'notes' | null = null
   // Screen and print layout differ by a few px per row, and the error grows with
   // the content placed so far. The safety margin is a share of the page already
   // used (18%, deliberately high: a break predicted a little early is harmless;
@@ -489,14 +499,17 @@ export function InvoicePrintPage() {
       remaining -= h
       consumed += h
     })
-    // Totals, notes and the closing block each avoid breaking on their own, so
+    // Totals and the notes+closing tail each avoid breaking on their own, so
     // each is checked in turn against what's left, and the first one to spill is
-    // where the seam (and the continuation note) goes. The drift margin carries
-    // over from the items but doesn't keep growing across these three big,
-    // directly measured blocks.
+    // where the seam (and the continuation note) goes. Notes and closing are
+    // measured separately but checked as one combined block: otherwise notes
+    // alone could fit a page while the signature block that must follow it
+    // doesn't, leaving the signature stranded alone on the next page. The drift
+    // margin carries over from the items but doesn't keep growing across these
+    // two big, directly measured blocks.
     let tailRemaining = remaining
     let tailDriftBasis = consumed
-    ;([['totals', measured.totals], ['notes', measured.notes], ['closing', measured.closing]] as const)
+    ;([['totals', measured.totals], ['notes', measured.notes + measured.closing]] as const)
       .forEach(([name, h]) => {
         const driftBuffer = BASE_SLACK_PX + tailDriftBasis * DRIFT_FRACTION
         if (h > 0 && h + driftBuffer > tailRemaining) {
@@ -545,8 +558,16 @@ export function InvoicePrintPage() {
   }
   if (!invoice) return <div className="p-8 text-red-400">Invoice not found.</div>
 
+  // Live, not this invoice's own (possibly stale) down_payment — see allInvoices
+  // above. For a DP invoice this is itself, so nothing changes there; only a
+  // Pelunasan printed after its DP was corrected is affected.
+  const liveDownPayment = resolveLiveDownPayment(invoice, allInvoices)
+  // The Pelunasan balance, recomputed live from that same figure rather than
+  // this invoice's own stored remaining/ar_receivable, for the same reason.
+  const liveBalanceDue = balanceDue(invoice, allInvoices)
+
   const dpPercent = invoice.total > 0
-    ? Math.round(((invoice.down_payment ?? 0) / invoice.total) * 100)
+    ? Math.round((liveDownPayment / invoice.total) * 100)
     : 50
 
   // Highlight the amount this invoice asks for: D/P on a DP invoice, Pelunasan
@@ -560,7 +581,7 @@ export function InvoicePrintPage() {
 
   // Each fixed column's content this render, for auto-fit. KETERANGAN takes the
   // remaining width.
-  const hasDp = invoice.down_payment != null && invoice.down_payment > 0
+  const hasDp = liveDownPayment > 0
   const columnTexts: Record<ColumnKey, string[]> = {
     no: ['NO.', ...groups.map((_, i) => String(i + 1))],
     size: ['SIZE', ...items.map(i => i.size || '—')],
@@ -581,11 +602,11 @@ export function InvoicePrintPage() {
       'JUMLAH (Rp)',
       ...items.map(i => i.sub_total.toLocaleString('id-ID')),
       invoice.total.toLocaleString('id-ID'),
-      ...(hasDp ? [(invoice.down_payment ?? 0).toLocaleString('id-ID')] : []),
+      ...(hasDp ? [liveDownPayment.toLocaleString('id-ID')] : []),
       // Matches the PELUNASAN cell's actual rendered value below — must
       // stay in sync or a discounted invoice could size the JUMLAH column
       // to a number narrower than what's really printed in it.
-      balanceDue(invoice).toLocaleString('id-ID'),
+      liveBalanceDue.toLocaleString('id-ID'),
     ],
   }
   const fitWidthFor = (column: ColumnKey) =>
@@ -1241,31 +1262,17 @@ export function InvoicePrintPage() {
               </tbody>
             )}
 
-            {/* TOTAL / D.P / PELUNASAN in one tbody, never split. */}
+            {/* D/P / PELUNASAN / TOTAL in one tbody, never split. Whichever row is
+               first closes the item table with a top border (the others leave it
+               'hidden' so border-collapse doesn't draw a second line). */}
             <tbody ref={totalsRef} style={{ pageBreakInside: 'avoid' }}>
-              {/* Total row */}
-              <tr
-                {...highlightRowHandlers('total')}
-                style={{ background: rowHighlights['total'] }}
-              >
-                {/* Blank spacer over NO/KETERANGAN/SIZE: the top border closes the item table;
-                   the bottom one is 'hidden' so border-collapse can't draw it. */}
-                <td style={{ padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, borderTop: '1px solid #ccc', borderBottomStyle: 'hidden' }} colSpan={3} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-                  {items.reduce((s, i) => s + i.amount, 0).toLocaleString('id-ID')}
-                </td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>TOTAL</td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-                  {invoice.total.toLocaleString('id-ID')}
-                </td>
-              </tr>
-
-              {/* D/P row. Clicking overrides its automatic highlight with the selected
-                 swatch; the same swatch again restores it. */}
-              {invoice.down_payment != null && invoice.down_payment > 0 ? (
+              {/* D/P row, when there is one. Clicking overrides its automatic highlight
+                 with the selected swatch; the same swatch again restores it. */}
+              {hasDp && (
                 <tr {...highlightRowHandlers('dp')}>
-                  {/* Blank spacer, borders hidden as above. */}
-                  <td style={{ padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, borderTopStyle: 'hidden', borderBottomStyle: 'hidden' }} colSpan={3} />
+                  {/* Blank spacer over NO/KETERANGAN/SIZE: first row in the group, so its
+                     top border closes the item table above. */}
+                  <td style={{ padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, borderTop: '1px solid #ccc', borderBottomStyle: 'hidden' }} colSpan={3} />
                   {/* A typable LUNAS label, only on a Pelunasan invoice (the D/P is paid by then).
                      Auto-fit sizes the QTY column to it. */}
                   <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
@@ -1283,18 +1290,15 @@ export function InvoicePrintPage() {
                     D/P {dpPercent} %
                   </td>
                   <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
-                    {(invoice.down_payment ?? 0).toLocaleString('id-ID')}
+                    {liveDownPayment.toLocaleString('id-ID')}
                   </td>
                 </tr>
-              ) : (
-                // No D/P to show (full invoice, or a Pelunasan with no DP): PELUNASAN sits
-                // directly under TOTAL.
-                null
               )}
 
-              {/* Pelunasan row — same click-to-override behavior as DP above. */}
+              {/* Pelunasan row — same click-to-override behavior as DP above. First in
+                 the group (and so closes the item table) when there's no D/P row. */}
               <tr {...highlightRowHandlers('pelunasan')}>
-                <td style={{ padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', borderTopStyle: 'hidden', borderBottomStyle: 'hidden' }} colSpan={3}>
+                <td style={{ padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', ...(hasDp ? { borderTopStyle: 'hidden' as const } : { borderTop: '1px solid #ccc' }), borderBottomStyle: 'hidden' }} colSpan={3}>
                   {/* J/T (due date), editable for this printed copy only. */}
                   <input
                     ref={jatuhTempo.ref}
@@ -1310,8 +1314,24 @@ export function InvoicePrintPage() {
                   PELUNASAN
                 </td>
                 <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
-                  {/* The balance after discount (see balanceDue). */}
-                  {balanceDue(invoice).toLocaleString('id-ID')}
+                  {/* The balance after discount, live — see liveBalanceDue above. */}
+                  {liveBalanceDue.toLocaleString('id-ID')}
+                </td>
+              </tr>
+
+              {/* Total row — last in the group now, so its spacer stays fully hidden
+                 (the row above it already closed the item table). */}
+              <tr
+                {...highlightRowHandlers('total')}
+                style={{ background: rowHighlights['total'] }}
+              >
+                <td style={{ padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, borderTopStyle: 'hidden', borderBottomStyle: 'hidden' }} colSpan={3} />
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                  {items.reduce((s, i) => s + i.amount, 0).toLocaleString('id-ID')}
+                </td>
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>TOTAL</td>
+                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                  {invoice.total.toLocaleString('id-ID')}
                 </td>
               </tr>
               {/* The note for a seam after PELUNASAN, when the notes and closing spill. */}
@@ -1337,9 +1357,12 @@ export function InvoicePrintPage() {
             />
           )}
 
-          {/* Notes, spaced a little tighter to help them fit on page 1. A fixed amount on
-             purpose: nothing measured feeds back into it. */}
-          <div ref={notesRef} style={{ marginTop: '18px', fontSize: `${BASE_FONT_PX}px`, pageBreakInside: 'avoid' }}>
+          {/* Notes and the closing block (signature/footer) are wrapped together as one
+             unbreakable unit: SYARAT & KETENTUAN should never print alone with the
+             signature stranded on the next page. Spaced a little tighter to help them
+             fit on page 1. A fixed amount on purpose: nothing measured feeds back into it. */}
+          <div style={{ pageBreakInside: 'avoid' }}>
+          <div ref={notesRef} style={{ marginTop: '18px', fontSize: `${BASE_FONT_PX}px` }}>
             <div style={{ fontWeight: 'bold', textDecoration: 'underline', marginBottom: '4px' }}>SYARAT & KETENTUAN :</div>
             <ol style={{ margin: 0, paddingLeft: '16px', lineHeight: '1.5' }}>
               {notes.map((note, idx) => (
@@ -1401,27 +1424,8 @@ export function InvoicePrintPage() {
             </div>
           </div>
 
-          {/* Same "(continued on next page)" treatment as the two seams
-              above, for when totals AND notes both print fine and it's
-              only the closing block (signature/footer) that spills. */}
-          {tailSpillsAt === 'closing' && (
-            <>
-              <div style={{ textAlign: 'right', fontSize: '10px', fontStyle: 'italic', color: '#64748b', marginTop: '8px' }}>
-                (continued on next page)
-              </div>
-              <PageBreakGap
-                endPage={pageSegments.length}
-                startPage={pageSegments.length + 1}
-                total={previewTotalPages}
-                invoiceId={invoice.id}
-                client={invoice.kepada_yth}
-                strong={false}
-              />
-            </>
-          )}
-
-          {/* Signature and footer: one unbreakable unit, placed by natural flow. */}
-          <div ref={closingRef} style={{ pageBreakInside: 'avoid' }}>
+          {/* Signature and footer, part of the same unbreakable unit as the notes above. */}
+          <div ref={closingRef}>
             {/* Signature block */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginTop: '24px', fontSize: `${BASE_FONT_PX}px` }}>
               <div>
@@ -1460,6 +1464,7 @@ export function InvoicePrintPage() {
               <div>TELP. 021.300.253.99 / Hp. 0811.857.372</div>
               <div>Email : fifi67@yahoo.com</div>
             </div>
+          </div>
           </div>
 
           {/* Preview of the last page's footer (earlier pages show theirs in their gap). */}

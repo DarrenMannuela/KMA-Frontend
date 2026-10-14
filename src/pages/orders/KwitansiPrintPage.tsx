@@ -1,4 +1,4 @@
-import { invoiceAmount } from '@/utils/invoiceAmount'
+import { invoiceAmount, liveDownPayment, balanceDue } from '@/utils/invoiceAmount'
 import { useState, useEffect, useLayoutEffect } from 'react'
 import type { CSSProperties } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -204,14 +204,15 @@ export function KwitansiPrintPage() {
 
   // What this receipt is for (see invoiceAmount: a 0% DP is a full payment).
   const isFullInvoice = invoice.type === 'dp' && (invoice.down_payment ?? 0) === 0
-  const amount = invoiceAmount(invoice)
+  const amount = invoiceAmount(invoice, allInvoices)
   const purposeLabel = invoice.type === 'dp' && !isFullInvoice ? 'DOWN PAYMENT (D/P)' : 'PELUNASAN'
 
   // The big figure is the order's full total, with the DP/Pelunasan split below.
   const printAmount = invoice.total || amount
 
-  // ── D/P line ──────────────────────────────────────────────────────────
-  const dpAmount = dpInvoice?.down_payment ?? 0
+  // ── D/P line — live, not dpInvoice's own field read directly, so this
+  //    still works out even if dpInvoice itself couldn't be resolved above. ──
+  const dpAmount = liveDownPayment(invoice, allInvoices)
   const dpPercent = dpInvoice?.total ? Math.round((dpAmount / dpInvoice.total) * 100) : null
   const dpPaidLabel = !dpInvoice
     ? null
@@ -219,9 +220,13 @@ export function KwitansiPrintPage() {
       ? `LUNAS - ${format(new Date(dpInvoice.paid_date), 'd MMMM yyyy').toUpperCase()}`
       : 'BELUM LUNAS'
 
-  // ── Sisa: the Pelunasan invoice's balance, or total minus DP before one exists ──
+  // ── Sisa: the Pelunasan invoice's balance, or total minus DP before one
+  //    exists. balanceDue recomputes it live from dpAmount above rather than
+  //    trusting the Pelunasan's own stored remaining/ar_receivable — that's a
+  //    snapshot from when it was created (or last saved), which goes stale if
+  //    the DP invoice is corrected afterwards. ──
   const sisaAmount = pelunasanInvoice
-    ? (pelunasanInvoice.ar_receivable ?? pelunasanInvoice.remaining ?? 0)
+    ? balanceDue(pelunasanInvoice, allInvoices)
     : (invoice.total ?? 0) - dpAmount
   // A full invoice's own status and dates, there being no Pelunasan.
   const sisaDueLabel = isFullInvoice

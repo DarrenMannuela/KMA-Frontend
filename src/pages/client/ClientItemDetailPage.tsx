@@ -309,9 +309,9 @@ export function ClientItemDetailPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [qc])
 
-  if (itemLoading) return <LoadingState />
-  if (itemError) return <ErrorState what="this item" onRetry={() => refetchItem()} />
-  if (!item) return <div className="p-8 text-red-400">Item not found.</div>
+  if (itemLoading) return <div className="p-4 md:p-6"><LoadingState label="Loading item…" /></div>
+  if (itemError) return <div className="p-4 md:p-6"><ErrorState what="this item" onRetry={() => refetchItem()} /></div>
+  if (!item) return <div className="p-4 md:p-6"><ErrorState what="this item" /></div>
 
   const sizes = catalogue.filter(i => i.item_name === item.item_name).sort((a, b) => compareSizes(a.size, b.size))
   const back = `/clients/${clientId}?tab=catalogue`
@@ -319,8 +319,8 @@ export function ClientItemDetailPage() {
   return (
     <div className="p-4 md:p-6 space-y-5">
       <div className="flex items-center gap-3">
-        <button onClick={() => navigate(back)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500" title="Back to catalogue">
-          <ArrowLeft size={18} />
+        <button onClick={() => navigate(back)} className="btn-secondary !px-2.5 shrink-0" title="Back to catalogue">
+          <ArrowLeft size={14} />
         </button>
         <div className="min-w-0">
           <p className="text-xs text-slate-400">

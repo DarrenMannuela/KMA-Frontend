@@ -35,9 +35,9 @@ export function monthly(year: number, invoices: Invoice[], costs: LedgerRow[], b
   const monthOf = (d: string) => (d.slice(0, 4) === String(year) ? Number(d.slice(5, 7)) - 1 : -1)
   for (const inv of invoices) {
     const m = monthOf(day(inv.tanggal))
-    if (m >= 0) rows[m].invoiced += invoiceAmount(inv)
+    if (m >= 0) rows[m].invoiced += invoiceAmount(inv, invoices)
     const p = isPaid(inv) ? monthOf(paidOn(inv)) : -1
-    if (p >= 0) rows[p].cashIn += invoiceAmount(inv)
+    if (p >= 0) rows[p].cashIn += invoiceAmount(inv, invoices)
   }
   for (const b of buktiKas) {
     const m = monthOf(day(b.date))
@@ -60,8 +60,8 @@ export interface Totals { invoiced: number; cost: number; production: number; op
 export function totals(period: Period, invoices: Invoice[], costs: LedgerRow[], buktiKas: BuktiKasRow[] = []): Totals {
   const t: Totals = { invoiced: 0, cost: 0, production: 0, operation: 0, cashIn: 0, profit: 0 }
   for (const inv of invoices) {
-    if (inPeriod(day(inv.tanggal), period)) t.invoiced += invoiceAmount(inv)
-    if (isPaid(inv) && inPeriod(paidOn(inv), period)) t.cashIn += invoiceAmount(inv)
+    if (inPeriod(day(inv.tanggal), period)) t.invoiced += invoiceAmount(inv, invoices)
+    if (isPaid(inv) && inPeriod(paidOn(inv), period)) t.cashIn += invoiceAmount(inv, invoices)
   }
   for (const b of buktiKas) if (inPeriod(day(b.date), period)) t.cashIn += b.price
   for (const c of costs) if (inPeriod(c.date, period)) t[c.kind] += c.total
@@ -109,7 +109,7 @@ export function cashFlow(period: Period, invoices: Invoice[], costs: LedgerRow[]
     for (const b of buckets) if (b.start <= date) hit = b
     return hit
   }
-  for (const inv of invoices) if (isPaid(inv)) { const b = find(paidOn(inv)); if (b) b.cashIn += invoiceAmount(inv) }
+  for (const inv of invoices) if (isPaid(inv)) { const b = find(paidOn(inv)); if (b) b.cashIn += invoiceAmount(inv, invoices) }
   for (const bk of buktiKas) { const b = find(day(bk.date)); if (b) b.cashIn += bk.price }
   for (const c of costs) { const b = find(day(c.date)); if (b) b.cashOut += c.total }
   return buckets
@@ -129,11 +129,11 @@ export interface Receivable { invoice: Invoice; amount: number; daysLate: number
 
 export function receivables(invoices: Invoice[], orders: Order[], clients: Client[], today = new Date()): Receivable[] {
   const now = iso(today)
-  return invoices.filter(i => !isPaid(i) && invoiceAmount(i) > 0).map(invoice => {
+  return invoices.filter(i => !isPaid(i) && invoiceAmount(i, invoices) > 0).map(invoice => {
     const due = dueOn(invoice)
     const daysLate = due && due < now ? Math.round((new Date(now).getTime() - new Date(due).getTime()) / 86400000) : 0
     const bucket = AGING.find(b => daysLate <= b.max)!.key
-    return { invoice, amount: invoiceAmount(invoice), daysLate, bucket, client: clientOfInvoice(invoice, orders, clients) }
+    return { invoice, amount: invoiceAmount(invoice, invoices), daysLate, bucket, client: clientOfInvoice(invoice, orders, clients) }
   }).sort((a, b) => b.daysLate - a.daysLate || b.amount - a.amount)
 }
 
@@ -166,8 +166,8 @@ export function orderStats(orders: Order[], items: Item[], invoices: Invoice[], 
   for (const inv of invoices) {
     const s = out.get(inv.order_id)
     if (!s) continue
-    s.invoiced += invoiceAmount(inv)
-    if (isPaid(inv)) s.paid += invoiceAmount(inv)
+    s.invoiced += invoiceAmount(inv, invoices)
+    if (isPaid(inv)) s.paid += invoiceAmount(inv, invoices)
   }
   for (const c of costs) { if (c.order_id) { const s = out.get(c.order_id); if (s) s.costs += c.total } }
   for (const s of out.values()) s.profit = s.value - s.costs

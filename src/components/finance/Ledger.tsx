@@ -368,11 +368,11 @@ export function Ledger({ kind, initial, title, icon }: {
   const columns: Col[] = [
     ...(!byKasBon ? [
       { key: 'header_id', header: 'Kas Bon', width: '6.5rem', sortKey: 'header_id' as SortKey, field: 'header_id' as EditField, type: 'text' as const, suggestions: headerSuggestions, value: (r: LedgerRow) => r.header_id, render: (r: LedgerRow) => <span className="font-mono text-xs">{r.header_id}</span> },
-      { key: 'date', header: 'Date', width: '6.5rem', sortKey: 'date' as SortKey, field: 'date' as EditField, type: 'date' as const, value: (r: LedgerRow) => r.date.slice(0, 10), render: (r: LedgerRow) => <span className="text-xs text-slate-500">{formatDateShort(r.date)}</span> },
-      { key: 'description', header: 'Description', width: '11rem', field: 'description' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.description, render: (r: LedgerRow) => <span className="text-slate-500">{r.description}</span> },
+      { key: 'date', header: 'Date', width: '6.5rem', sortKey: 'date' as SortKey, field: 'date' as EditField, type: 'date' as const, value: (r: LedgerRow) => r.date.slice(0, 10), render: (r: LedgerRow) => <span className="text-xs font-medium text-slate-700">{formatDateShort(r.date)}</span> },
+      { key: 'description', header: 'Description', width: '11rem', field: 'description' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.description, render: (r: LedgerRow) => <span className="text-slate-600">{r.description}</span> },
     ] : []),
     ...(kind === 'production' ? [
-      { key: 'name', header: 'Bahan', width: 'auto', sortKey: 'name' as SortKey, field: 'name' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.name },
+      { key: 'name', header: 'Bahan', width: 'auto', sortKey: 'name' as SortKey, field: 'name' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.name, render: (r: LedgerRow) => <span className="font-medium text-slate-800">{r.name}</span> },
       { key: 'supplier', header: 'Supplier', width: '11rem', sortKey: 'group' as SortKey, field: 'supplier_id' as EditField, type: 'select' as const, options: supplierOptions, value: (r: LedgerRow) => r.supplier_id,
         render: (r: LedgerRow) => {
           const s = suppliers.find(x => x.id === r.supplier_id)
@@ -382,7 +382,7 @@ export function Ledger({ kind, initial, title, icon }: {
       { key: 'unit', header: 'Unit', width: '5rem', field: 'unit' as EditField, type: 'select' as const, options: unitOptions, value: (r: LedgerRow) => r.unit },
     ] : [
       { key: 'category', header: 'Category', width: '9rem', sortKey: 'group' as SortKey, field: 'category' as EditField, type: 'text' as const, suggestions: categories, value: (r: LedgerRow) => r.category },
-      { key: 'name', header: 'Item', width: 'auto', sortKey: 'name' as SortKey, field: 'name' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.name },
+      { key: 'name', header: 'Item', width: 'auto', sortKey: 'name' as SortKey, field: 'name' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.name, render: (r: LedgerRow) => <span className="font-medium text-slate-800">{r.name}</span> },
     ]),
     { key: 'price', header: 'Price', width: '7.5rem', sortKey: 'price', align: 'right', field: 'price', type: 'number', value: r => r.price, render: r => money(r.price) },
     ...(kind === 'production' ? [{ key: 'total', header: 'Total', width: '8rem', sortKey: 'total' as SortKey, align: 'right' as const, value: (r: LedgerRow) => r.total, render: (r: LedgerRow) => <span className="font-mono tabular-nums font-semibold">{formatRp(r.total)}</span> }] : []),
@@ -647,16 +647,16 @@ export function Ledger({ kind, initial, title, icon }: {
                           </td>
                         </tr>
                       )}
-                      {rows.map(r => (
-                        <tr key={r.id} className={`border-b border-slate-50 group ${selected.has(r.id) ? 'bg-navy-50/70' : 'hover:bg-slate-50/60'}`}>
-                          <td className="px-2 py-1.5">
+                      {rows.map((r, ri) => (
+                        <tr key={r.id} className={`border-b border-slate-50 group ${selected.has(r.id) ? 'bg-navy-50/70' : ri % 2 ? 'bg-slate-50/40 hover:bg-slate-100/70' : 'hover:bg-slate-50/60'}`}>
+                          <td className="px-2 py-2">
                             <input
                               type="checkbox" aria-label="Select line" checked={selected.has(r.id)} onChange={() => undefined} onClick={e => toggle(r.id, e.shiftKey)}
                               className={`block transition-opacity ${selected.has(r.id) ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
                             />
                           </td>
                           {columns.map((c, ci) => (
-                            <td key={c.key} className={`px-1 py-1 truncate ${c.align === 'right' ? 'text-right' : ''}`}>
+                            <td key={c.key} className={`px-1 py-0.5 truncate ${c.align === 'right' ? 'text-right' : ''}`}>
                               {c.field ? (
                                 <EditableCell
                                   value={c.value(r)}
@@ -672,7 +672,7 @@ export function Ledger({ kind, initial, title, icon }: {
                                   onNavigate={(dr, dc) => moveFocus(r.id, ci, dr, dc)}
                                 />
                               ) : (
-                                <div ref={cellRef(`${r.id}:${ci}`)} tabIndex={0} className="px-2 py-1 focus:outline-none focus:bg-navy-50/50 rounded-sm"
+                                <div ref={cellRef(`${r.id}:${ci}`)} tabIndex={0} className="px-2.5 py-1.5 min-h-[2rem] flex items-center focus:outline-none focus:bg-navy-50/50 rounded-sm"
                                   onKeyDown={e => {
                                     const d = ({ ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] } as Record<string, [number, number]>)[e.key]
                                     if (d) { e.preventDefault(); moveFocus(r.id, ci, d[0], d[1]) }

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Plus, UserX, UserCheck, Circle, Loader2, AlertTriangle } from 'lucide-react'
+import { Plus, UserX, UserCheck, Circle, Loader2, ShieldCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { usersApi, UsersApiError } from '@/api/usersApi'
 import type { AdminUser } from '@/api/usersApi'
 import { ConfirmDialog } from '@/components/ui'
 import { Modal } from '@/components/ui/Modal'
+import { PageHeader, LoadingState, ErrorState } from '@/components/ui/Page'
 import { useIsMobile } from '@/hooks/useIsMobile'
 
 export function UsersPage() {
@@ -66,20 +67,18 @@ export function UsersPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px]">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold text-navy-900">Users</h1>
-          <p className="text-sm text-slate-400">Staff accounts are provisioned here — there's no self-signup.</p>
-        </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="btn-primary text-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Add user
-        </button>
-      </div>
+    <div className="p-4 md:p-6 space-y-5 max-w-[1400px]">
+      <PageHeader
+        icon={ShieldCheck}
+        title="Users"
+        subtitle="Staff accounts are provisioned here — there's no self-signup."
+        actions={
+          <button onClick={() => setShowForm(true)} className="btn-primary text-sm">
+            <Plus className="w-4 h-4" />
+            Add user
+          </button>
+        }
+      />
 
       {/* Always a popup: a short, rarely used form. */}
       {showForm && (
@@ -93,18 +92,11 @@ export function UsersPage() {
         </Modal>
       )}
 
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-card overflow-hidden">
+      <div className="card overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-12 text-slate-400">
-            <Loader2 className="w-5 h-5 animate-spin" />
-          </div>
+          <LoadingState label="Loading users…" />
         ) : loadError ? (
-          <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-            <AlertTriangle className="w-8 h-8 mb-3 text-red-300" />
-            <p className="font-medium text-slate-500 text-sm">Couldn't load users</p>
-            <p className="text-xs text-slate-400 mt-1 mb-4">Check your connection and try again.</p>
-            <button onClick={loadUsers} className="btn-secondary btn-sm">Retry</button>
-          </div>
+          <ErrorState what="users" onRetry={loadUsers} />
         ) : users.length === 0 ? (
           <p className="text-center text-sm text-slate-400 py-12">No users yet.</p>
         ) : isMobile ? (
@@ -160,7 +152,7 @@ export function UsersPage() {
             </thead>
             <tbody>
               {users.map(u => (
-                <tr key={u.id} className="border-b border-slate-50 last:border-0">
+                <tr key={u.id} className="group border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                   <td className="px-5 py-3 font-medium text-navy-900">{u.name}</td>
                   <td className="px-5 py-3 text-slate-500">{u.email}</td>
                   <td className="px-5 py-3">
@@ -181,7 +173,7 @@ export function UsersPage() {
                       <button
                         onClick={() => setConfirmDeactivate(u)}
                         disabled={pendingId === u.id}
-                        className="flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 ml-auto disabled:opacity-50"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 ml-auto disabled:opacity-50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
                       >
                         <UserX className="w-3.5 h-3.5" />
                         Deactivate
@@ -190,7 +182,7 @@ export function UsersPage() {
                       <button
                         onClick={() => handleReactivate(u)}
                         disabled={pendingId === u.id}
-                        className="flex items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800 ml-auto disabled:opacity-50"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800 ml-auto disabled:opacity-50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
                       >
                         <UserCheck className="w-3.5 h-3.5" />
                         Reactivate
