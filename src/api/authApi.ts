@@ -64,11 +64,27 @@ export function readCsrfCookie(): string | null {
   return match ? decodeURIComponent(match[1]) : null
 }
 
+// A plain 'login' success, or — for an account with 2FA on — a 202 telling
+// the caller to collect a code next (see authApi.mfaLogin). Both are 2xx
+// responses, not errors: axios resolves either the same way, so the caller
+// tells them apart by checking 'mfa_required'.
+export type LoginResult = { user: AuthUser } | { mfa_required: true }
+
 export const authApi = {
   // takeOver signs the account's other live session out first: the auth
   // service allows one session per account, and refuses (409) otherwise.
   login: (email: string, password: string, takeOver = false) =>
-    authHttp.post<{ user: AuthUser }>('/login', { email, password, take_over: takeOver }).then(r => r.data),
+    authHttp.post<LoginResult>('/login', { email, password, take_over: takeOver }).then(r => r.data),
+
+  // The second step of logging in to an account with 2FA on — pass
+  // exactly one of code (from an authenticator app) or recoveryCode (one
+  // of the one-time backup codes). Redeems the pending-login cookie
+  // login() above left behind, same as login() would on success.
+  mfaLogin: (code?: string, recoveryCode?: string) =>
+    authHttp.post<{ user: AuthUser; recovery_code_used?: boolean; recovery_codes_remaining?: number }>('/totp/login', {
+      code: code || undefined,
+      recovery_code: recoveryCode || undefined,
+    }).then(r => r.data),
 
   me: () =>
     authHttp.get<{ user: AuthUser }>('/me').then(r => r.data),
@@ -92,4 +108,22 @@ export const authApi = {
       current_password: currentPassword,
       new_password: newPassword,
     }).then(r => r.data),
+
+  // ── Two-factor (TOTP) — the authed user's own device ─────────────────
+  // Requires the current password (not just the existing session) so a
+  // hijacked session alone can't enroll an attacker's device, or strip
+  // the real owner's 2FA off — see the auth service's own comment on
+  // SetupTOTP/DisableTOTP for the full reasoning.
+  setupTotp: (currentPassword: string) =>
+    authHttp.post<{ otpauth_url: string }>('/totp/setup', { current_password: currentPassword }).then(r => r.data),
+
+  // Confirms the code from setupTotp's QR actually works, which is what
+  // turns 2FA on. recovery_codes is shown exactly once — nothing shows
+  // it again afterwards, so the caller has to get the user to save them
+  // before moving on.
+  verifyTotp: (code: string) =>
+    authHttp.post<{ recovery_codes: string[] }>('/totp/verify', { code }).then(r => r.data),
+
+  disableTotp: (currentPassword: string) =>
+    authHttp.post<{ ok: true }>('/totp/disable', { current_password: currentPassword }).then(r => r.data),
 }

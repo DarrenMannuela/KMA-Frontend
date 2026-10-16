@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Lock, Mail, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Lock, Mail, Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/contexts/AuthContext'
 import { AuthApiError } from '@/api/authApi'
 
 export function LoginPage() {
-  const { login } = useAuth()
+  const { login, mfaLogin } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -21,6 +21,12 @@ export function LoginPage() {
   // the person locked out until it expires.
   const [signedInElsewhere, setSignedInElsewhere] = useState(false)
 
+  // Password succeeded, but the account has 2FA on — a second screen
+  // asks for a code instead of the account ever actually signing in yet.
+  const [awaitingMfa, setAwaitingMfa] = useState(false)
+  const [mfaCode, setMfaCode] = useState('')
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false)
+
   const redirectTo = (location.state as { from?: Location })?.from?.pathname || '/'
 
   async function signIn(takeOver: boolean) {
@@ -28,7 +34,11 @@ export function LoginPage() {
     setSignedInElsewhere(false)
     setSubmitting(true)
     try {
-      await login(email, password, takeOver)
+      const result = await login(email, password, takeOver)
+      if (result.mfaRequired) {
+        setAwaitingMfa(true)
+        return
+      }
       if (takeOver) toast.success('Signed in here. The other device was signed out.')
       navigate(redirectTo, { replace: true })
     } catch (err) {
@@ -52,6 +62,105 @@ export function LoginPage() {
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     signIn(false)
+  }
+
+  async function handleMfaSubmit(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+    try {
+      const { recoveryCodeUsed, recoveryCodesRemaining } = await mfaLogin(
+        useRecoveryCode ? undefined : mfaCode,
+        useRecoveryCode ? mfaCode : undefined,
+      )
+      if (recoveryCodeUsed) {
+        toast.success(
+          recoveryCodesRemaining === 0
+            ? 'Signed in with a recovery code. That was your last one — set up two-factor again soon.'
+            : `Signed in with a recovery code. ${recoveryCodesRemaining} left.`,
+          { duration: 6000 },
+        )
+      }
+      navigate(redirectTo, { replace: true })
+    } catch (err) {
+      const message = err instanceof AuthApiError ? err.message : 'Could not reach the auth server'
+      setError(message)
+      setMfaCode('')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (awaitingMfa) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <div className="w-12 h-12 rounded-xl bg-navy-900 flex items-center justify-center mx-auto mb-4">
+              <ShieldCheck className="w-5 h-5 text-gold-400" />
+            </div>
+            <h1 className="text-xl font-bold text-navy-900">Two-factor authentication</h1>
+            <p className="text-sm text-slate-400 mt-1">
+              {useRecoveryCode ? 'Enter one of your recovery codes' : 'Enter the 6-digit code from your authenticator app'}
+            </p>
+          </div>
+
+          <form
+            onSubmit={handleMfaSubmit}
+            className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 flex flex-col gap-4"
+          >
+            <div>
+              <label htmlFor="mfa-code" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">
+                {useRecoveryCode ? 'Recovery code' : 'Code'}
+              </label>
+              <input
+                id="mfa-code"
+                type="text"
+                inputMode={useRecoveryCode ? 'text' : 'numeric'}
+                autoComplete="one-time-code"
+                autoFocus
+                required
+                value={mfaCode}
+                onChange={e => setMfaCode(useRecoveryCode ? e.target.value.toUpperCase() : e.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm text-navy-900 text-center tracking-[0.3em] font-mono
+                           focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors"
+                placeholder={useRecoveryCode ? 'XXXX-XXXX' : '000000'}
+              />
+            </div>
+
+            {error && (
+              <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2" role="alert">{error}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-navy-900 text-white text-sm font-semibold
+                         hover:bg-navy-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {submitting ? 'Verifying…' : 'Verify'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setUseRecoveryCode(v => !v); setMfaCode(''); setError(null) }}
+              className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              {useRecoveryCode ? 'Use your authenticator app instead' : "Lost your device? Use a recovery code"}
+            </button>
+          </form>
+
+          <button
+            type="button"
+            onClick={() => { setAwaitingMfa(false); setPassword(''); setMfaCode(''); setError(null) }}
+            className="block w-full text-center text-xs text-slate-400 hover:text-slate-600 mt-6 transition-colors"
+          >
+            ← Back to sign in
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (

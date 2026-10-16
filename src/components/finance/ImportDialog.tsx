@@ -11,6 +11,7 @@ import { readXlsx } from '@/utils/xlsx'
 import { todayISODate } from '@/utils/MonthUtils'
 import { suggestNextKasBonId } from '@/utils/KasBonId'
 import { CATEGORY_LABELS } from '@/constants/supplierCategories'
+import { friendlyError } from '@/utils/friendlyError'
 import type { FinanceBatch, FinanceBatchResult, FinanceHeader, Order, Supplier, SupplierCategory } from '@/types'
 import { guessColumns, readRows, TARGETS, TARGET_LABELS, type Guess, type ImportedRow, type Target } from './columnGuess'
 import { supplierWithCategory, type Kind } from './ledgerModel'
@@ -178,7 +179,7 @@ export function ImportDialog({ kind, headers, suppliers, orders, initialGrid, on
       recordBatches(qc, `Imported ${good.length} line${good.length === 1 ? '' : 's'}`, results)
       onClose()
     } catch (e) {
-      toast.error(`Import stopped: ${(e as Error).message}. Anything saved before that can be undone with Ctrl+Z.`)
+      toast.error(`Import stopped: ${friendlyError(e)}. Anything saved before that can be undone with Ctrl+Z.`)
     } finally {
       setBusy(false)
     }

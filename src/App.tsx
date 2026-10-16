@@ -34,6 +34,7 @@ const BuktiKasPage = lazy(() => import('@/pages/finance/BuktiKasPage').then(m =>
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage').then(m => ({ default: m.LoginPage })))
 const SetPasswordPage = lazy(() => import('@/pages/auth/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })))
 const ChangePasswordPage = lazy(() => import('@/pages/auth/ChangePasswordPage').then(m => ({ default: m.ChangePasswordPage })))
+const TwoFactorPage = lazy(() => import('@/pages/auth/TwoFactorPage').then(m => ({ default: m.TwoFactorPage })))
 const UsersPage = lazy(() => import('@/pages/users/UsersPage').then(m => ({ default: m.UsersPage })))
 
 // Full-page variant for the top-level Routes (login, print pages, the
@@ -118,6 +119,7 @@ export default function App() {
 
           {/* Not inside MustChangePasswordRoute, which redirects here. */}
           <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
+          <Route path="/two-factor" element={<ProtectedRoute><TwoFactorPage /></ProtectedRoute>} />
 
           {/* Print routes: logged in, no app chrome. A direct hit (typed URL, refresh)
              goes to the dashboard instead; see RedirectDirectAccess. */}

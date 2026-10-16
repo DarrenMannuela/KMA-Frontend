@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Zap, AlertCircle, ChevronDown, LogOut, User as UserIcon, KeyRound, Menu, Languages } from 'lucide-react'
+import { Bell, Zap, AlertCircle, ChevronDown, LogOut, User as UserIcon, KeyRound, ShieldCheck, Menu, Languages } from 'lucide-react'
 import { format } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
@@ -123,6 +123,17 @@ function AccountMenu() {
           >
             <KeyRound className="w-4 h-4" />
             {t('topbar.changePassword')}
+          </button>
+          <button
+            onClick={() => {
+              setOpen(false)
+              navigate('/two-factor')
+            }}
+            className="w-full flex items-center gap-2 px-3.5 py-2 text-sm text-navy-700 hover:bg-slate-50 transition-colors"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            {t('topbar.twoFactor')}
+            {user?.totp_enabled && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-green-500" />}
           </button>
           <button
             onClick={handleLogout}

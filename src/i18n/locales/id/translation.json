@@ -67,6 +67,7 @@
   "topbar": {
     "openMenu": "Buka menu",
     "changePassword": "Ganti kata sandi",
+    "twoFactor": "Autentikasi dua faktor",
     "logOut": "Keluar",
     "backendLive": "Server aktif",
     "backendOffline": "Server mati",

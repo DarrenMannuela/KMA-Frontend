@@ -1,6 +1,7 @@
 import { createElement, useMemo } from 'react'
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { friendlyError } from '@/utils/friendlyError'
 import { catalogueApi } from '@/api'
 import type { CatalogueBatch, CatalogueBatchResult, Client, Item, Order } from '@/types'
 import { itemKey } from '@/pages/client/catalogue/catalogueModel'
@@ -97,7 +98,7 @@ export function useCatalogueBatch() {
   return useMutation({
     mutationFn: ({ batch }: CatalogueRequest) => catalogueApi.apply(batch),
     onSuccess: (res, { batch, label }) => recordCatalogue(qc, batch.client_id, label, [res]),
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(friendlyError(e)),
   })
 }
 

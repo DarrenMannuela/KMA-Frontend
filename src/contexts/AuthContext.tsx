@@ -9,7 +9,14 @@ interface AuthContextValue {
   // 'error': the session couldn't be checked (network, 5xx), unlike
   // 'unauthenticated' (a real 401). Route guards offer Retry instead of /login.
   status: 'loading' | 'authenticated' | 'unauthenticated' | 'error'
-  login: (email: string, password: string, takeOver?: boolean) => Promise<void>
+  // Resolves { mfaRequired: true } without signing in, for an account
+  // with 2FA on — the caller (LoginPage) then collects a code and calls
+  // mfaLogin to finish. Otherwise resolves { mfaRequired: false } having
+  // already signed in, same as before 2FA existed.
+  login: (email: string, password: string, takeOver?: boolean) => Promise<{ mfaRequired: boolean }>
+  // The second step of signing in to an account with 2FA on. Pass
+  // exactly one of code or recoveryCode.
+  mfaLogin: (code?: string, recoveryCode?: string) => Promise<{ recoveryCodeUsed?: boolean; recoveryCodesRemaining?: number }>
   acceptInvite: (token: string, newPassword: string) => Promise<void>
   logout: () => Promise<void>
   retryMe: () => void
@@ -57,10 +64,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const retryMe = useCallback(() => setAttempt(a => a + 1), [])
 
   const login = useCallback(async (email: string, password: string, takeOver = false) => {
-    const { user } = await authApi.login(email, password, takeOver)
+    const result = await authApi.login(email, password, takeOver)
+    if ('mfa_required' in result) {
+      return { mfaRequired: true }
+    }
     markTabSignedIn()
-    setUser(user)
+    setUser(result.user)
     setStatus('authenticated')
+    return { mfaRequired: false }
+  }, [])
+
+  const mfaLogin = useCallback(async (code?: string, recoveryCode?: string) => {
+    const result = await authApi.mfaLogin(code, recoveryCode)
+    markTabSignedIn()
+    setUser(result.user)
+    setStatus('authenticated')
+    return { recoveryCodeUsed: result.recovery_code_used, recoveryCodesRemaining: result.recovery_codes_remaining }
   }, [])
 
   // Accepting an invite signs the user in, like login.
@@ -84,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, status, login, acceptInvite, logout, retryMe }}>
+    <AuthContext.Provider value={{ user, status, login, mfaLogin, acceptInvite, logout, retryMe }}>
       {children}
     </AuthContext.Provider>
   )

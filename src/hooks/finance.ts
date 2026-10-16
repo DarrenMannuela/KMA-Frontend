@@ -1,6 +1,7 @@
 import { createElement, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { friendlyError } from '@/utils/friendlyError'
 import {
   financeHeaderApi, productionItemApi, operationItemApi, financeBatchApi, budgetApi, recurringCostApi,
   buktiKasHeaderApi, buktiKasItemApi, buktiKasBatchApi,
@@ -178,7 +179,7 @@ export function useFinanceBatch() {
   return useMutation({
     mutationFn: ({ batch }: BatchRequest) => financeBatchApi.apply(batch),
     onSuccess: (res, { label }) => recordBatches(qc, label, [res]),
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(friendlyError(e)),
   })
 }
 
@@ -311,7 +312,7 @@ export function useBuktiKasBatch() {
   return useMutation({
     mutationFn: ({ batch }: BuktiKasBatchRequest) => buktiKasBatchApi.apply(batch),
     onSuccess: (res, { label }) => recordBuktiKasBatch(qc, label, res),
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(friendlyError(e)),
   })
 }
 
@@ -374,7 +375,7 @@ export function useSetBudget() {
   return useMutation({
     mutationFn: (b: Omit<Budget, 'id'>) => budgetApi.put(b),
     onSuccess: () => qc.invalidateQueries({ queryKey: BUDGET_KEY }),
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(friendlyError(e)),
   })
 }
 
@@ -388,7 +389,7 @@ export function useSaveRecurringCost() {
     mutationFn: (rc: Omit<RecurringCost, 'id'> & { id?: number }) =>
       rc.id ? recurringCostApi.update(rc.id, rc) : recurringCostApi.create(rc),
     onSuccess: () => qc.invalidateQueries({ queryKey: RECURRING_KEY }),
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(friendlyError(e)),
   })
 }
 
@@ -397,7 +398,7 @@ export function useDeleteRecurringCost() {
   return useMutation({
     mutationFn: (id: number) => recurringCostApi.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: RECURRING_KEY }),
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(friendlyError(e)),
   })
 }
 
@@ -412,6 +413,6 @@ export function usePostRecurringMonth() {
       const n = res.posted?.length ?? 0
       toast.success(n ? `Added ${n} recurring cost${n === 1 ? '' : 's'}` : 'Already added for this month')
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(friendlyError(e)),
   })
 }

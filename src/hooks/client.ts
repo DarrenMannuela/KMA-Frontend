@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { friendlyError } from '@/utils/friendlyError'
 import { clientApi, clientContactApi, clientItemApi, clientItemPriceApi } from '@/api'
 import { makeCrudHooks } from './crud'
 
@@ -33,7 +34,7 @@ export const clientItemHooks = {
     return useMutation({
       mutationFn: ({ id, file }: { id: number; file: File }) => clientItemApi.uploadPhoto(id, file),
       onSuccess: () => { qc.invalidateQueries({ queryKey: ['client-items'] }); toast.success('Photo uploaded') },
-      onError:   (e: Error) => toast.error(e.message),
+      onError:   (e: Error) => toast.error(friendlyError(e)),
     })
   },
   useDeletePhoto: () => {
@@ -41,7 +42,7 @@ export const clientItemHooks = {
     return useMutation({
       mutationFn: (id: number) => clientItemApi.deletePhoto(id),
       onSuccess: () => { qc.invalidateQueries({ queryKey: ['client-items'] }); toast.success('Photo removed') },
-      onError:   (e: Error) => toast.error(e.message),
+      onError:   (e: Error) => toast.error(friendlyError(e)),
     })
   },
 }

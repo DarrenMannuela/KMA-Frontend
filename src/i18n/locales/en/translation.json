@@ -68,6 +68,7 @@
   "topbar": {
     "openMenu": "Open menu",
     "changePassword": "Change password",
+    "twoFactor": "Two-factor authentication",
     "logOut": "Log out",
     "backendLive": "Backend live",
     "backendOffline": "Backend offline",

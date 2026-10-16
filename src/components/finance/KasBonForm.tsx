@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Trash2, Factory, Wrench, Search, Palette } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { formatRp } from '@/components/ui'
 import { useFinanceBatch } from '@/hooks'
+import { useIsDirty, useUnsavedChanges, useAutosaveDraft, loadDraft, clearDraft } from '@/hooks/useUnsavedChanges'
 import { ApiError } from '@/api'
 import { SI_UNITS } from '@/utils/Units'
 import { todayISODate } from '@/utils/MonthUtils'
@@ -42,6 +43,34 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
   const [showErrors, setShowErrors] = useState(false)
   const save = useFinanceBatch()
   const formRef = useRef<HTMLDivElement>(null)
+
+  // Autosaved locally so a crashed tab or closed browser doesn't take a half-
+  // typed Kas Bon with it — only for a brand-new one; adding lines to an
+  // existing Kas Bon isn't drafted (there's a real record to just reopen).
+  type Draft = { date: string; id: string; description: string; lines: DraftLine[] }
+  const draftKey = `kasbon.${kind}.new`
+  const restoredRef = useRef(false)
+  useEffect(() => {
+    if (existing || restoredRef.current) return
+    restoredRef.current = true
+    const draft = loadDraft<Draft>(draftKey)
+    if (!draft || (!draft.description.trim() && !draft.lines.some(l => !isBlank(l)))) return
+    if (window.confirm('Restore the Kas Bon you were entering before?')) {
+      setDate(draft.date)
+      setId(draft.id)
+      setIdTouched(true)
+      setDescription(draft.description)
+      setLines(draft.lines)
+    } else {
+      clearDraft(draftKey)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useAutosaveDraft(draftKey, { date, id, description, lines }, !!existing)
+
+  const isDirty = useIsDirty({ date, id, description, lines })
+  const { guardClose } = useUnsavedChanges(isDirty)
+  const close = () => guardClose(onClose)
 
   const supplierIds = useMemo(() => new Set(suppliers.map(s => s.id)), [suppliers])
   const target = headers.find(h => h.id === id.trim())
@@ -114,7 +143,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
       batch: draftsToBatch(filled, target?.id ?? headerId, batch),
       label: `Saved ${filled.length} line${filled.length === 1 ? '' : 's'} on ${target?.id ?? headerId}`,
     }, {
-      onSuccess: onClose,
+      onSuccess: () => { clearDraft(draftKey); onClose() },
       onError: e => {
         // Someone else just took this number: offer the next one.
         if (e instanceof ApiError && e.status === 409) setId(headerId.replace(/^\d+/, n => String(Number(n) + 1).padStart(n.length, '0')))
@@ -127,7 +156,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
   const categoryListId = 'kasbon-categories'
 
   return (
-    <Modal title={title} onClose={onClose} size="xl">
+    <Modal title={title} onClose={close} size="xl">
       <div
         ref={formRef}
         className="space-y-4"
@@ -311,7 +340,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
         </p>
         {showErrors && !filled.length && <p className="text-sm text-red-500">Add at least one line.</p>}
         <div className="flex justify-end gap-2 pt-1">
-          <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-secondary" onClick={close}>Cancel</button>
           <button type="button" className="btn-primary" onClick={submit} disabled={save.isPending}>
             {save.isPending ? 'Saving…' : `Save ${filled.length || ''} line${filled.length === 1 ? '' : 's'}`}
           </button>

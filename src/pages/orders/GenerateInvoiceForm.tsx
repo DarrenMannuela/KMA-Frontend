@@ -6,8 +6,10 @@ import { RotateCcw, Building2 } from 'lucide-react'
 import { FormField, formatRp, UppercaseField } from '@/components/ui'
 import { invoicesApi, ApiError } from '@/api'
 import { invoiceHooks, clientHooks, clientContactHooks } from '@/hooks'
+import { useIsDirty, useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import type { Order, Item, Invoice, CreateInvoiceRequest, UpdateInvoiceRequest } from '@/types'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
+import { friendlyError } from '@/utils/friendlyError'
 
 // "NNN/KMA/YY" for this year. Older invoices may carry a ".N" suffix
 // ("076.1/KMA/26"); the scan allows it, new suggestions never use it.
@@ -210,6 +212,14 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
     setForm(p => ({ ...p, discount }))
   })
 
+  // Warns (native beforeunload, plus the Cancel button below) before losing
+  // what's typed here — this form's own close button is the only exit it
+  // controls; the Modal around it (in OrderDetailPage) closes on its own
+  // backdrop/Escape without going through here, so the browser-level warning
+  // on `isDirty` is still the real safety net for those.
+  const isDirty = useIsDirty({ form, dpPercent, contactId })
+  const { guardClose } = useUnsavedChanges(isDirty)
+
   const create = useMutation({
     mutationFn: (body: CreateInvoiceRequest) => invoicesApi.create(body),
     onSuccess: (inv) => {
@@ -225,7 +235,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
         resetIdSuggestion()
         return
       }
-      toast.error(e.message)
+      toast.error(friendlyError(e))
     },
   })
 
@@ -237,7 +247,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
       onClose()
       navigate(`/invoice/${encodeURIComponent(inv.id)}`)
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(friendlyError(e)),
   })
 
   const handleSubmit = () => {
@@ -523,7 +533,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
         <button className="btn-primary" disabled={busy || idAlreadyExists} onClick={handleSubmit}>
           {busy ? 'Saving…' : existingInvoice ? 'Update Invoice' : 'Generate Invoice'}
         </button>
-        <button className="btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn-secondary" onClick={() => guardClose(onClose)}>Cancel</button>
       </div>
     </div>
   )

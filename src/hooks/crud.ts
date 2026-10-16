@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { friendlyError } from '@/utils/friendlyError'
 
 // ── generic CRUD hook factory (unchanged — used by orders/items/etc.) ────────
 export function makeCrudHooks<T, C, U>(
@@ -25,7 +26,7 @@ export function makeCrudHooks<T, C, U>(
       return useMutation({
         mutationFn: (body: C) => api.create(body),
         onSuccess: () => { qc.invalidateQueries({ queryKey: [key] }); toast.success(`${label} created`) },
-        onError:   (e: Error) => toast.error(e.message),
+        onError:   (e: Error) => toast.error(friendlyError(e)),
       })
     },
 
@@ -34,7 +35,7 @@ export function makeCrudHooks<T, C, U>(
       return useMutation({
         mutationFn: ({ id, body }: { id: string | number; body: U }) => api.update(id, body),
         onSuccess: () => { qc.invalidateQueries({ queryKey: [key] }); toast.success(`${label} updated`) },
-        onError:   (e: Error) => toast.error(e.message),
+        onError:   (e: Error) => toast.error(friendlyError(e)),
       })
     },
 
@@ -43,7 +44,7 @@ export function makeCrudHooks<T, C, U>(
       return useMutation({
         mutationFn: (id: string | number) => api.delete(id),
         onSuccess: () => { qc.invalidateQueries({ queryKey: [key] }); toast.success(`${label} deleted`) },
-        onError:   (e: Error) => toast.error(e.message),
+        onError:   (e: Error) => toast.error(friendlyError(e)),
       })
     },
   }

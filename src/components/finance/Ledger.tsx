@@ -108,6 +108,10 @@ export function Ledger({ kind, initial, title, icon }: {
   const [importGrid, setImportGrid] = useState<Grid | null | undefined>(undefined)
   const [dialog, setDialog] = useState<null | 'move' | 'supplier_id' | 'category' | 'order_id' | 'delete'>(null)
   const [editing, setEditing] = useState<LedgerRow | null>(null)
+  // A single line's delete also confirms first — unlike the bulk one above,
+  // it has no selecting-then-clicking-Delete step of its own to catch a
+  // mis-click, just the one small icon.
+  const [confirmDeleteRow, setConfirmDeleteRow] = useState<LedgerRow | null>(null)
   const [selectMode, setSelectMode] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const lastClicked = useRef<number | null>(null)
@@ -683,7 +687,7 @@ export function Ledger({ kind, initial, title, icon }: {
                             </td>
                           ))}
                           <td className="px-1 text-center">
-                            <button onClick={() => removeRows([r])} className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-slate-300 hover:text-red-500" title="Delete line (undo with Ctrl+Z)">
+                            <button onClick={() => setConfirmDeleteRow(r)} className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-slate-300 hover:text-red-500" title="Delete line">
                               <Trash2 size={14} />
                             </button>
                           </td>
@@ -743,10 +747,17 @@ export function Ledger({ kind, initial, title, icon }: {
           onCancel={() => setDialog(null)}
         />
       )}
+      {confirmDeleteRow && (
+        <ConfirmDialog
+          message={`Delete "${confirmDeleteRow.name || confirmDeleteRow.category}" (${formatRp(confirmDeleteRow.total)})? You can undo this right after.`}
+          onConfirm={() => { removeRows([confirmDeleteRow]); setConfirmDeleteRow(null); setEditing(null) }}
+          onCancel={() => setConfirmDeleteRow(null)}
+        />
+      )}
       {editing && (
         <LineEditor row={editing} suppliers={suppliers} orders={orders} categories={categories}
           onApply={(b, l) => apply(b, l, () => setEditing(null))}
-          onDelete={() => { removeRows([editing]); setEditing(null) }}
+          onDelete={() => setConfirmDeleteRow(editing)}
           onClose={() => setEditing(null)} />
       )}
     </div>
