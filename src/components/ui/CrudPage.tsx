@@ -7,7 +7,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog, Spinner, EmptyState } from '@/components/ui'
 import { useIsMobile } from '@/hooks/useIsMobile'
 
-export interface Column<T> {
+interface Column<T> {
   header: string
   key: keyof T | string
   render?: (row: T) => React.ReactNode

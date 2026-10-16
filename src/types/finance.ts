@@ -77,7 +77,7 @@ export type CreateProductionRowRequest = Omit<ProductionRow, 'id' | 'order_id'> 
 export type CreateOperationRowRequest = Omit<OperationRow, 'id' | 'order_id'> & { order_id?: string | null }
 
 // ─── Batch changes (POST /finance/batch), applied in one transaction ─────────
-export interface ItemPatch {
+interface ItemPatch {
   id: number
   fields: Record<string, unknown>
 }
@@ -162,7 +162,7 @@ export interface BuktiKasBatchResult {
 }
 
 // ─── Budgets and recurring costs ─────────────────────────────────────────────
-export type BudgetScope = 'production' | 'operation'
+type BudgetScope = 'production' | 'operation'
 
 /** A monthly limit for an operation category, a supplier category, or ""
  *  for the whole scope. */

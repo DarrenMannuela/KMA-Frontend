@@ -32,7 +32,7 @@ import { guessColumns, readRows } from './columnGuess'
 import type { Grid } from '@/utils/tableText'
 import { isTyping } from '@/utils/isTyping'
 
-export type GroupBy = 'kasbon' | 'group' | 'order' | 'none'
+type GroupBy = 'kasbon' | 'group' | 'order' | 'none'
 type SortKey = 'header_id' | 'date' | 'name' | 'group' | 'qty' | 'price' | 'total' | 'order_id'
 interface Sort { key: SortKey; dir: 'asc' | 'desc' }
 

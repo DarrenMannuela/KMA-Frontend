@@ -2,13 +2,13 @@ import { formatRp } from '@/components/ui'
 
 // ─── StackedBarChart ─────────────────────────────────────────────────────────
 // One bar per category, each split into the same segments (e.g. Paid/Unpaid).
-export interface StackedBarSegment {
+interface StackedBarSegment {
   key: string
   label: string
   color: string
 }
 
-export interface StackedBarDatum {
+interface StackedBarDatum {
   /** X-axis label for this bar, e.g. a month name or "This Month". */
   category: string
   /** Segment key → value; missing keys count as 0. */

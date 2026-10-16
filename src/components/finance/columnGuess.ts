@@ -41,7 +41,7 @@ const HEADINGS: [Target, RegExp][] = [
 
 const KAS_BON = /^\d+\s*\/\s*KB\s*\/\s*\d+$/i
 
-export function supplierMatcher(suppliers: Supplier[]) {
+function supplierMatcher(suppliers: Supplier[]) {
   const norm = (s: string) => s.toLowerCase().replace(/·.*$/, '').replace(/[^a-z0-9]/g, '')
   const byName = new Map<string, number>()
   for (const s of suppliers) if (!byName.has(norm(s.supplier_name))) byName.set(norm(s.supplier_name), s.id)

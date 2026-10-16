@@ -99,7 +99,7 @@ const operationFields = (i: OperationItem) => ({
 })
 
 /** The batch that puts everything a saved batch changed back as it was. */
-export function inverseBatch(r: FinanceBatchResult): FinanceBatch {
+function inverseBatch(r: FinanceBatchResult): FinanceBatch {
   return {
     headers: r.headers_deleted ?? [],
     header_update: r.headers_before ?? [],
@@ -147,7 +147,7 @@ function undoToast(label: string, qc: QueryClient) {
   ), { duration: 6000 })
 }
 
-export interface BatchRequest {
+interface BatchRequest {
   batch: FinanceBatch
   /** What the change was, for the toast and the undo message: "Deleted 3 lines". */
   label: string
@@ -264,7 +264,7 @@ function invalidateBuktiKas(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: BUKTI_KAS_ITEMS_KEY })
 }
 
-export async function undoLastBuktiKas(qc: QueryClient) {
+async function undoLastBuktiKas(qc: QueryClient) {
   const entry = buktiKasUndoStack.pop()
   if (!entry) {
     toast('Nothing to undo')
@@ -302,12 +302,12 @@ function recordBuktiKasBatch(qc: QueryClient, label: string, result: BuktiKasBat
   buktiKasUndoToast(label, qc)
 }
 
-export interface BuktiKasBatchRequest {
+interface BuktiKasBatchRequest {
   batch: BuktiKasBatch
   label: string
 }
 
-export function useBuktiKasBatch() {
+function useBuktiKasBatch() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ batch }: BuktiKasBatchRequest) => buktiKasBatchApi.apply(batch),

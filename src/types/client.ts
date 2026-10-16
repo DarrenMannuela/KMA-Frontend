@@ -60,7 +60,7 @@ export type UpdateClientItemPriceRequest = Partial<CreateClientItemPriceRequest>
 // ─── POST /client-catalogue/batch ──────────────────────────────────────────
 // Changes to one client's catalogue saved together; the result is enough to
 // undo them.
-export interface CataloguePriceIn {
+interface CataloguePriceIn {
   client_item_id?: number
   year: number
   price: number

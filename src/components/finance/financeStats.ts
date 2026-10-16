@@ -13,12 +13,10 @@ import { inPeriod, type LedgerRow, type Period } from './ledgerModel'
 // future caller that doesn't have Bukti Kas data to hand yet degrades to
 // "just invoices" instead of a hard type error.
 
-export { invoiceAmount }
-
 const day = (s: string | null | undefined) => (s ?? '').slice(0, 10)
-export const paidOn = (inv: Invoice) => day(inv.paid_date) || day(inv.tanggal)
+const paidOn = (inv: Invoice) => day(inv.paid_date) || day(inv.tanggal)
 export const dueOn = (inv: Invoice) => day(inv.due_date) || day(inv.tanggal)
-export const isPaid = (inv: Invoice) => inv.status === 'paid'
+const isPaid = (inv: Invoice) => inv.status === 'paid'
 
 export interface MonthStat {
   month: number
@@ -137,7 +135,7 @@ export function receivables(invoices: Invoice[], orders: Order[], clients: Clien
   }).sort((a, b) => b.daysLate - a.daysLate || b.amount - a.amount)
 }
 
-export function clientOfInvoice(inv: Invoice, orders: Order[], clients: Client[]): string {
+function clientOfInvoice(inv: Invoice, orders: Order[], clients: Client[]): string {
   const order = orders.find(o => o.id === inv.order_id)
   const client = order?.client_id != null ? clients.find(c => c.id === order.client_id) : undefined
   return client?.client_name ?? order?.company ?? inv.kepada_yth ?? 'Unknown'

@@ -105,7 +105,7 @@ async function unzip(buf: ArrayBuffer, wanted: (name: string) => boolean): Promi
 
 // ── Writing ──────────────────────────────────────────────────────────────────
 
-export type ColumnKind = 'text' | 'money' | 'number' | 'date'
+type ColumnKind = 'text' | 'money' | 'number' | 'date'
 
 export interface SheetSpec {
   name: string

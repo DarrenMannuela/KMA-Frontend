@@ -150,7 +150,9 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           </div>
           {/* Close button — mobile only; the sidebar isn't a dismissible
               drawer on desktop, so this has nothing to do there. */}
-          <button onClick={onClose} className="md:hidden p-1.5 rounded-lg text-navy-400 hover:bg-white/5 hover:text-white transition-colors" title="Close menu">
+          {/* Same reasoning as Topbar's menu button: a full 44px tap target
+              for the control that closes the whole nav drawer. */}
+          <button onClick={onClose} className="md:hidden p-3.5 -m-2 rounded-lg text-navy-400 hover:bg-white/5 hover:text-white transition-colors" title="Close menu">
             <X className="w-4 h-4" />
           </button>
         </div>

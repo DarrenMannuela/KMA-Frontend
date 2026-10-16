@@ -173,7 +173,10 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           {/* Opens the Sidebar's mobile drawer — md:hidden because the
               sidebar is permanently visible from that breakpoint up, where
               this button would have nothing to do. */}
-          <button onClick={onMenuClick} className="md:hidden btn-ghost !px-2 shrink-0" title={t('topbar.openMenu')}>
+          {/* A full 44px tap target, not just the icon's own size — the one
+              control that opens the entire nav on mobile is worth the extra
+              padding so a slightly-off tap still lands. */}
+          <button onClick={onMenuClick} className="md:hidden btn-ghost !p-3.5 shrink-0" title={t('topbar.openMenu')}>
             <Menu className="w-4 h-4" />
           </button>
           <div className="min-w-0">

@@ -16,7 +16,7 @@ const undoStack: UndoEntry[] = []
 const UNDO_DEPTH = 30
 
 /** The batch that puts back what a saved batch changed. */
-export function inverseCatalogue(clientId: number, r: CatalogueBatchResult): CatalogueBatch {
+function inverseCatalogue(clientId: number, r: CatalogueBatchResult): CatalogueBatch {
   const created = new Set((r.items_created ?? []).map(i => i.id))
   const deleted = new Map((r.items_deleted ?? []).map(i => [i.id, i]))
   const before = (r.prices_before ?? []).filter(p => !created.has(p.client_item_id) && !deleted.has(p.client_item_id))
@@ -116,7 +116,7 @@ export interface Sale {
 
 /** True when an order is this client's (linked, or an older order with only
  *  the company name typed). */
-export function isClientOrder(o: Order, client: Pick<Client, 'id' | 'client_name'>) {
+function isClientOrder(o: Order, client: Pick<Client, 'id' | 'client_name'>) {
   if (o.client_id != null) return o.client_id === client.id
   return (o.company ?? '').trim().toUpperCase() === client.client_name.trim().toUpperCase()
 }
