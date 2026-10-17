@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, BarChart3, CheckCircle2, ChevronRight, Download, Hourglass, PiggyBank, Receipt, Repeat, Scale, TrendingUp, Unlink, Wallet } from 'lucide-react'
+import { AlertCircle, BarChart3, CheckCircle2, ChevronRight, Download, Hourglass, PiggyBank, Printer, Receipt, Repeat, Scale, TrendingUp, Unlink, Wallet } from 'lucide-react'
 import { formatRp } from '@/components/ui'
 import { PageHeader, Card, LoadingState, ErrorState } from '@/components/ui/Page'
 import {
@@ -185,6 +185,15 @@ export function FinancePage() {
         actions={
           <>
             <PeriodPicker value={period} onChange={setPeriod} />
+            {(period.mode === 'month' || period.mode === 'year') && (
+              <button
+                className="btn-secondary btn-sm"
+                onClick={() => navigate(`/finance/report?mode=${period.mode}&year=${period.year}&month=${period.month}`)}
+                title="A printable monthly or yearly report — same numbers as this page, formatted as a document"
+              >
+                <Printer size={14} /> Print Report
+              </button>
+            )}
             <button className="btn-secondary btn-sm" onClick={download} title="Summary, lines, clients and receivables as one Excel file"><Download size={14} /> Excel</button>
           </>
         }

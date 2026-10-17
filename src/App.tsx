@@ -30,6 +30,7 @@ const ClientDetailPage = lazy(() => import('@/pages/client/ClientDetailPage').th
 const ClientItemDetailPage = lazy(() => import('@/pages/client/ClientItemDetailPage').then(m => ({ default: m.ClientItemDetailPage })))
 const BudgetsPage = lazy(() => import('@/pages/finance/BudgetsPage').then(m => ({ default: m.BudgetsPage })))
 const FinancePage = lazy(() => import('@/pages/finance/FinancePage').then(m => ({ default: m.FinancePage })))
+const FinanceReportPrintPage = lazy(() => import('@/pages/finance/FinanceReportPrintPage').then(m => ({ default: m.FinanceReportPrintPage })))
 const BuktiKasPage = lazy(() => import('@/pages/finance/BuktiKasPage').then(m => ({ default: m.BuktiKasPage })))
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage').then(m => ({ default: m.LoginPage })))
 const SetPasswordPage = lazy(() => import('@/pages/auth/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })))
@@ -126,6 +127,7 @@ export default function App() {
           <Route path="/invoice/:id" element={<ProtectedRoute><RedirectDirectAccess><InvoicePrintPage /></RedirectDirectAccess></ProtectedRoute>} />
           <Route path="/invoice/:id/kwitansi" element={<ProtectedRoute><RedirectDirectAccess><KwitansiPrintPage /></RedirectDirectAccess></ProtectedRoute>} />
           <Route path="/delivery/:id/print" element={<ProtectedRoute><RedirectDirectAccess><DeliveryPrintPage /></RedirectDirectAccess></ProtectedRoute>} />
+          <Route path="/finance/report" element={<ProtectedRoute><RedirectDirectAccess><FinanceReportPrintPage /></RedirectDirectAccess></ProtectedRoute>} />
 
           {/* Everything else is behind one ProtectedRoute; a temporary password must be
              changed first. */}
