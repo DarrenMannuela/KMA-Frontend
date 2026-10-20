@@ -16,7 +16,7 @@ export function PageHeader({ icon: Icon, title, subtitle, actions }: {
         <Icon className="w-4 h-4 text-gold-400" />
       </div>
       <div className="min-w-0">
-        <h2 className="font-display font-semibold text-navy-900 leading-tight">{title}</h2>
+        <h2 className="font-display font-semibold text-navy-900 leading-tight dark:text-slate-50">{title}</h2>
         {subtitle && <p className="text-slate-400 text-xs truncate">{subtitle}</p>}
       </div>
       {actions && <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>}
@@ -39,7 +39,7 @@ export function Card({ id, title, icon: Icon, actions, children, className = '',
       {(title || actions) && (
         <div className="flex flex-wrap items-center gap-2 px-5 pt-4">
           {Icon && <Icon className="w-4 h-4 text-navy-500" />}
-          {title && <h3 className="font-semibold text-navy-900 text-sm">{title}</h3>}
+          {title && <h3 className="font-semibold text-navy-900 text-sm dark:text-slate-100">{title}</h3>}
           {actions && <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>}
         </div>
       )}
@@ -63,7 +63,7 @@ export function ErrorState({ what, onRetry }: { what: string; onRetry?: () => vo
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <AlertTriangle className="w-9 h-9 mb-3 text-red-300" />
-      <p className="font-medium text-slate-600 text-sm">{t('common.couldntLoad', { what })}</p>
+      <p className="font-medium text-slate-600 text-sm dark:text-slate-300">{t('common.couldntLoad', { what })}</p>
       <p className="text-xs text-slate-400 mt-1 mb-4">{t('common.checkConnection')}</p>
       {onRetry && <button className="btn-secondary btn-sm" onClick={onRetry}>{t('common.retry')}</button>}
     </div>

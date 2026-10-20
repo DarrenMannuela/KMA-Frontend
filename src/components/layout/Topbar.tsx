@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Zap, AlertCircle, ChevronDown, LogOut, User as UserIcon, KeyRound, ShieldCheck, Menu, Languages } from 'lucide-react'
+import { Bell, Zap, AlertCircle, ChevronDown, LogOut, User as UserIcon, KeyRound, ShieldCheck, Menu, Languages, Sun, Moon } from 'lucide-react'
 import { format } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 import { useTranslation } from 'react-i18next'
 import { useDateLocale } from '@/i18n/dateLocale'
 import { useAuth } from '@/contexts/AuthContext'
+import { useTheme } from '@/contexts/ThemeContext'
 
 // The stub/live route banners are for development builds only.
 const SHOW_DEV_STATUS = import.meta.env.DEV
@@ -38,21 +39,16 @@ function titleKeyFor(pathname: string): string | null {
   return best ? TITLE_KEYS[best] : null
 }
 
-// A toggle button showing the OTHER language — click "ID" to switch to
-// Bahasa Indonesia, click "EN" to switch back. Persisted via
-// i18next-browser-languagedetector's localStorage cache (see i18n/config.ts).
-function LanguageToggle() {
-  const { i18n, t } = useTranslation()
-  const next = i18n.resolvedLanguage?.startsWith('id') ? 'en' : 'id'
-  const nextLabel = next === 'id' ? t('common.languageIndonesian') : t('common.languageEnglish')
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme()
+  const { t } = useTranslation()
   return (
     <button
-      className="btn-ghost !px-2 flex items-center gap-1"
-      onClick={() => i18n.changeLanguage(next)}
-      title={t('common.switchToLanguage', { language: nextLabel })}
+      className="btn-ghost !px-2"
+      onClick={toggleTheme}
+      title={theme === 'dark' ? t('topbar.switchToLight') : t('topbar.switchToDark')}
     >
-      <Languages className="w-4 h-4" />
-      <span className="hidden sm:inline text-xs font-semibold">{next.toUpperCase()}</span>
+      {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
     </button>
   )
 }
@@ -68,9 +64,11 @@ const STUB_ROUTES = new Set()
 function AccountMenu() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const { t } = useTranslation()
+  const { i18n, t } = useTranslation()
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const nextLang = i18n.resolvedLanguage?.startsWith('id') ? 'en' : 'id'
+  const nextLangLabel = nextLang === 'id' ? t('common.languageIndonesian') : t('common.languageEnglish')
 
   // Close on outside click — a dropdown that only closes when you pick
   // an item (or never) is worse than no dropdown.
@@ -96,7 +94,7 @@ function AccountMenu() {
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1 pl-1 pr-1.5 py-1 rounded-full hover:bg-slate-100 transition-colors group"
+        className="flex items-center gap-1 pl-1 pr-1.5 py-1 rounded-full hover:bg-slate-100 dark:hover:bg-white/10 transition-colors group"
       >
         <div className="w-8 h-8 rounded-full bg-navy-900 flex items-center justify-center shrink-0">
           <span className="text-white text-xs font-semibold">{initial}</span>
@@ -105,10 +103,10 @@ function AccountMenu() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-[calc(100%+8px)] w-52 bg-white rounded-xl border border-slate-100 shadow-card py-1.5 z-40">
+        <div className="absolute right-0 top-[calc(100%+8px)] w-52 bg-white rounded-xl border border-slate-100 shadow-card py-1.5 z-40 dark:bg-navy-900 dark:border-navy-800">
           {user?.email && (
-            <div className="px-3.5 py-2 border-b border-slate-100 mb-1">
-              <p className="flex items-center gap-1.5 text-xs font-medium text-navy-900 truncate">
+            <div className="px-3.5 py-2 border-b border-slate-100 mb-1 dark:border-navy-800">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-navy-900 truncate dark:text-slate-100">
                 <UserIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 {user.email}
               </p>
@@ -116,10 +114,33 @@ function AccountMenu() {
           )}
           <button
             onClick={() => {
+              i18n.changeLanguage(nextLang)
+              setOpen(false)
+            }}
+            className="w-full flex items-center gap-2 px-3.5 py-2 text-sm text-navy-700 hover:bg-slate-50 transition-colors dark:text-slate-200 dark:hover:bg-white/5"
+          >
+            <Languages className="w-4 h-4" />
+            {t('common.switchToLanguage', { language: nextLangLabel })}
+          </button>
+          {/* No handler yet — there's nothing to show here until actual
+              notifications exist (see the overdue-invoices idea). A dead
+              button in the always-visible topbar row was worse than this:
+              listed honestly as not-yet-live, tucked in the menu instead of
+              competing for primary-bar space it wasn't earning. */}
+          <div
+            className="w-full flex items-center gap-2 px-3.5 py-2 text-sm text-slate-400 dark:text-slate-600 cursor-default"
+          >
+            <Bell className="w-4 h-4" />
+            <span className="flex-1 text-left">{t('topbar.notifications')}</span>
+            <span className="text-[9px] uppercase tracking-wide font-semibold text-slate-300 dark:text-slate-700">{t('topbar.comingSoon')}</span>
+          </div>
+          <div className="border-t border-slate-100 my-1 dark:border-navy-800" />
+          <button
+            onClick={() => {
               setOpen(false)
               navigate('/change-password')
             }}
-            className="w-full flex items-center gap-2 px-3.5 py-2 text-sm text-navy-700 hover:bg-slate-50 transition-colors"
+            className="w-full flex items-center gap-2 px-3.5 py-2 text-sm text-navy-700 hover:bg-slate-50 transition-colors dark:text-slate-200 dark:hover:bg-white/5"
           >
             <KeyRound className="w-4 h-4" />
             {t('topbar.changePassword')}
@@ -129,7 +150,7 @@ function AccountMenu() {
               setOpen(false)
               navigate('/two-factor')
             }}
-            className="w-full flex items-center gap-2 px-3.5 py-2 text-sm text-navy-700 hover:bg-slate-50 transition-colors"
+            className="w-full flex items-center gap-2 px-3.5 py-2 text-sm text-navy-700 hover:bg-slate-50 transition-colors dark:text-slate-200 dark:hover:bg-white/5"
           >
             <ShieldCheck className="w-4 h-4" />
             {t('topbar.twoFactor')}
@@ -137,7 +158,7 @@ function AccountMenu() {
           </button>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-3.5 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+            className="w-full flex items-center gap-2 px-3.5 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors dark:text-red-400 dark:hover:bg-red-500/10"
           >
             <LogOut className="w-4 h-4" />
             {t('topbar.logOut')}
@@ -167,9 +188,9 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const isLive = SHOW_DEV_STATUS && LIVE_ROUTES.has(pathname)
 
   return (
-    <header className="bg-white border-b border-slate-100 shrink-0">
-      <div className="h-[60px] flex items-center justify-between px-6 gap-3">
-        <div className="flex items-center gap-3 min-w-0">
+    <header className="bg-white border-b border-slate-100 shrink-0 dark:bg-navy-900 dark:border-navy-800">
+      <div className="h-[60px] flex items-center justify-between px-4 sm:px-6 gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           {/* Opens the Sidebar's mobile drawer — md:hidden because the
               sidebar is permanently visible from that breakpoint up, where
               this button would have nothing to do. */}
@@ -180,7 +201,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
             <Menu className="w-4 h-4" />
           </button>
           <div className="min-w-0">
-            <h2 className="font-display font-semibold text-navy-900 text-base truncate">{title}</h2>
+            <h2 className="font-display font-semibold text-navy-900 text-base truncate dark:text-slate-50">{title}</h2>
             <p className="text-slate-400 text-xs font-mono truncate">
               {/* Short on phones, where the full date was cut off. */}
               <span className="sm:hidden">{format(new Date(), 'EEE, d MMM yyyy', { locale: dateLocale })}</span>
@@ -188,12 +209,12 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {/* Below sm only the dot shows. */}
           <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-            isUp === true  ? 'bg-green-50 text-green-700' :
-            isUp === false ? 'bg-red-50 text-red-600'    :
-            'bg-slate-100 text-slate-500'
+            isUp === true  ? 'bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400' :
+            isUp === false ? 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'    :
+            'bg-slate-100 text-slate-500 dark:bg-white/5 dark:text-slate-400'
           }`}>
             <span className={`w-1.5 h-1.5 rounded-full ${
               isUp === true ? 'bg-green-500 animate-pulse' :
@@ -204,11 +225,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
             </span>
           </div>
 
-          <LanguageToggle />
-
-          <button className="btn-ghost !px-2">
-            <Bell className="w-4 h-4" />
-          </button>
+          <ThemeToggle />
 
           <AccountMenu />
         </div>
@@ -216,17 +233,17 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
 
       {/* Route status banner */}
       {isStub && (
-        <div className="flex items-center gap-2 px-6 py-1.5 bg-amber-50 border-b border-amber-100">
-          <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-          <p className="text-xs text-amber-700">
-            <span className="font-semibold">Stub route</span> — this endpoint returns placeholder JSON. Wire the handler in <code className="font-mono bg-amber-100 px-1 rounded">main.go</code> to enable full functionality.
+        <div className="flex items-center gap-2 px-6 py-1.5 bg-amber-50 border-b border-amber-100 dark:bg-amber-500/10 dark:border-amber-500/20">
+          <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 dark:text-amber-400" />
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            <span className="font-semibold">Stub route</span> — this endpoint returns placeholder JSON. Wire the handler in <code className="font-mono bg-amber-100 px-1 rounded dark:bg-amber-500/20">main.go</code> to enable full functionality.
           </p>
         </div>
       )}
       {isLive && (
-        <div className="flex items-center gap-2 px-6 py-1.5 bg-green-50 border-b border-green-100">
-          <Zap className="w-3.5 h-3.5 text-green-600 shrink-0" />
-          <p className="text-xs text-green-700">
+        <div className="flex items-center gap-2 px-6 py-1.5 bg-green-50 border-b border-green-100 dark:bg-green-500/10 dark:border-green-500/20">
+          <Zap className="w-3.5 h-3.5 text-green-600 shrink-0 dark:text-green-400" />
+          <p className="text-xs text-green-700 dark:text-green-400">
             <span className="font-semibold">Live</span> — this route is wired to the database.
           </p>
         </div>

@@ -190,13 +190,13 @@ export function ImportDialog({ kind, headers, suppliers, orders, initialGrid, on
       {!grid || !guess ? (
         <div className="space-y-4">
           <label
-            className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 p-8 text-center cursor-pointer hover:border-navy-300 hover:bg-navy-50/30"
+            className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 p-8 text-center cursor-pointer hover:border-navy-300 hover:bg-navy-50/30 dark:border-navy-700"
             onDragOver={e => e.preventDefault()}
             onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) onFile(f) }}
           >
-            <Upload className="text-slate-300" />
-            <span className="text-sm font-medium text-slate-600">Drop an Excel (.xlsx) or CSV file, or click to choose</span>
-            <span className="text-xs text-slate-400">The first sheet is read. Headings like Tanggal, Bahan, Supplier, Qty, Satuan, Harga are recognised.</span>
+            <Upload className="text-slate-300 dark:text-navy-700" />
+            <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Drop an Excel (.xlsx) or CSV file, or click to choose</span>
+            <span className="text-xs text-slate-400 dark:text-slate-500">The first sheet is read. Headings like Tanggal, Bahan, Supplier, Qty, Satuan, Harga are recognised.</span>
             <input type="file" accept=".xlsx,.csv,.tsv,.txt" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f) }} />
           </label>
           <div>
@@ -209,23 +209,23 @@ export function ImportDialog({ kind, headers, suppliers, orders, initialGrid, on
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="flex items-center gap-2 text-sm text-slate-600">
+          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
             <FileSpreadsheet size={16} className="text-navy-500" />
             <span className="font-medium">{fileName || 'Pasted rows'}</span>
-            <span className="text-slate-400">· {grid.length} rows</span>
-            <button className="ml-auto text-xs text-navy-600 hover:underline" onClick={() => { setGrid(null); setGuess(null) }}>Choose another file</button>
+            <span className="text-slate-400 dark:text-slate-500">· {grid.length} rows</span>
+            <button className="ml-auto text-xs text-navy-600 hover:underline dark:text-navy-300" onClick={() => { setGrid(null); setGuess(null) }}>Choose another file</button>
           </div>
 
           <section>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">1 · What each column holds</h4>
-            <div className="overflow-x-auto rounded-lg border border-slate-100">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2 dark:text-slate-500">1 · What each column holds</h4>
+            <div className="overflow-x-auto rounded-lg border border-slate-100 dark:border-navy-800">
               <table className="text-xs min-w-full">
                 <tbody>
-                  <tr className="bg-slate-50">
+                  <tr className="bg-slate-50 dark:bg-navy-950">
                     {guess.targets.map((t, i) => (
                       <td key={i} className="p-1.5 min-w-[8rem]">
                         <select
-                          className={`field !py-1 text-xs ${t === 'ignore' ? 'text-slate-400' : 'font-medium'}`}
+                          className={`field !py-1 text-xs ${t === 'ignore' ? 'text-slate-400 dark:text-slate-500' : 'font-medium'}`}
                           value={t}
                           onChange={e => setGuess(g => g && ({ ...g, targets: g.targets.map((x, j) => (j === i ? e.target.value as Target : x === e.target.value && x !== 'ignore' ? 'ignore' : x)) }))}
                         >
@@ -235,14 +235,14 @@ export function ImportDialog({ kind, headers, suppliers, orders, initialGrid, on
                     ))}
                   </tr>
                   {grid.slice(0, 4).map((r, ri) => (
-                    <tr key={ri} className={ri === 0 && guess.hasHeadings ? 'text-slate-400 italic' : 'text-slate-600'}>
+                    <tr key={ri} className={ri === 0 && guess.hasHeadings ? 'text-slate-400 italic dark:text-slate-500' : 'text-slate-600 dark:text-slate-300'}>
                       {guess.targets.map((_, i) => <td key={i} className="px-2.5 py-1 truncate max-w-[12rem]">{cellText(r[i])}</td>)}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <label className="mt-2 inline-flex items-center gap-2 text-xs text-slate-500">
+            <label className="mt-2 inline-flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
               <input type="checkbox" checked={guess.hasHeadings} onChange={e => setGuess(g => g && ({ ...g, hasHeadings: e.target.checked }))} />
               The first row is headings
             </label>
@@ -250,7 +250,7 @@ export function ImportDialog({ kind, headers, suppliers, orders, initialGrid, on
 
           {!hasIdColumn && (
             <section className="space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">2 · Which Kas Bon</h4>
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">2 · Which Kas Bon</h4>
               <div className="flex flex-wrap gap-4 text-sm">
                 <label className="inline-flex items-center gap-2"><input type="radio" checked={grouping === 'single'} onChange={() => setGrouping('single')} /> All on one new Kas Bon</label>
                 <label className="inline-flex items-center gap-2"><input type="radio" checked={grouping === 'perDate'} onChange={() => setGrouping('perDate')} disabled={!guess.targets.includes('date')} /> A new Kas Bon for each date</label>
@@ -267,12 +267,12 @@ export function ImportDialog({ kind, headers, suppliers, orders, initialGrid, on
 
           {kind === 'production' && (unknownSuppliers.length > 0 || noSupplierRows) && (
             <section className="space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Suppliers</h4>
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Suppliers</h4>
               {unknownSuppliers.map(name => {
                 const c = choiceFor(name)
                 return (
                   <div key={name} className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-medium text-slate-700 min-w-[10rem]">{name}</span>
+                    <span className="font-medium text-slate-700 min-w-[10rem] dark:text-slate-300">{name}</span>
                     <select
                       className="field !w-auto !py-1 text-xs"
                       value={c.mode === 'existing' ? String(c.id) : `new:${c.category}`}
@@ -293,7 +293,7 @@ export function ImportDialog({ kind, headers, suppliers, orders, initialGrid, on
               })}
               {noSupplierRows && (
                 <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="text-slate-600 min-w-[10rem]">Lines with no supplier</span>
+                  <span className="text-slate-600 min-w-[10rem] dark:text-slate-300">Lines with no supplier</span>
                   <select className="field !w-auto !py-1 text-xs" value={fallbackSupplier} onChange={e => setFallbackSupplier(Number(e.target.value))}>
                     {suppliers.map(s => <option key={s.id} value={s.id}>{supplierWithCategory(s)}</option>)}
                   </select>
@@ -303,10 +303,10 @@ export function ImportDialog({ kind, headers, suppliers, orders, initialGrid, on
           )}
 
           <section>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Preview</h4>
-            <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-100">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2 dark:text-slate-500">Preview</h4>
+            <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-100 dark:border-navy-800">
               <table className="w-full text-xs">
-                <thead className="bg-slate-50 text-slate-400 sticky top-0">
+                <thead className="bg-slate-50 text-slate-400 sticky top-0 dark:bg-navy-950 dark:text-slate-500">
                   <tr>
                     <th className="text-left px-2 py-1.5">Kas Bon</th>
                     <th className="text-left px-2 py-1.5">Date</th>
@@ -319,14 +319,14 @@ export function ImportDialog({ kind, headers, suppliers, orders, initialGrid, on
                 </thead>
                 <tbody>
                   {plan.slice(0, 200).map((p, i) => (
-                    <tr key={i} className={`border-t border-slate-50 ${p.problem ? 'bg-red-50/60 text-red-700' : 'text-slate-600'}`}>
+                    <tr key={i} className={`border-t border-slate-50 dark:border-navy-800 ${p.problem ? 'bg-red-50/60 text-red-700 dark:bg-red-500/10 dark:text-red-400' : 'text-slate-600 dark:text-slate-300'}`}>
                       <td className="px-2 py-1 font-mono">{p.headerId || '—'}</td>
                       <td className="px-2 py-1">{p.date ?? (grouping === 'single' && !hasIdColumn ? single.date : '—')}</td>
                       <td className="px-2 py-1">{kind === 'production' ? p.name : [p.category, p.name].filter(Boolean).join(' · ')}</td>
                       {kind === 'production' && <td className="px-2 py-1">{p.supplierText || '—'}</td>}
                       {kind === 'production' && <td className="px-2 py-1 text-right">{p.qty ?? '—'} {p.unit}</td>}
                       <td className="px-2 py-1 text-right font-mono">{p.price != null ? formatRp(p.price) : '—'}</td>
-                      <td className="px-2 py-1 text-[11px]">{p.problem ?? <span className="text-slate-400">{p.note}</span>}</td>
+                      <td className="px-2 py-1 text-[11px]">{p.problem ?? <span className="text-slate-400 dark:text-slate-500">{p.note}</span>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -335,12 +335,12 @@ export function ImportDialog({ kind, headers, suppliers, orders, initialGrid, on
           </section>
 
           <div className="flex flex-wrap items-center gap-3 pt-1">
-            <p className="text-sm text-slate-600">
-              <span className="font-semibold text-navy-900">{good.length}</span> line{good.length === 1 ? '' : 's'} on {new Set(good.map(p => p.headerId)).size} Kas Bon
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              <span className="font-semibold text-navy-900 dark:text-slate-50">{good.length}</span> line{good.length === 1 ? '' : 's'} on {new Set(good.map(p => p.headerId)).size} Kas Bon
               ({newHeaderIds.length} new) · <span className="font-mono">{formatRp(total)}</span>
-              {plan.length > good.length && <span className="text-red-600"> · {plan.length - good.length} skipped</span>}
+              {plan.length > good.length && <span className="text-red-600 dark:text-red-400"> · {plan.length - good.length} skipped</span>}
             </p>
-            {missingDates.length > 0 && <p className="text-xs text-red-600">No date for new Kas Bon {missingDates.slice(0, 3).join(', ')}: map a date column.</p>}
+            {missingDates.length > 0 && <p className="text-xs text-red-600 dark:text-red-400">No date for new Kas Bon {missingDates.slice(0, 3).join(', ')}: map a date column.</p>}
             <span className="flex-1" />
             <button className="btn-secondary" onClick={onClose}>Cancel</button>
             <button className="btn-primary" disabled={busy || !good.length || missingDates.length > 0} onClick={runImport}>

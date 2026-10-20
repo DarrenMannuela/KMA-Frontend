@@ -241,7 +241,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
             <option value="">{t('delivery.form.selectOrder')}</option>
             {orders.map(o => <option key={o.id} value={o.id}>{o.id} — {o.company}</option>)}
           </select>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
             {t('delivery.form.doOrderHint')}
           </p>
         </FormField>
@@ -262,19 +262,19 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
             const orderInvoices = invoices.filter(inv => inv.order_id === form.order_id)
             const preview = suggestSJDocuments(linkedOrder, orderInvoices)
             return preview.length > 0 ? (
-              <div className="text-xs text-slate-500 mt-1.5 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+              <div className="text-xs text-slate-500 mt-1.5 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 dark:text-slate-400 dark:bg-navy-950 dark:border-navy-700">
                 {t('delivery.form.willAutoAdd')}
                 <ul className="mt-1 space-y-0.5">
                   {preview.map(doc => <li key={doc.item_name} className="font-mono">· {doc.item_name}</li>)}
                 </ul>
               </div>
             ) : (
-              <p className="text-xs text-amber-600 mt-1">
+              <p className="text-xs text-amber-600 mt-1 dark:text-amber-400">
                 {t('delivery.form.noInvoicesNoAutoAdd')}
               </p>
             )
           })() : (
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
               {t('delivery.form.sjOrderHint')}
             </p>
           )}
@@ -302,7 +302,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
           )}
         </div>
         {isDeliveriesError ? (
-          <p className="text-xs text-amber-600 mt-1">
+          <p className="text-xs text-amber-600 mt-1 dark:text-amber-400">
             {t('delivery.form.idUnverified')}
           </p>
         ) : idAlreadyExists ? (
@@ -310,7 +310,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
             {t('delivery.form.idExists')}
           </p>
         ) : !editing ? (
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
             {t('delivery.form.idSuggested', { type, year: new Date().getFullYear() })}
           </p>
         ) : null}
@@ -321,7 +321,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
           <option value="">{t('delivery.form.noLinkedClient')}</option>
           {clients.map(c => <option key={c.id} value={c.id}>{c.client_name}</option>)}
         </select>
-        <p className="text-xs text-slate-400 mt-1">
+        <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
           {form.order_id
             ? t('delivery.form.clientHintFromOrder')
             : t('delivery.form.clientHint')}
@@ -338,7 +338,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
               </option>
             ))}
           </select>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
             {t('delivery.form.contactHint')}
           </p>
         </FormField>
@@ -378,8 +378,8 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
       {/* Context note based on type */}
       <div className={`rounded-lg px-4 py-3 text-xs ${
         type === 'DO'
-          ? 'bg-blue-50 text-blue-700 border border-blue-100'
-          : 'bg-amber-50 text-amber-700 border border-amber-100'
+          ? 'bg-blue-50 text-blue-700 border border-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20'
+          : 'bg-amber-50 text-amber-700 border border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20'
       }`}>
         {type === 'DO'
           ? t('delivery.form.doNoteAfterCreate')
@@ -418,8 +418,8 @@ export function DeliveryPage() {
       searchKeys={['company', 'address', 'contact_person', 'po_number']}
       columns={[
         { header: t('delivery.columns.deliveryId'),     key: 'id',             render: r => <span className="id-chip">{r.id}</span> },
-        { header: t('delivery.columns.company'),         key: 'company',        render: r => <span className="font-semibold text-navy-900">{r.company ?? '—'}</span> },
-        { header: t('delivery.columns.client'),          key: 'client_id',      render: r => r.client_id ? (
+        { header: t('delivery.columns.company'),         key: 'company',        render: r => <span className="font-semibold text-navy-900 dark:text-slate-50">{r.company ?? '—'}</span> },
+        { header: t('delivery.columns.client'),          key: 'client_id',      secondary: true, render: r => r.client_id ? (
             <button
               onClick={(e) => { e.stopPropagation(); navigate(`/clients/${r.client_id}`) }}
               className="inline-flex items-center gap-1 text-sm font-medium text-navy-600 hover:text-navy-800"
@@ -427,15 +427,15 @@ export function DeliveryPage() {
             >
               <Building2 size={12} /> {t('common.view')} <ArrowRight size={12} />
             </button>
-          ) : <span className="text-slate-300 text-xs">{t('delivery.notLinked')}</span> },
+          ) : <span className="text-slate-300 text-xs dark:text-navy-700">{t('delivery.notLinked')}</span> },
         { header: t('delivery.columns.address'),         key: 'address',        render: r => <span className="font-medium">{r.address}</span> },
-        { header: t('delivery.columns.contact'),         key: 'contact_person', render: r => r.contact_person || r.phone_number ? (
+        { header: t('delivery.columns.contact'),         key: 'contact_person', secondary: true, render: r => r.contact_person || r.phone_number ? (
             <div className="leading-tight">
               {r.contact_person && <div>{r.contact_person}</div>}
-              {r.phone_number && <div className="font-mono text-xs text-slate-400">{r.phone_number}</div>}
+              {r.phone_number && <div className="font-mono text-xs text-slate-400 dark:text-slate-500">{r.phone_number}</div>}
             </div>
           ) : '—' },
-        { header: t('delivery.columns.po'),              key: 'po_number',      render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
+        { header: t('delivery.columns.po'),              key: 'po_number',      secondary: true, render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
         { header: t('delivery.columns.date'),            key: 'date',           render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
       ]}
       formTitle={e => e ? t('delivery.formTitleEdit') : t('delivery.formTitleNew')}

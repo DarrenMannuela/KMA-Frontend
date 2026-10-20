@@ -69,8 +69,8 @@ export function ClientsPage() {
       searchKeys={['client_name', 'address']}
       columns={[
         { header: 'ID', key: 'id' },
-        { header: 'Client Name', key: 'client_name', primary: true, render: r => <span className="font-medium text-navy-900">{r.client_name}</span> },
-        { header: 'Address', key: 'address', render: r => <span className="text-slate-500">{r.address ?? '—'}</span> },
+        { header: 'Client Name', key: 'client_name', primary: true, render: r => <span className="font-medium text-navy-900 dark:text-slate-100">{r.client_name}</span> },
+        { header: 'Address', key: 'address', render: r => <span className="text-slate-500 dark:text-slate-400">{r.address ?? '—'}</span> },
         // An actions column; its key must differ from the ID column's.
         { header: '', key: 'catalogue_link', render: r => (
           <button

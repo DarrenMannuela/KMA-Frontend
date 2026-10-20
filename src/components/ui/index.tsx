@@ -20,10 +20,10 @@ export function EmptyState({ icon: Icon, title, subtitle }: {
   subtitle?: string
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-slate-300">
+    <div className="flex flex-col items-center justify-center py-16 text-slate-300 dark:text-navy-700">
       <Icon className="w-12 h-12 mb-3 opacity-40" />
-      <p className="font-medium text-slate-500 text-sm">{title}</p>
-      {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
+      <p className="font-medium text-slate-500 text-sm dark:text-slate-400">{title}</p>
+      {subtitle && <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">{subtitle}</p>}
     </div>
   )
 }
@@ -47,13 +47,13 @@ export function ConfirmDialog({ message, onConfirm, onCancel, confirmLabel }: {
         className="fixed inset-0 z-[60] flex items-end bg-navy-950/30 backdrop-blur-sm fade-in"
         onClick={e => e.target === e.currentTarget && onCancel()}
       >
-        <div className="bg-white w-full rounded-t-3xl shadow-2xl slide-up">
+        <div className="bg-white w-full rounded-t-3xl shadow-2xl slide-up dark:bg-navy-900">
           <div className="pt-2.5 pb-1 flex justify-center">
-            <div className="w-9 h-1 rounded-full bg-slate-200" />
+            <div className="w-9 h-1 rounded-full bg-slate-200 dark:bg-navy-700" />
           </div>
           <div className="flex gap-3 px-5 pt-2 pb-5">
             <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-            <p className="text-sm text-slate-700">{message}</p>
+            <p className="text-sm text-slate-700 dark:text-slate-200">{message}</p>
           </div>
           <div className="flex flex-col gap-2 px-5 pb-6">
             <button className="btn-secondary w-full" onClick={onCancel}>{t('common.cancel')}</button>
@@ -69,10 +69,10 @@ export function ConfirmDialog({ message, onConfirm, onCancel, confirmLabel }: {
       className="fixed inset-0 z-[60] flex items-center justify-center bg-navy-950/50 backdrop-blur-sm fade-in"
       onClick={e => e.target === e.currentTarget && onCancel()}
     >
-      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm fade-up">
+      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm fade-up dark:bg-navy-900">
         <div className="flex gap-3 mb-4">
           <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-          <p className="text-sm text-slate-700">{message}</p>
+          <p className="text-sm text-slate-700 dark:text-slate-200">{message}</p>
         </div>
         <div className="flex gap-2 justify-end">
           <button className="btn-secondary btn-sm" onClick={onCancel}>{t('common.cancel')}</button>

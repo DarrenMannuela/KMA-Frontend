@@ -282,12 +282,12 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
     <div className="space-y-5 max-h-[80vh] overflow-y-auto pr-1">
 
       {existingInvoice && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm text-amber-700">
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm text-amber-700 dark:bg-amber-500/10 dark:border-amber-500/20 dark:text-amber-400">
           Updating existing invoice <span className="font-mono font-semibold">{existingInvoice.id}</span> — total will be recalculated from current items.
         </div>
       )}
       {!existingInvoice && prefillFrom && (
-        <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-2 text-sm text-blue-700">
+        <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-2 text-sm text-blue-700 dark:bg-blue-500/10 dark:border-blue-500/20 dark:text-blue-400">
           Client and production details copied from DP invoice <span className="font-mono font-semibold">{prefillFrom.id}</span> — modify as needed.
         </div>
       )}
@@ -310,7 +310,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
             )}
           </div>
           {isInvoicesError ? (
-            <p className="text-xs text-amber-600 mt-1">
+            <p className="text-xs text-amber-600 mt-1 dark:text-amber-400">
               Couldn't check existing invoice numbers — this ID isn't verified as unique yet. The server will still reject a duplicate on submit.
             </p>
           ) : idAlreadyExists ? (
@@ -318,11 +318,11 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
               An invoice with this ID already exists — pick a different number.
             </p>
           ) : idChanged ? (
-            <p className="text-xs text-amber-600 mt-1">
+            <p className="text-xs text-amber-600 mt-1 dark:text-amber-400">
               Renaming from {existingInvoice!.id}.
             </p>
           ) : !existingInvoice ? (
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
               Auto-suggested as next invoice number for {new Date().getFullYear()} — edit if needed.
             </p>
           ) : null}
@@ -339,10 +339,10 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
                 onChange={e => setDpPercent(e.target.value.replace(/[^\d]/g, ''))}
                 onBlur={() => setDpPercent(String(dpPercentNum))}
               />
-              <span className="text-slate-400 text-sm shrink-0">%</span>
+              <span className="text-slate-400 text-sm shrink-0 dark:text-slate-500">%</span>
             </div>
             {dpPercentNum === 0 && (
-              <p className="text-xs text-amber-600 mt-1">
+              <p className="text-xs text-amber-600 mt-1 dark:text-amber-400">
                 0% — this covers the full amount in one invoice. No separate Pelunasan invoice will be offered for this order.
               </p>
             )}
@@ -350,17 +350,17 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
         ) : forcedType === 'cod' ? (
           // COD collects the whole amount; nothing to choose.
           <FormField label="Amount (COD)">
-            <input className="field font-mono bg-slate-50 text-slate-500 cursor-not-allowed" readOnly
+            <input className="field font-mono bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-navy-950 dark:text-slate-400" readOnly
               value={formatRp(remaining)} />
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
               Full total, collected on delivery — no separate Pelunasan invoice will be offered for this order.
             </p>
           </FormField>
         ) : (
           <FormField label="Remaining to Collect">
-            <input className="field font-mono bg-slate-50 text-slate-500 cursor-not-allowed" readOnly
+            <input className="field font-mono bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-navy-950 dark:text-slate-400" readOnly
               value={formatRp(remaining)} />
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
               {alreadyPaidAmount > 0
                 ? `Total minus the ${formatRp(alreadyPaidAmount)} already collected on the D/P invoice — filled in automatically.`
                 : 'No D/P was collected on this order — this covers the full total.'}
@@ -369,9 +369,9 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
         )}
       </div>
 
-      <div className="border-t border-slate-100 pt-4">
+      <div className="border-t border-slate-100 pt-4 dark:border-navy-800">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Client Details</p>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide dark:text-slate-500">Client Details</p>
           {client && (
             <button
               type="button"
@@ -397,7 +397,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
                 Fills in Untuk, Telp, Email, and Alamat (if this contact has one saved) below — still editable, or leave unpicked to type them directly.
               </p>
             </FormField>
@@ -433,8 +433,8 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
         </div>
       </div>
 
-      <div className="border-t border-slate-100 pt-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Production Info</p>
+      <div className="border-t border-slate-100 pt-4 dark:border-navy-800">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3 dark:text-slate-500">Production Info</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <FormField label="Start Produksi">
             <UppercaseField className="field" value={form.start_produksi ?? ''}
@@ -447,8 +447,8 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
         </div>
       </div>
 
-      <div className="border-t border-slate-100 pt-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Financials</p>
+      <div className="border-t border-slate-100 pt-4 dark:border-navy-800">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3 dark:text-slate-500">Financials</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <FormField label="Total (Rp)">
             <input className="field font-mono" type="text" inputMode="numeric"
@@ -464,30 +464,30 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
             )}
           </FormField>
         </div>
-        <div className="bg-slate-50 rounded-lg px-4 py-3 mt-3 space-y-1.5 text-sm">
+        <div className="bg-slate-50 rounded-lg px-4 py-3 mt-3 space-y-1.5 text-sm dark:bg-navy-950">
           <div className="flex justify-between">
-            <span className="text-slate-500">Total</span>
+            <span className="text-slate-500 dark:text-slate-400">Total</span>
             <span className="font-mono">{formatRp(form.total)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-500">
+            <span className="text-slate-500 dark:text-slate-400">
               {forcedType === 'dp' ? `D/P (${dpPercentNum}%)` : forcedType === 'cod' ? 'Down Payment' : 'Already Paid (D/P)'}
             </span>
-            <span className="font-mono text-green-700">{formatRp(downPayment)}</span>
+            <span className="font-mono text-green-700 dark:text-green-400">{formatRp(downPayment)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-500">Remaining</span>
+            <span className="text-slate-500 dark:text-slate-400">Remaining</span>
             <span className="font-mono">{formatRp(remaining)}</span>
           </div>
-          <div className="flex justify-between font-semibold border-t border-slate-200 pt-1.5">
+          <div className="flex justify-between font-semibold border-t border-slate-200 pt-1.5 dark:border-navy-700">
             <span>Pelunasan (AR)</span>
-            <span className="font-mono text-red-600">{formatRp(ar)}</span>
+            <span className="font-mono text-red-600 dark:text-red-400">{formatRp(ar)}</span>
           </div>
         </div>
       </div>
 
-      <div className="border-t border-slate-100 pt-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Dates</p>
+      <div className="border-t border-slate-100 pt-4 dark:border-navy-800">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3 dark:text-slate-500">Dates</p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <FormField label="Tanggal Invoice">
             <input className="field" type="date" value={form.tanggal} onChange={set('tanggal')} />
@@ -501,14 +501,14 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
         </div>
       </div>
 
-      <div className="border-t border-slate-100 pt-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+      <div className="border-t border-slate-100 pt-4 dark:border-navy-800">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 dark:text-slate-500">
           Items on this invoice ({items.length})
         </p>
-        <div className="rounded-lg border border-slate-100 overflow-hidden text-xs">
+        <div className="rounded-lg border border-slate-100 overflow-hidden text-xs dark:border-navy-800">
           <table className="w-full">
-            <thead className="bg-slate-50">
-              <tr className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            <thead className="bg-slate-50 dark:bg-navy-950">
+              <tr className="text-xs font-semibold text-slate-400 uppercase tracking-wider dark:text-slate-500">
                 <th className="text-left p-2">Item</th>
                 <th className="text-center p-2">Size</th>
                 <th className="text-right p-2">Qty</th>
@@ -517,7 +517,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
             </thead>
             <tbody>
               {items.map(item => (
-                <tr key={item.id} className="border-t border-slate-50">
+                <tr key={item.id} className="border-t border-slate-50 dark:border-navy-800/60">
                   <td className="p-2">{item.item_name}</td>
                   <td className="p-2 text-center">{item.size ?? '—'}</td>
                   <td className="p-2 text-right">{item.amount}</td>
@@ -529,7 +529,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
         </div>
       </div>
 
-      <div className="flex gap-2 pt-2 border-t border-slate-100">
+      <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-navy-800">
         <button className="btn-primary" disabled={busy || idAlreadyExists} onClick={handleSubmit}>
           {busy ? 'Saving…' : existingInvoice ? 'Update Invoice' : 'Generate Invoice'}
         </button>

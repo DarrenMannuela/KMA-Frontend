@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   LayoutDashboard, ShoppingBag, ListOrdered, FileText,
-  Truck, Factory, Users, Wrench, BarChart3, PiggyBank, Banknote,
+  Truck, BarChart3,
   Building2, Circle, ChevronDown, ShieldCheck, X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -19,6 +19,12 @@ interface NavItem {
   path: string
   icon: LucideIcon
   status?: RouteStatus
+  /** Other paths that should also count as "in this section" for the
+   *  active-state highlight — e.g. Finance's sidebar entry stays lit up
+   *  across all of FinanceSection's own tabs (Production, Operations,
+   *  Bukti Kas, Budgets, Suppliers), not just the literal /finance route
+   *  those tabs replace as the sidebar's single entry point into Finance. */
+  activePrefixes?: string[]
 }
 
 interface NavGroup {
@@ -30,6 +36,14 @@ interface NavGroup {
 const STANDALONE: NavItem[] = [
   { labelKey: 'sidebar.dashboard', path: '/', icon: LayoutDashboard },
   { labelKey: 'sidebar.delivery', path: '/delivery', icon: Truck, status: 'live' },
+  // A single entry point into Finance — Overview, Production, Operations,
+  // Bukti Kas, Budgets and Suppliers used to each have their own sidebar
+  // row here too, duplicating the FinanceSection tab bar shown on every
+  // one of those pages. One nav beats two copies of the same nav.
+  {
+    labelKey: 'sidebar.financeGroup', path: '/finance', icon: BarChart3, status: 'live',
+    activePrefixes: ['/production', '/operations', '/bukti-kas', '/finance/budgets', '/suppliers'],
+  },
 ]
 
 const GROUPS: NavGroup[] = [
@@ -43,22 +57,12 @@ const GROUPS: NavGroup[] = [
       { labelKey: 'sidebar.invoice', path: '/invoice',  icon: FileText,    status: 'live' },
     ],
   },
-  {
-    labelKey: 'sidebar.financeGroup',
-    icon: BarChart3,
-    items: [
-      { labelKey: 'sidebar.overview',   path: '/finance',    icon: BarChart3, status: 'live' },
-      { labelKey: 'sidebar.production', path: '/production', icon: Factory, status: 'live' },
-      { labelKey: 'sidebar.operations', path: '/operations', icon: Wrench,  status: 'live' },
-      { labelKey: 'sidebar.buktiKas',  path: '/bukti-kas',  icon: Banknote, status: 'live' },
-      { labelKey: 'sidebar.budgetsAndRecurring', path: '/finance/budgets', icon: PiggyBank, status: 'live' },
-      { labelKey: 'sidebar.suppliers',  path: '/suppliers',  icon: Users,   status: 'live' },
-    ],
-  },
 ]
 
 function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
   const { t } = useTranslation()
+  const location = useLocation()
+  const extraActive = item.activePrefixes?.some(p => location.pathname === p || location.pathname.startsWith(`${p}/`)) ?? false
   return (
     <NavLink
       to={item.path}
@@ -67,7 +71,7 @@ function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => v
       onClick={onNavigate}
       className={({ isActive }) =>
         `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 group ${
-          isActive
+          (isActive || extraActive)
             ? 'bg-white/10 text-white'
             : 'text-navy-300 hover:bg-white/5 hover:text-white'
         }`
@@ -75,7 +79,7 @@ function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => v
     >
       {({ isActive }) => (
         <>
-          <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-gold-400' : 'text-navy-400 group-hover:text-navy-200'}`} />
+          <item.icon className={`w-4 h-4 shrink-0 ${(isActive || extraActive) ? 'text-gold-400' : 'text-navy-400 group-hover:text-navy-200'}`} />
           <span className="flex-1">{t(item.labelKey)}</span>
           {SHOW_DEV_STATUS && item.status === 'live' && <Circle className="w-2 h-2 fill-green-400 text-green-400 shrink-0" />}
           {SHOW_DEV_STATUS && item.status === 'stub' && <Circle className="w-2 h-2 fill-amber-400 text-amber-400 shrink-0 opacity-60" />}
@@ -166,11 +170,11 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             {/* Orders group */}
             <NavGroupSection group={GROUPS[0]} onNavigate={onClose} />
 
-            {/* Delivery standalone, after Orders */}
+            {/* Delivery, then Finance — both standalone single links; Finance's
+                own sub-pages are reached via FinanceSection's tab bar instead
+                of a second copy of the same nav here. */}
             <NavItemLink item={STANDALONE[1]} onNavigate={onClose} />
-
-            {/* Finances group */}
-            <NavGroupSection group={GROUPS[1]} onNavigate={onClose} />
+            <NavItemLink item={STANDALONE[2]} onNavigate={onClose} />
           </div>
 
           {/* Admin-only: user management. Assumes useAuth()'s user has a

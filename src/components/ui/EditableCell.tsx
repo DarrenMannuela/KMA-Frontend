@@ -180,7 +180,7 @@ export function EditableCell({
           onChange={(e) => setVal(e.target.value)}
           onBlur={(e) => commit(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="w-full px-2 py-1 text-sm border-2 border-navy-400 rounded outline-none bg-white"
+          className="w-full px-2 py-1 text-sm border-2 border-navy-400 rounded outline-none bg-white dark:bg-navy-900 dark:text-slate-100"
         >
           <option value="">Select…</option>
           {options?.map(o => (
@@ -203,7 +203,7 @@ export function EditableCell({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           list={suggestions && suggestions.length > 0 ? datalistId : undefined}
-          className="w-full px-2 py-1 text-sm border-2 border-navy-400 rounded outline-none bg-white"
+          className="w-full px-2 py-1 text-sm border-2 border-navy-400 rounded outline-none bg-white dark:bg-navy-900 dark:text-slate-100"
         />
         {suggestions && suggestions.length > 0 && (
           <datalist id={datalistId}>
@@ -226,10 +226,10 @@ export function EditableCell({
       // doesn't exist; on a mouse/trackpad it only shows on hover, so a dense table
       // of many editable cells doesn't read as a grid of boxes at rest. The focus
       // border marks the active cell.
-      className="px-2.5 py-1.5 min-h-[2rem] cursor-cell border border-transparent [border-bottom-style:dotted] [@media(hover:none)]:border-b-slate-200 hover:border-slate-300 hover:bg-slate-50 hover:[border-bottom-style:solid] focus:outline-none focus:border-navy-400 focus:bg-navy-50/50 focus:[border-bottom-style:solid] transition-colors break-words"
+      className="px-2.5 py-1.5 min-h-[2rem] cursor-cell border border-transparent [border-bottom-style:dotted] [@media(hover:none)]:border-b-slate-200 dark:[@media(hover:none)]:border-b-navy-700 hover:border-slate-300 hover:bg-slate-50 hover:[border-bottom-style:solid] dark:hover:border-navy-600 dark:hover:bg-white/5 focus:outline-none focus:border-navy-400 focus:bg-navy-50/50 dark:focus:bg-navy-800/50 focus:[border-bottom-style:solid] transition-colors break-words"
     >
       {isEmpty
-        ? <span className="text-slate-300 italic">{placeholder ?? 'click to fill'}</span>
+        ? <span className="text-slate-300 italic dark:text-slate-600">{placeholder ?? 'click to fill'}</span>
         : (format ? format(initialValue) : initialValue)}
     </div>
   )

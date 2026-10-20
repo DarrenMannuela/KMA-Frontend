@@ -104,13 +104,13 @@ export function CatalogueImportDialog({ clientId, clientName, catalogue, pricesB
     <Modal title={`Import catalogue: ${clientName}`} onClose={onClose} size="lg">
       {!grid ? (
         <div className="space-y-4">
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
             Use a sheet with columns <b>Item</b>, <b>Size</b>, <b>Notes</b> and one column per year (<b>2025</b>, <b>2026</b>…)
             holding prices. Export gives you this layout with the current catalogue in it.
           </p>
-          <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-2xl py-8 cursor-pointer hover:border-navy-300 hover:bg-slate-50">
+          <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-2xl py-8 cursor-pointer hover:border-navy-300 hover:bg-slate-50 dark:border-navy-700 dark:hover:bg-white/5">
             <FileSpreadsheet className="w-8 h-8 text-navy-400" />
-            <span className="text-sm text-slate-600">Choose an .xlsx or .csv file</span>
+            <span className="text-sm text-slate-600 dark:text-slate-300">Choose an .xlsx or .csv file</span>
             <input type="file" accept=".xlsx,.csv,.tsv,.txt" className="hidden" onChange={e => e.target.files?.[0] && onFile(e.target.files[0])} />
           </label>
           <div>
@@ -123,37 +123,37 @@ export function CatalogueImportDialog({ clientId, clientName, catalogue, pricesB
         </div>
       ) : read && 'error' in read ? (
         <div className="space-y-3">
-          <p className="text-sm text-red-600">{read.error}</p>
+          <p className="text-sm text-red-600 dark:text-red-400">{read.error}</p>
           <button className="btn-secondary btn-sm" onClick={() => setGrid(null)}>Choose another file</button>
         </div>
       ) : (
         <div className="space-y-4">
-          <p className="text-sm text-slate-600">
-            {fileName && <span className="text-slate-400">{fileName}: </span>}
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            {fileName && <span className="text-slate-400 dark:text-slate-500">{fileName}: </span>}
             {plan.length} rows. {newItems} new item{newItems === 1 ? '' : 's'}, {priceCount} price{priceCount === 1 ? '' : 's'} new or changed,
             {' '}{plan.length - todo.length} unchanged.
           </p>
-          <div className="border border-slate-100 rounded-xl max-h-[45vh] overflow-y-auto">
+          <div className="border border-slate-100 rounded-xl max-h-[45vh] overflow-y-auto dark:border-navy-800">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500">
+              <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500 dark:bg-navy-950 dark:text-slate-400">
                 <tr>
                   <th className="text-left px-3 py-2 font-medium">Item</th>
                   <th className="text-left px-3 py-2 font-medium">Prices</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
-                {todo.length === 0 && <tr><td colSpan={2} className="px-3 py-6 text-center text-slate-400">Nothing new: the catalogue already matches.</td></tr>}
+              <tbody className="divide-y divide-slate-50 dark:divide-navy-800/60">
+                {todo.length === 0 && <tr><td colSpan={2} className="px-3 py-6 text-center text-slate-400 dark:text-slate-500">Nothing new: the catalogue already matches.</td></tr>}
                 {todo.slice(0, 300).map(p => (
                   <tr key={itemKey(p.name, p.size)}>
                     <td className="px-3 py-1.5 align-top">
-                      {p.name}{p.size && <span className="text-slate-400"> ({p.size})</span>}
+                      {p.name}{p.size && <span className="text-slate-400 dark:text-slate-500"> ({p.size})</span>}
                       {p.isNew && <span className="ml-2 badge-green text-[10px]">new</span>}
                     </td>
                     <td className="px-3 py-1.5 text-xs font-mono">
                       {p.changes.map(c => (
                         <span key={c.year} className="mr-3 whitespace-nowrap">
-                          {c.year}: {c.was != null && <span className="text-slate-400 line-through mr-1">{formatRp(c.was)}</span>}
-                          <span className="text-navy-900 font-semibold">{formatRp(c.price)}</span>
+                          {c.year}: {c.was != null && <span className="text-slate-400 line-through mr-1 dark:text-slate-500">{formatRp(c.was)}</span>}
+                          <span className="text-navy-900 font-semibold dark:text-slate-100">{formatRp(c.price)}</span>
                         </span>
                       ))}
                     </td>
@@ -162,7 +162,7 @@ export function CatalogueImportDialog({ clientId, clientName, catalogue, pricesB
               </tbody>
             </table>
           </div>
-          {todo.length > 300 && <p className="text-xs text-slate-400">Showing 300 of {todo.length}.</p>}
+          {todo.length > 300 && <p className="text-xs text-slate-400 dark:text-slate-500">Showing 300 of {todo.length}.</p>}
           <div className="flex gap-2">
             <button className="btn-primary" disabled={!todo.length || busy} onClick={apply}>
               {busy ? 'Importing…' : 'Import'}

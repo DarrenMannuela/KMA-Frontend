@@ -14,7 +14,7 @@ const TABS = [
 export function FinanceSection() {
   return (
     <div>
-      <nav className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur border-b border-slate-200 px-4 md:px-6" aria-label="Finance">
+      <nav className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur border-b border-slate-200 px-4 md:px-6 dark:bg-navy-950/95 dark:border-navy-700" aria-label="Finance">
         <div className="flex gap-1 overflow-x-auto -mb-px">
           {TABS.map(({ to, label, icon: Icon, end }) => (
             <NavLink
@@ -23,7 +23,7 @@ export function FinanceSection() {
               end={end}
               className={({ isActive }) =>
                 `inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  isActive ? 'border-navy-900 text-navy-900' : 'border-transparent text-slate-500 hover:text-navy-700 hover:border-slate-300'
+                  isActive ? 'border-navy-900 text-navy-900 dark:text-slate-50' : 'border-transparent text-slate-500 hover:text-navy-700 hover:border-slate-300 dark:text-slate-400'
                 }`
               }
             >

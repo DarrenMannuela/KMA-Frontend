@@ -16,7 +16,7 @@ export function OrderItemSelect({ items, value, onSelect, missing, label = 'Item
   return (
     <FormField label={label} required>
       <select
-        className={`field ${missing ? '!border-red-400 !ring-red-100' : ''}`}
+        className={`field ${missing ? '!border-red-400 !ring-red-100 dark:!border-red-500 dark:!ring-red-500/20' : ''}`}
         value={selectedKey}
         onChange={e => {
           if (!e.target.value) { onSelect(null); return }
@@ -36,7 +36,7 @@ export function OrderItemSelect({ items, value, onSelect, missing, label = 'Item
         })}
       </select>
       {items.length === 0 && (
-        <p className="text-xs text-slate-400 mt-1">This order has no items yet.</p>
+        <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">This order has no items yet.</p>
       )}
     </FormField>
   )

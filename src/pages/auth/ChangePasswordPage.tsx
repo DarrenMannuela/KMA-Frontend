@@ -46,12 +46,12 @@ export function ChangePasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 dark:bg-navy-950">
       <div className="w-full max-w-sm">
         {!isForced && (
           <button
             onClick={() => navigate('/')}
-            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-navy-700 transition-colors mb-6"
+            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-navy-700 transition-colors mb-6 dark:text-slate-500 dark:hover:text-slate-200"
           >
             <ArrowLeft className="w-4 h-4" />
             Back
@@ -62,10 +62,10 @@ export function ChangePasswordPage() {
           <div className="w-12 h-12 rounded-xl bg-navy-900 flex items-center justify-center mx-auto mb-4">
             <KeyRound className="w-5 h-5 text-gold-400" />
           </div>
-          <h1 className="text-xl font-bold text-navy-900">
+          <h1 className="text-xl font-bold text-navy-900 dark:text-slate-50">
             {isForced ? 'Set a new password' : 'Change your password'}
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-slate-400 mt-1 dark:text-slate-500">
             {isForced
               ? "You're signing in with a temporary password — choose one only you know before continuing."
               : 'Enter your current password and choose a new one.'}
@@ -74,14 +74,14 @@ export function ChangePasswordPage() {
 
         <form
           onSubmit={handleSubmit}
-          className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 flex flex-col gap-4"
+          className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 flex flex-col gap-4 dark:bg-navy-900 dark:border-navy-800"
         >
           <div>
-            <label htmlFor="current" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">
+            <label htmlFor="current" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">
               {isForced ? 'Temporary password' : 'Current password'}
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2 dark:text-navy-700" />
               <input
                 id="current"
                 type={showPasswords ? 'text' : 'password'}
@@ -89,19 +89,19 @@ export function ChangePasswordPage() {
                 required
                 value={currentPassword}
                 onChange={e => setCurrentPassword(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 text-sm text-navy-900
-                           focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors"
+                className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-navy-900
+                           focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors dark:bg-navy-900 dark:border-navy-700 dark:text-slate-50"
                 placeholder={isForced ? 'What was shared with you' : 'Your current password'}
               />
             </div>
           </div>
 
           <div>
-            <label htmlFor="new" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">
+            <label htmlFor="new" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">
               New password
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2 dark:text-navy-700" />
               <input
                 id="new"
                 type={showPasswords ? 'text' : 'password'}
@@ -109,14 +109,14 @@ export function ChangePasswordPage() {
                 required
                 value={newPassword}
                 onChange={e => setNewPassword(e.target.value)}
-                className="w-full pl-9 pr-9 py-2.5 rounded-lg border border-slate-200 text-sm text-navy-900
-                           focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors"
+                className="w-full pl-9 pr-9 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-navy-900
+                           focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors dark:bg-navy-900 dark:border-navy-700 dark:text-slate-50"
                 placeholder="••••••••••••"
               />
               <button
                 type="button"
                 onClick={() => setShowPasswords(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors dark:text-navy-700 dark:hover:text-slate-400"
                 tabIndex={-1}
               >
                 {showPasswords ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -125,11 +125,11 @@ export function ChangePasswordPage() {
           </div>
 
           <div>
-            <label htmlFor="confirm" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">
+            <label htmlFor="confirm" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">
               Confirm new password
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2 dark:text-navy-700" />
               <input
                 id="confirm"
                 type={showPasswords ? 'text' : 'password'}
@@ -137,15 +137,15 @@ export function ChangePasswordPage() {
                 required
                 value={confirmPassword}
                 onChange={e => setConfirmPassword(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 text-sm text-navy-900
-                           focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors"
+                className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-navy-900
+                           focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors dark:bg-navy-900 dark:border-navy-700 dark:text-slate-50"
                 placeholder="••••••••••••"
               />
             </div>
           </div>
 
           {error && (
-            <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
+            <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 dark:bg-red-500/10 dark:text-red-400">{error}</p>
           )}
 
           <button

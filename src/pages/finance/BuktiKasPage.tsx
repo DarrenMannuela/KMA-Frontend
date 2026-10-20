@@ -56,7 +56,7 @@ export function BuktiKasPage() {
       />
 
       {headers.length === 0 ? (
-        <div className="card p-10 text-center text-slate-400 text-sm">
+        <div className="card p-10 text-center text-slate-400 text-sm dark:text-slate-500">
           No Bukti Kas yet — click Add New to record cash received.
         </div>
       ) : (
@@ -65,14 +65,14 @@ export function BuktiKasPage() {
             const total = h.rows.reduce((n, r) => n + r.price, 0)
             return (
               <div key={h.header_id} className="card overflow-hidden">
-                <div className="flex items-center justify-between gap-3 px-4 py-3 bg-navy-50 border-b border-navy-100 flex-wrap">
+                <div className="flex items-center justify-between gap-3 px-4 py-3 bg-navy-50 border-b border-navy-100 flex-wrap dark:bg-navy-800 dark:border-navy-700">
                   <div className="min-w-0">
                     <span className="id-chip font-mono">{h.header_id}</span>
-                    <span className="ml-2 text-sm text-navy-900 font-medium">{h.description}</span>
-                    <span className="ml-2 text-xs font-medium text-slate-600">{formatDateShort(h.date)}</span>
+                    <span className="ml-2 text-sm text-navy-900 font-medium dark:text-slate-50">{h.description}</span>
+                    <span className="ml-2 text-xs font-medium text-slate-600 dark:text-slate-300">{formatDateShort(h.date)}</span>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
-                    <span className="font-mono font-semibold text-navy-900">{formatRp(total)}</span>
+                    <span className="font-mono font-semibold text-navy-900 dark:text-slate-50">{formatRp(total)}</span>
                     <button className="btn-ghost btn-sm !px-2" onClick={() => setFormFor({ headerId: h.header_id })} title="Add another line to this Bukti Kas">
                       <Plus size={14} />
                     </button>
@@ -80,19 +80,19 @@ export function BuktiKasPage() {
                 </div>
 
                 {isMobile ? (
-                  <div className="divide-y divide-slate-50">
+                  <div className="divide-y divide-slate-50 dark:divide-navy-800">
                     {h.rows.map(r => (
                       <div key={r.id} className="p-4">
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-medium">{r.item_description}</span>
                           <span className="font-mono font-semibold shrink-0">{formatRp(r.price)}</span>
                         </div>
-                        {r.order_id && <div className="text-xs text-slate-400 mt-1">Order: {orderLabel(orders, r.order_id)}</div>}
+                        {r.order_id && <div className="text-xs text-slate-400 mt-1 dark:text-slate-500">Order: {orderLabel(orders, r.order_id)}</div>}
                         <div className="flex items-center gap-4 mt-3">
-                          <button className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1.5" onClick={() => setEditingRow(r)}>
+                          <button className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1.5 dark:text-slate-500" onClick={() => setEditingRow(r)}>
                             <Pencil size={14} /> Edit
                           </button>
-                          <button className="text-slate-400 hover:text-red-500 text-xs flex items-center gap-1.5" onClick={() => setConfirmDeleteRow(r)}>
+                          <button className="text-slate-400 hover:text-red-500 text-xs flex items-center gap-1.5 dark:text-slate-500" onClick={() => setConfirmDeleteRow(r)}>
                             <Trash2 size={14} /> Delete
                           </button>
                         </div>
@@ -109,7 +109,7 @@ export function BuktiKasPage() {
                         {h.rows.map(r => (
                           <tr key={r.id}>
                             <td>{r.item_description}</td>
-                            <td className="text-slate-500 text-xs">{r.order_id ? orderLabel(orders, r.order_id) : '—'}</td>
+                            <td className="text-slate-500 text-xs dark:text-slate-400">{r.order_id ? orderLabel(orders, r.order_id) : '—'}</td>
                             <td className="text-right font-mono">{formatRp(r.price)}</td>
                             <td className="text-right">
                               <div className="flex items-center justify-end gap-1">

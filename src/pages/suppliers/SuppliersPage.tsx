@@ -13,11 +13,11 @@ const SUPPLIER_CATEGORIES: SupplierCategory[] = [
 
 // Badge colors in the same families as CATEGORY_COLORS.
 const CATEGORY_BADGE: Record<SupplierCategory, string> = {
-  sablon:                'bg-amber-50 text-amber-700',
-  embroidery:            'bg-teal-50 text-teal-700',
-  merchandise_supplier:  'bg-violet-50 text-violet-700',
-  uniform_supplier:      'bg-rose-50 text-rose-700',
-  general_supplier:      'bg-slate-100 text-slate-600',
+  sablon:                'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
+  embroidery:            'bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-400',
+  merchandise_supplier:  'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-400',
+  uniform_supplier:      'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400',
+  general_supplier:      'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300',
 }
 
 function SupplierForm({ editing, onClose }: { editing: Supplier | null; onClose: () => void }) {
@@ -78,7 +78,7 @@ export function SuppliersPage() {
       searchKeys={['supplier_name', 'supplier_category']}
       columns={[
         { header: 'ID',       key: 'id' },
-        { header: 'Name',     key: 'supplier_name',     primary: true, render: r => <span className="font-medium text-navy-900">{r.supplier_name}</span> },
+        { header: 'Name',     key: 'supplier_name',     primary: true, render: r => <span className="font-medium text-navy-900 dark:text-slate-100">{r.supplier_name}</span> },
         { header: 'Category', key: 'supplier_category', render: r => (
           <span className={`badge ${CATEGORY_BADGE[r.supplier_category] ?? 'badge-slate'}`}>
             {CATEGORY_LABELS[r.supplier_category] ?? r.supplier_category}

@@ -102,30 +102,30 @@ export function TwoFactorPage() {
   // ── Recovery codes, shown exactly once ──────────────────────────────
   if (step === 'recovery') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 py-10">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 py-10 dark:bg-navy-950">
         <div className="w-full max-w-md">
           <div className="text-center mb-6">
             <div className="w-12 h-12 rounded-xl bg-navy-900 flex items-center justify-center mx-auto mb-4">
               <ShieldCheck className="w-5 h-5 text-gold-400" />
             </div>
-            <h1 className="text-xl font-bold text-navy-900">Save your recovery codes</h1>
-            <p className="text-sm text-slate-400 mt-1">
+            <h1 className="text-xl font-bold text-navy-900 dark:text-slate-50">Save your recovery codes</h1>
+            <p className="text-sm text-slate-400 mt-1 dark:text-slate-500">
               Two-factor authentication is on. Each code works once, if you ever lose access to your authenticator app — they won't be shown again.
             </p>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6">
-            <div className="grid grid-cols-2 gap-2 font-mono text-sm text-navy-900 bg-slate-50 rounded-lg p-4">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 dark:bg-navy-900 dark:border-navy-800">
+            <div className="grid grid-cols-2 gap-2 font-mono text-sm text-navy-900 bg-slate-50 rounded-lg p-4 dark:text-slate-50 dark:bg-navy-950">
               {recoveryCodes.map(c => <span key={c}>{c}</span>)}
             </div>
             <button
               onClick={handleDownloadCodes}
-              className="w-full mt-4 flex items-center justify-center gap-2 py-2 rounded-lg border border-slate-200 text-sm text-navy-700 hover:bg-slate-50 transition-colors"
+              className="w-full mt-4 flex items-center justify-center gap-2 py-2 rounded-lg border border-slate-200 text-sm text-navy-700 hover:bg-slate-50 transition-colors dark:border-navy-700 dark:text-slate-200 dark:hover:bg-white/5"
             >
               <Download className="w-4 h-4" /> Download as a text file
             </button>
 
-            <label className="flex items-start gap-2 mt-5 text-sm text-slate-600">
+            <label className="flex items-start gap-2 mt-5 text-sm text-slate-600 dark:text-slate-300">
               <input type="checkbox" checked={savedConfirmed} onChange={e => setSavedConfirmed(e.target.checked)} className="mt-0.5" />
               I've saved these codes somewhere safe
             </label>
@@ -147,25 +147,25 @@ export function TwoFactorPage() {
   // ── Scan the QR, then verify a code from it ─────────────────────────
   if (step === 'scan') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 py-10">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 py-10 dark:bg-navy-950">
         <div className="w-full max-w-sm">
           <div className="text-center mb-6">
             <div className="w-12 h-12 rounded-xl bg-navy-900 flex items-center justify-center mx-auto mb-4">
               <ShieldCheck className="w-5 h-5 text-gold-400" />
             </div>
-            <h1 className="text-xl font-bold text-navy-900">Scan this code</h1>
-            <p className="text-sm text-slate-400 mt-1">
+            <h1 className="text-xl font-bold text-navy-900 dark:text-slate-50">Scan this code</h1>
+            <p className="text-sm text-slate-400 mt-1 dark:text-slate-500">
               Open your authenticator app (Google Authenticator, Authy, 1Password, etc.) and scan this, or enter the code by hand.
             </p>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 flex flex-col items-center gap-4">
-            {qrDataUrl && <img src={qrDataUrl} alt="Scan this QR code with your authenticator app" width={200} height={200} className="rounded-lg" />}
-            <p className="font-mono text-xs text-slate-500 tracking-wider text-center break-all">{groupSecret(secret)}</p>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 flex flex-col items-center gap-4 dark:bg-navy-900 dark:border-navy-800">
+            {qrDataUrl && <img src={qrDataUrl} alt="Scan this QR code with your authenticator app" width={200} height={200} className="rounded-lg dark:bg-white dark:p-3" />}
+            <p className="font-mono text-xs text-slate-500 tracking-wider text-center break-all dark:text-slate-400">{groupSecret(secret)}</p>
 
             <form onSubmit={handleVerify} className="w-full flex flex-col gap-3 mt-2">
               <div>
-                <label htmlFor="verify-code" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">
+                <label htmlFor="verify-code" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">
                   Enter the 6-digit code it shows
                 </label>
                 <input
@@ -177,12 +177,12 @@ export function TwoFactorPage() {
                   required
                   value={code}
                   onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm text-navy-900 text-center tracking-[0.3em] font-mono
-                             focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors"
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-navy-900 text-center tracking-[0.3em] font-mono
+                             focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors dark:bg-navy-900 dark:border-navy-700 dark:text-slate-50"
                   placeholder="000000"
                 />
               </div>
-              {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2" role="alert">{error}</p>}
+              {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 dark:bg-red-500/10 dark:text-red-400" role="alert">{error}</p>}
               <button
                 type="submit"
                 disabled={submitting}
@@ -197,7 +197,7 @@ export function TwoFactorPage() {
 
           <button
             onClick={() => { setStep('status'); setError(null) }}
-            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-navy-700 transition-colors mt-6 mx-auto"
+            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-navy-700 dark:text-slate-500 dark:hover:text-slate-200 transition-colors mt-6 mx-auto"
           >
             <ArrowLeft className="w-4 h-4" /> Cancel
           </button>
@@ -209,21 +209,21 @@ export function TwoFactorPage() {
   // ── Confirm the current password before starting setup ─────────────
   if (step === 'password') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 dark:bg-navy-950">
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
             <div className="w-12 h-12 rounded-xl bg-navy-900 flex items-center justify-center mx-auto mb-4">
               <ShieldCheck className="w-5 h-5 text-gold-400" />
             </div>
-            <h1 className="text-xl font-bold text-navy-900">Confirm it's you</h1>
-            <p className="text-sm text-slate-400 mt-1">Enter your password to start setting up two-factor authentication.</p>
+            <h1 className="text-xl font-bold text-navy-900 dark:text-slate-50">Confirm it's you</h1>
+            <p className="text-sm text-slate-400 mt-1 dark:text-slate-500">Enter your password to start setting up two-factor authentication.</p>
           </div>
 
-          <form onSubmit={handleStartSetup} className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 flex flex-col gap-4">
+          <form onSubmit={handleStartSetup} className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 flex flex-col gap-4 dark:bg-navy-900 dark:border-navy-800">
             <div>
-              <label htmlFor="confirm-password" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Password</label>
+              <label htmlFor="confirm-password" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">Password</label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2 dark:text-navy-700" />
                 <input
                   id="confirm-password"
                   type={showPassword ? 'text' : 'password'}
@@ -232,16 +232,16 @@ export function TwoFactorPage() {
                   required
                   value={currentPassword}
                   onChange={e => setCurrentPassword(e.target.value)}
-                  className="w-full pl-9 pr-9 py-2.5 rounded-lg border border-slate-200 text-sm text-navy-900
-                             focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors"
+                  className="w-full pl-9 pr-9 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-navy-900
+                             focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors dark:bg-navy-900 dark:border-navy-700 dark:text-slate-50"
                   placeholder="••••••••••••"
                 />
-                <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors" tabIndex={-1}>
+                <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors dark:text-navy-700 dark:hover:text-slate-400" tabIndex={-1}>
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
-            {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2" role="alert">{error}</p>}
+            {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 dark:bg-red-500/10 dark:text-red-400" role="alert">{error}</p>}
             <button
               type="submit"
               disabled={submitting}
@@ -255,7 +255,7 @@ export function TwoFactorPage() {
 
           <button
             onClick={() => { setStep('status'); setCurrentPassword(''); setError(null) }}
-            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-navy-700 transition-colors mt-6 mx-auto"
+            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-navy-700 dark:text-slate-500 dark:hover:text-slate-200 transition-colors mt-6 mx-auto"
           >
             <ArrowLeft className="w-4 h-4" /> Cancel
           </button>
@@ -266,11 +266,11 @@ export function TwoFactorPage() {
 
   // ── Status: on/off, with the one action available from here ────────
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 dark:bg-navy-950">
       <div className="w-full max-w-sm">
         <button
           onClick={() => navigate('/')}
-          className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-navy-700 transition-colors mb-6"
+          className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-navy-700 dark:text-slate-500 dark:hover:text-slate-200 transition-colors mb-6"
         >
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
@@ -279,14 +279,14 @@ export function TwoFactorPage() {
           <div className="w-12 h-12 rounded-xl bg-navy-900 flex items-center justify-center mx-auto mb-4">
             <ShieldCheck className="w-5 h-5 text-gold-400" />
           </div>
-          <h1 className="text-xl font-bold text-navy-900">Two-factor authentication</h1>
-          <p className="text-sm text-slate-400 mt-1">An extra code from your phone, on top of your password, when you sign in.</p>
+          <h1 className="text-xl font-bold text-navy-900 dark:text-slate-50">Two-factor authentication</h1>
+          <p className="text-sm text-slate-400 mt-1 dark:text-slate-500">An extra code from your phone, on top of your password, when you sign in.</p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6">
-          <div className={`flex items-center gap-3 rounded-lg px-4 py-3 ${enabled ? 'bg-green-50' : 'bg-amber-50'}`}>
-            {enabled ? <Check className="w-5 h-5 text-green-600 shrink-0" /> : <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />}
-            <p className={`text-sm font-medium ${enabled ? 'text-green-700' : 'text-amber-700'}`}>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 dark:bg-navy-900 dark:border-navy-800">
+          <div className={`flex items-center gap-3 rounded-lg px-4 py-3 ${enabled ? 'bg-green-50 dark:bg-green-500/10' : 'bg-amber-50 dark:bg-amber-500/10'}`}>
+            {enabled ? <Check className="w-5 h-5 text-green-600 shrink-0 dark:text-green-400" /> : <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 dark:text-amber-400" />}
+            <p className={`text-sm font-medium ${enabled ? 'text-green-700 dark:text-green-400' : 'text-amber-700 dark:text-amber-400'}`}>
               {enabled ? "You're protected — two-factor authentication is on." : 'Two-factor authentication is off.'}
             </p>
           </div>
@@ -295,7 +295,7 @@ export function TwoFactorPage() {
             onClick={() => (enabled ? setConfirmDisable(true) : setStep('password'))}
             className={`w-full mt-4 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
               enabled
-                ? 'border border-red-200 text-red-600 hover:bg-red-50'
+                ? 'border border-red-200 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10'
                 : 'bg-navy-900 text-white hover:bg-navy-800'
             }`}
           >
@@ -327,10 +327,10 @@ function DisableConfirm({ onConfirm, onCancel }: { onConfirm: (password: string)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/50 backdrop-blur-sm" onClick={e => e.target === e.currentTarget && onCancel()}>
-      <form onSubmit={handleSubmit} className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-4 dark:bg-navy-900">
         <div className="flex gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-          <p className="text-sm text-slate-700">Turning this off means signing in again only needs your password. Enter it to confirm.</p>
+          <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5 dark:text-red-400" />
+          <p className="text-sm text-slate-700 dark:text-slate-300">Turning this off means signing in again only needs your password. Enter it to confirm.</p>
         </div>
         <input
           type="password"
@@ -339,10 +339,10 @@ function DisableConfirm({ onConfirm, onCancel }: { onConfirm: (password: string)
           value={password}
           onChange={e => setPassword(e.target.value)}
           placeholder="Your password"
-          className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300"
+          className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 dark:bg-navy-900 dark:border-navy-700 dark:text-slate-50"
         />
         <div className="flex gap-2">
-          <button type="button" onClick={onCancel} className="flex-1 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+          <button type="button" onClick={onCancel} className="flex-1 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-navy-700 dark:text-slate-300 dark:hover:bg-white/5">Cancel</button>
           <button type="submit" disabled={submitting} className="flex-1 py-2.5 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-60">
             {submitting ? 'Turning off…' : 'Turn off'}
           </button>

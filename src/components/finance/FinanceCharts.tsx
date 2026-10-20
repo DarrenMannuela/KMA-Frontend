@@ -100,7 +100,7 @@ export function TrendChart({ data, selected, onSelect }: { data: TrendPoint[]; s
 
 export function Legend({ items }: { items: { label: string; color: string; dashed?: boolean; line?: boolean }[] }) {
   return (
-    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
       {items.map(i => (
         <span key={i.label} className="inline-flex items-center gap-1.5">
           {i.line || i.dashed
@@ -185,20 +185,20 @@ export function RankBars({ items, onSelect, empty = 'Nothing in this period' }: 
 }) {
   const max = Math.max(1, ...items.map(i => i.value))
   const total = items.reduce((n, i) => n + i.value, 0) || 1
-  if (!items.length) return <p className="py-8 text-center text-sm text-slate-400">{empty}</p>
+  if (!items.length) return <p className="py-8 text-center text-sm text-slate-400 dark:text-slate-500">{empty}</p>
   return (
     <ul className="space-y-1">
       {items.map(i => (
         <li key={i.id}>
-          <button className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-slate-50 group" onClick={() => onSelect?.(i.id)} disabled={!onSelect}>
+          <button className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-slate-50 group dark:hover:bg-white/5" onClick={() => onSelect?.(i.id)} disabled={!onSelect}>
             <div className="flex items-baseline gap-2 text-sm">
               {i.color && <span className="w-2 h-2 rounded-full shrink-0 self-center" style={{ background: i.color }} />}
-              <span className="truncate text-slate-700 group-hover:text-navy-900">{i.label}</span>
-              {i.sub && <span className="text-xs text-slate-400 truncate">{i.sub}</span>}
-              <span className="ml-auto font-mono tabular-nums text-slate-800">{formatRp(i.value)}</span>
-              <span className="w-10 text-right text-xs text-slate-400 tabular-nums">{Math.round((i.value / total) * 100)}%</span>
+              <span className="truncate text-slate-700 group-hover:text-navy-900 dark:text-slate-300 dark:group-hover:text-slate-50">{i.label}</span>
+              {i.sub && <span className="text-xs text-slate-400 truncate dark:text-slate-500">{i.sub}</span>}
+              <span className="ml-auto font-mono tabular-nums text-slate-800 dark:text-slate-200">{formatRp(i.value)}</span>
+              <span className="w-10 text-right text-xs text-slate-400 tabular-nums dark:text-slate-500">{Math.round((i.value / total) * 100)}%</span>
             </div>
-            <div className="mt-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+            <div className="mt-1 h-1.5 rounded-full bg-slate-100 overflow-hidden dark:bg-white/10">
               <div className="h-full rounded-full bg-navy-500 group-hover:bg-navy-700 transition-colors" style={{ width: `${(i.value / max) * 100}%` }} />
             </div>
           </button>
@@ -213,7 +213,7 @@ export function SplitBar({ parts }: { parts: { key: string; label: string; value
   const total = parts.reduce((n, p) => n + p.value, 0)
   return (
     <div className="space-y-2">
-      <div className="flex h-3 rounded-full overflow-hidden bg-slate-100">
+      <div className="flex h-3 rounded-full overflow-hidden bg-slate-100 dark:bg-white/10">
         {total > 0 && parts.filter(p => p.value > 0).map(p => (
           <div key={p.key} style={{ width: `${(p.value / total) * 100}%`, background: p.color }} title={`${p.label}: ${formatRp(p.value)}`} />
         ))}
@@ -221,8 +221,8 @@ export function SplitBar({ parts }: { parts: { key: string; label: string; value
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {parts.map(p => (
           <div key={p.key} className="text-xs">
-            <div className="flex items-center gap-1.5 text-slate-500"><span className="w-2 h-2 rounded-full" style={{ background: p.color }} />{p.label}</div>
-            <div className="font-mono text-slate-800 tabular-nums">{shortRp(p.value)}</div>
+            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400"><span className="w-2 h-2 rounded-full" style={{ background: p.color }} />{p.label}</div>
+            <div className="font-mono text-slate-800 tabular-nums dark:text-slate-200">{shortRp(p.value)}</div>
           </div>
         ))}
       </div>
@@ -234,7 +234,7 @@ export function Meter({ value, max }: { value: number; max: number }) {
   const share = max > 0 ? value / max : 0
   const color = share > 1 ? 'bg-red-500' : share > 0.8 ? 'bg-amber-400' : 'bg-green-500'
   return (
-    <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+    <div className="h-2 rounded-full bg-slate-100 overflow-hidden dark:bg-white/10">
       <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(100, share * 100)}%` }} />
     </div>
   )

@@ -5,7 +5,7 @@ import { format } from 'date-fns'
 import { orderHooks, itemHooks, invoiceHooks, clientHooks, supplierHooks, productionHooks, operationHooks, buktiKasHooks } from '@/hooks'
 import { LoadingState, ErrorState } from '@/components/ui/Page'
 import { formatRp } from '@/components/ui'
-import { fromProduction, fromOperation, inPeriod, type Period } from '@/components/finance/ledgerModel'
+import { fromProduction, fromOperation, inPeriod, previousPeriod, type Period } from '@/components/finance/ledgerModel'
 import { periodLabel } from '@/components/finance/PeriodPicker'
 import { monthly, totals, receivables, orderStats, clientStats, dueOn, AGING } from '@/components/finance/financeStats'
 import { shortMonthLabel } from '@/utils/MonthUtils'
@@ -30,6 +30,13 @@ function periodFromParams(params: URLSearchParams): Period {
 }
 
 const money = (v: number) => formatRp(v)
+/** Same convention as the Finance Overview page's own delta(), generalized
+ *  to either period mode instead of a hardcoded "vs last year". */
+function delta(now: number, before: number, vsLabel: string): string | null {
+  if (!before) return null
+  const d = Math.round(((now - before) / Math.abs(before)) * 100)
+  return `${d > 0 ? '▲' : d < 0 ? '▼' : ''} ${Math.abs(d)}% vs ${vsLabel}`
+}
 
 export function FinanceReportPrintPage() {
   const navigate = useNavigate()
@@ -57,6 +64,9 @@ export function FinanceReportPrintPage() {
 
   const months = useMemo(() => monthly(period.year, invoices, costs, buktiKas), [period.year, invoices, costs, buktiKas])
   const t = useMemo(() => totals(period, invoices, costs, buktiKas), [period, invoices, costs, buktiKas])
+  const prevPeriod = useMemo(() => previousPeriod(period), [period])
+  const prevT = useMemo(() => (prevPeriod ? totals(prevPeriod, invoices, costs, buktiKas) : null), [prevPeriod, invoices, costs, buktiKas])
+  const prevLabel = prevPeriod ? periodLabel(prevPeriod) : ''
   // Receivables are a snapshot of what's owed right now, not scoped to the
   // report's period — same as the Finance Overview, and the only sensible
   // reading for "Owed to you" on a document meant to be handed to someone.
@@ -81,6 +91,15 @@ export function FinanceReportPrintPage() {
     }
     return [...sum.values()].sort((a, b) => b.value - a.value).slice(0, 10)
   }, [periodCosts, suppliers])
+  const whereOps = useMemo(() => {
+    const sum = new Map<string, number>()
+    for (const c of periodCosts) {
+      if (c.kind !== 'operation') continue
+      const key = c.category || 'Uncategorized'
+      sum.set(key, (sum.get(key) ?? 0) + c.total)
+    }
+    return [...sum.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 10)
+  }, [periodCosts])
 
   if (queries.some(q => q.isLoading)) return <LoadingState label="Loading the report…" />
   if (queries.some(q => q.isError)) {
@@ -123,19 +142,21 @@ export function FinanceReportPrintPage() {
           {/* KPI summary */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '20px', breakInside: 'avoid' }}>
             {[
-              ['Invoiced', t.invoiced, null],
-              ['Spent', t.cost, `${money(t.production)} bahan · ${money(t.operation)} ops`],
-              ['Profit', t.profit, margin != null ? `${margin}% margin` : null],
-              ['Cash in', t.cashIn, null],
-              ['Owed to you', owed, `${open.length} unpaid invoice${open.length === 1 ? '' : 's'}`],
-              ['Orders in period', inPeriodOrders.length, null],
-            ].map(([label, value, sub]) => (
-              <div key={label as string} style={{ border: '1px solid #ddd', borderRadius: '6px', padding: '8px 10px' }}>
+              { label: 'Invoiced', value: t.invoiced, subs: [prevT ? delta(t.invoiced, prevT.invoiced, prevLabel) : null] },
+              { label: 'Spent', value: t.cost, subs: [`${money(t.production)} bahan · ${money(t.operation)} ops`, prevT ? delta(t.cost, prevT.cost, prevLabel) : null] },
+              { label: 'Profit', value: t.profit, subs: [margin != null ? `${margin}% margin` : null, prevT ? delta(t.profit, prevT.profit, prevLabel) : null] },
+              { label: 'Cash in', value: t.cashIn, subs: [prevT ? delta(t.cashIn, prevT.cashIn, prevLabel) : null] },
+              { label: 'Owed to you', value: owed, subs: [`${open.length} unpaid invoice${open.length === 1 ? '' : 's'}`] },
+              { label: 'Orders in period', value: inPeriodOrders.length, subs: [] },
+            ].map(({ label, value, subs }) => (
+              <div key={label} style={{ border: '1px solid #ddd', borderRadius: '6px', padding: '8px 10px' }}>
                 <div style={{ fontSize: '9px', color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
                 <div style={{ fontWeight: 'bold', fontSize: '14px', fontFamily: 'monospace' }}>
-                  {typeof value === 'number' && label !== 'Orders in period' ? money(value) : value}
+                  {label === 'Orders in period' ? value : money(value)}
                 </div>
-                {sub && <div style={{ fontSize: '9px', color: '#888' }}>{sub}</div>}
+                {subs.filter((s): s is string => s != null).map((s, i) => (
+                  <div key={i} style={{ fontSize: '9px', color: '#888' }}>{s}</div>
+                ))}
               </div>
             ))}
           </div>
@@ -177,22 +198,43 @@ export function FinanceReportPrintPage() {
 
           {/* Where the money went */}
           <Section title={`Where the money went · ${periodLabel(period)}`}>
-            {where.length === 0 ? <Empty text="No bahan costs in this period." /> : (
-              <table style={tableStyle}>
-                <thead><tr style={theadRowStyle}><th style={thStyle}>Supplier</th><th style={thStyleRight}>Spent</th></tr></thead>
-                <tbody>
-                  {where.map(w => (
-                    <tr key={w.label}>
-                      <td style={tdStyle}>
-                        {w.color && <span style={{ display: 'inline-block', width: '7px', height: '7px', borderRadius: '50%', background: w.color, marginRight: '6px' }} />}
-                        {w.label}
-                      </td>
-                      <td style={tdStyleRight}>{money(w.value)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#555', marginBottom: '4px' }}>By supplier · bahan</div>
+                {where.length === 0 ? <Empty text="No bahan costs in this period." /> : (
+                  <table style={tableStyle}>
+                    <thead><tr style={theadRowStyle}><th style={thStyle}>Supplier</th><th style={thStyleRight}>Spent</th></tr></thead>
+                    <tbody>
+                      {where.map(w => (
+                        <tr key={w.label}>
+                          <td style={tdStyle}>
+                            {w.color && <span style={{ display: 'inline-block', width: '7px', height: '7px', borderRadius: '50%', background: w.color, marginRight: '6px' }} />}
+                            {w.label}
+                          </td>
+                          <td style={tdStyleRight}>{money(w.value)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <div>
+                <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#555', marginBottom: '4px' }}>By category · operations</div>
+                {whereOps.length === 0 ? <Empty text="No operations costs in this period." /> : (
+                  <table style={tableStyle}>
+                    <thead><tr style={theadRowStyle}><th style={thStyle}>Category</th><th style={thStyleRight}>Spent</th></tr></thead>
+                    <tbody>
+                      {whereOps.map(w => (
+                        <tr key={w.label}>
+                          <td style={tdStyle}>{w.label}</td>
+                          <td style={tdStyleRight}>{money(w.value)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
           </Section>
 
           {/* Clients */}

@@ -21,14 +21,18 @@ const emptyQuickAddItem = () => ({ item_name: '', size: '', amount: 1, box_numbe
 // saturated colors stacked down the page read as noisy, and the tinted
 // version already read calmer on phones).
 const BOX_BADGE_COLORS_LIGHT = [
-  'bg-navy-50 text-navy-700', 'bg-blue-50 text-blue-700', 'bg-teal-50 text-teal-700',
-  'bg-purple-50 text-purple-700', 'bg-amber-50 text-amber-700', 'bg-rose-50 text-rose-700',
+  'bg-navy-50 text-navy-700 dark:bg-navy-800 dark:text-navy-200',
+  'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400',
+  'bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-400',
+  'bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400',
+  'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
+  'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400',
 ]
 
 // A fixed-height hint line under every field, so rows line up whether or not
 // a hint shows.
 function FieldHint({ children }: { children?: React.ReactNode }) {
-  return <p className="text-xs text-slate-400 mt-1 h-4 leading-4">{children ?? '\u00A0'}</p>
+  return <p className="text-xs text-slate-400 mt-1 h-4 leading-4 dark:text-slate-500">{children ?? '\u00A0'}</p>
 }
 
 interface DeliveryItemsManagerProps {
@@ -134,7 +138,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
 
   if (!deliveryId) {
     return (
-      <div className="card p-10 text-center text-slate-400 text-sm">
+      <div className="card p-10 text-center text-slate-400 text-sm dark:text-slate-500">
         {t('delivery.items.deliveryNotFound')}
       </div>
     )
@@ -143,7 +147,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h2 className="font-semibold text-navy-900 text-sm">
+        <h2 className="font-semibold text-navy-900 text-sm dark:text-slate-50">
           {isDO ? t('delivery.items.boxContents', { count: items.length }) : t('delivery.items.documents', { count: items.length })}
         </h2>
         <button className="btn-primary flex items-center gap-1 !py-1.5 text-sm" onClick={open ? () => setOpen(false) : openAdd}>
@@ -159,14 +163,14 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
         >
           <div className="space-y-4">
             <div className="space-y-2">
-              <span className="inline-flex items-center gap-1.5 text-xs bg-navy-50 text-navy-700 border border-navy-100 rounded-full px-2.5 py-1">
+              <span className="inline-flex items-center gap-1.5 text-xs bg-navy-50 text-navy-700 border border-navy-100 rounded-full px-2.5 py-1 dark:bg-navy-800 dark:text-navy-200 dark:border-navy-700">
                 {t('delivery.items.addingTo')} <span className="font-mono font-semibold">{deliveryId}</span>
                 {selectedDelivery && (
                   <span className="text-navy-400 font-normal"> · {isDO ? t('delivery.deliveryOrder') : t('delivery.suratJalan')}</span>
                 )}
               </span>
               {duplicatingFrom && (
-                <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-700">
+                <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-700 dark:bg-blue-500/10 dark:border-blue-500/20 dark:text-blue-400">
                   {t('delivery.items.duplicatedFrom', { name: duplicatingFrom.item_name })}
                 </div>
               )}
@@ -188,7 +192,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
             ) : (
               <FormField label={isDO ? t('delivery.items.itemName') : t('delivery.items.documentName')} required>
                 <input
-                  className={`field ${missing ? '!border-red-400 !ring-red-100' : ''}`}
+                  className={`field ${missing ? '!border-red-400 !ring-red-100 dark:!border-red-500 dark:!ring-red-500/20' : ''}`}
                   placeholder={isDO ? t('delivery.items.itemNamePlaceholder') : t('delivery.items.documentNamePlaceholder')}
                   value={quickAdd.item_name}
                   onChange={e => setQuickAdd(p => ({ ...p, item_name: e.target.value.toUpperCase() }))}
@@ -209,7 +213,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
                   const val = Number(e.target.value)
                   setQuickAdd(p => ({ ...p, amount: maxAmount != null ? Math.min(val, maxAmount) : val }))
                 }} />
-              {maxAmount != null && <p className="text-xs text-slate-400 mt-1">{t('delivery.items.maxAvailable', { max: maxAmount })}</p>}
+              {maxAmount != null && <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">{t('delivery.items.maxAvailable', { max: maxAmount })}</p>}
             </FormField>
 
             <FormField label={isDO ? t('delivery.items.boxNumber') : t('delivery.items.packageCode')}>
@@ -221,7 +225,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
             <button className="btn-primary w-full" disabled={create.isPending} onClick={handleAdd}>
               {create.isPending ? t('delivery.items.adding') : isDO ? t('delivery.items.addItem') : t('delivery.items.addDocument')}
             </button>
-            <p className="text-xs text-slate-400 text-center">
+            <p className="text-xs text-slate-400 text-center dark:text-slate-500">
               {t('delivery.items.stayOpenHint', { thing: isDO ? t('delivery.items.item') : t('delivery.items.document') })}
             </p>
           </div>
@@ -229,19 +233,19 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
       )}
 
       {open && !isMobile && (
-        <div className="card p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50">
+        <div className="card p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 dark:bg-navy-950">
           <div className="col-span-1 sm:col-span-2 md:col-span-4 -mb-1 space-y-2">
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 dark:text-slate-500">
               {t('delivery.items.addingToThisDeliveryStayOpenHint', { thing: isDO ? t('delivery.items.item') : t('delivery.items.document') })}
             </p>
-            <span className="inline-flex items-center gap-1.5 text-xs bg-navy-50 text-navy-700 border border-navy-100 rounded-full px-2.5 py-1">
+            <span className="inline-flex items-center gap-1.5 text-xs bg-navy-50 text-navy-700 border border-navy-100 rounded-full px-2.5 py-1 dark:bg-navy-800 dark:text-navy-200 dark:border-navy-700">
               {t('delivery.items.addingTo')} <span className="font-mono font-semibold">{deliveryId}</span>
               {selectedDelivery && (
                 <span className="text-navy-400 font-normal"> · {isDO ? t('delivery.deliveryOrder') : t('delivery.suratJalan')}</span>
               )}
             </span>
             {duplicatingFrom && (
-              <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-700">
+              <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-700 dark:bg-blue-500/10 dark:border-blue-500/20 dark:text-blue-400">
                 {t('delivery.items.duplicatedFrom', { name: duplicatingFrom.item_name })}
               </div>
             )}
@@ -266,7 +270,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
           ) : (
             <FormField label={isDO ? t('delivery.items.itemName') : t('delivery.items.documentName')} required>
               <input
-                className={`field ${missing ? '!border-red-400 !ring-red-100' : ''}`}
+                className={`field ${missing ? '!border-red-400 !ring-red-100 dark:!border-red-500 dark:!ring-red-500/20' : ''}`}
                 placeholder={isDO ? t('delivery.items.itemNamePlaceholder') : t('delivery.items.documentNamePlaceholder')}
                 value={quickAdd.item_name}
                 onChange={e => setQuickAdd(p => ({ ...p, item_name: e.target.value.toUpperCase() }))}
@@ -309,7 +313,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
       )}
 
       {isLoading ? (
-        <div className="p-8 text-slate-400 text-sm">{t('common.loading')}</div>
+        <div className="p-8 text-slate-400 text-sm dark:text-slate-500">{t('common.loading')}</div>
       ) : isError ? (
         // A failed fetch shows Retry, not "nothing here".
         <div className="card p-10 text-center text-sm">
@@ -319,7 +323,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
       ) : (
         <>
           {items.length === 0 && (
-            <div className="card p-10 text-center text-slate-400 text-sm">
+            <div className="card p-10 text-center text-slate-400 text-sm dark:text-slate-500">
               {isDO
                 ? t('delivery.items.noItemsYet', { id: deliveryId })
                 : t('delivery.items.noDocumentsYet', { id: deliveryId })}
@@ -327,14 +331,14 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
           )}
 
           {isDO && recap.length > 0 && (
-            <div className="card border-navy-100">
-              <div className="flex items-center justify-between px-4 py-3 bg-navy-50 border-b border-navy-100 gap-2 flex-wrap">
-                <h3 className="font-semibold text-navy-900 text-sm">{t('delivery.items.recapAllBoxes')}</h3>
+            <div className="card border-navy-100 dark:border-navy-700">
+              <div className="flex items-center justify-between px-4 py-3 bg-navy-50 border-b border-navy-100 gap-2 flex-wrap dark:bg-navy-800 dark:border-navy-700">
+                <h3 className="font-semibold text-navy-900 text-sm dark:text-slate-50">{t('delivery.items.recapAllBoxes')}</h3>
                 <span className="text-xs text-navy-500">{t('delivery.items.boxCount', { count: boxGroups.length })} · {t('common.pcs', { count: recap.reduce((s, r) => s + r.total, 0) })}</span>
               </div>
               {isMobile ? (
                 // Phone width: label: value cards instead of a 3-column table.
-                <div className="divide-y divide-slate-50">
+                <div className="divide-y divide-slate-50 dark:divide-navy-800/60">
                   {recap.map(r => (
                     <div key={`${r.item_name}|${r.size ?? ''}`} className="flex items-center justify-between gap-3 p-4">
                       <span className="font-medium">{r.item_name}{r.size ? ` · ${r.size}` : ''}</span>
@@ -346,7 +350,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm min-w-[420px]">
                     <thead>
-                      <tr className="text-xs text-slate-400 uppercase border-b border-slate-100">
+                      <tr className="text-xs text-slate-400 uppercase border-b border-slate-100 dark:text-slate-500 dark:border-navy-800">
                         <th className="text-left p-3">{t('delivery.items.itemHeader')}</th>
                         <th className="text-left p-3">{t('delivery.items.sizeHeader')}</th>
                         <th className="text-right p-3">{t('delivery.items.totalQty')}</th>
@@ -354,7 +358,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
                     </thead>
                     <tbody>
                       {recap.map(r => (
-                        <tr key={`${r.item_name}|${r.size ?? ''}`} className="border-b border-slate-50 last:border-0">
+                        <tr key={`${r.item_name}|${r.size ?? ''}`} className="border-b border-slate-50 last:border-0 dark:border-navy-800/60">
                           <td className="p-3 font-medium">{r.item_name}</td>
                           <td className="p-3">{r.size ?? '—'}</td>
                           <td className="p-3 text-right font-mono font-semibold">{r.total}</td>
@@ -370,12 +374,12 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
           {isDO ? (
             boxGroups.map(([boxKey, boxItems], i) => {
               const boxTotal = boxItems.reduce((s, it) => s + it.amount, 0)
-              const badgeColorLight = boxKey === 'unassigned' ? 'bg-slate-100 text-slate-600' : BOX_BADGE_COLORS_LIGHT[i % BOX_BADGE_COLORS_LIGHT.length]
+              const badgeColorLight = boxKey === 'unassigned' ? 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300' : BOX_BADGE_COLORS_LIGHT[i % BOX_BADGE_COLORS_LIGHT.length]
               return (
-                <div key={boxKey} className="rounded-xl overflow-hidden border border-slate-200">
+                <div key={boxKey} className="rounded-xl overflow-hidden border border-slate-200 dark:border-navy-700">
                   <div className={`flex items-center justify-between px-4 py-3 gap-2 flex-wrap ${badgeColorLight}`}>
                     <div className="flex items-center gap-2.5">
-                      <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white/60 font-bold text-xs shrink-0">
+                      <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white/60 font-bold text-xs shrink-0 dark:bg-navy-950/40">
                         {boxKey === 'unassigned' ? <Box size={14} /> : boxKey}
                       </span>
                       <h3 className="font-semibold text-sm">
@@ -385,7 +389,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
                     <span className="text-xs opacity-70">{t('delivery.items.itemCount', { count: boxItems.length })} · {t('common.pcs', { count: boxTotal })}</span>
                   </div>
                   {isMobile ? (
-                    <div className="divide-y divide-slate-50">
+                    <div className="divide-y divide-slate-50 dark:divide-navy-800/60">
                       {boxItems.map(item => (
                         <DeliveryItemRow
                           key={item.id}
@@ -404,7 +408,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm min-w-[560px]">
                         <thead>
-                          <tr className="text-xs text-slate-400 uppercase border-b border-slate-100 bg-slate-50">
+                          <tr className="text-xs text-slate-400 uppercase border-b border-slate-100 bg-slate-50 dark:text-slate-500 dark:border-navy-800 dark:bg-navy-950">
                             <th className="text-left p-3">{t('delivery.items.itemHeader')}</th>
                             <th className="text-left p-3">{t('delivery.items.sizeHeader')}</th>
                             <th className="text-right p-3">{t('delivery.items.amountHeader')}</th>
@@ -433,12 +437,12 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
             })
           ) : items.length > 0 && (
             <div className="card">
-              <div className="flex items-center justify-between p-3 border-b border-slate-100 bg-slate-50 gap-2 flex-wrap">
-                <h3 className="font-semibold text-navy-900 text-sm">{t('delivery.items.documentsHeader')}</h3>
-                <span className="text-xs text-slate-400">{t('delivery.items.documentsCount', { count: items.length })}</span>
+              <div className="flex items-center justify-between p-3 border-b border-slate-100 bg-slate-50 gap-2 flex-wrap dark:border-navy-800 dark:bg-navy-950">
+                <h3 className="font-semibold text-navy-900 text-sm dark:text-slate-50">{t('delivery.items.documentsHeader')}</h3>
+                <span className="text-xs text-slate-400 dark:text-slate-500">{t('delivery.items.documentsCount', { count: items.length })}</span>
               </div>
               {isMobile ? (
-                <div className="divide-y divide-slate-50">
+                <div className="divide-y divide-slate-50 dark:divide-navy-800/60">
                   {items.map(item => (
                     <DeliveryItemRow
                       key={item.id}
@@ -456,7 +460,7 @@ export function DeliveryItemsManager({ deliveryId }: DeliveryItemsManagerProps) 
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[480px]">
                   <thead>
-                    <tr className="text-xs text-slate-400 uppercase border-b border-slate-100">
+                    <tr className="text-xs text-slate-400 uppercase border-b border-slate-100 dark:text-slate-500 dark:border-navy-800">
                       <th className="text-left p-3">{t('delivery.items.documentHeader')}</th>
                       <th className="text-right p-3">{t('delivery.items.amountHeader')}</th>
                       <th className="text-right p-3">{t('delivery.items.packageHeader')}</th>
@@ -550,7 +554,7 @@ function DeliveryItemRow({
     if (isMobile) {
       // Labeled fields on the card, instead of the table's bare inputs.
       return (
-        <div className="p-4 bg-navy-50/40">
+        <div className="p-4 bg-navy-50/40 dark:bg-navy-800/40">
           <div className="font-medium mb-3">{item.item_name}{isDO && item.size ? ` · ${item.size}` : ''}</div>
           <div className="grid grid-cols-2 gap-3 mb-3">
             <FormField label={t('delivery.items.amount')}>
@@ -586,7 +590,7 @@ function DeliveryItemRow({
       )
     }
     return (
-      <tr className="border-b border-slate-50 bg-navy-50/40">
+      <tr className="border-b border-slate-50 bg-navy-50/40 dark:border-navy-800/60 dark:bg-navy-800/40">
         <td className="p-3 font-medium">{item.item_name}</td>
         {isDO && <td className="p-3">{item.size ?? '—'}</td>}
         <td className="p-2 text-right">
@@ -611,10 +615,10 @@ function DeliveryItemRow({
         </td>
         <td className="p-3 text-right">
           <div className="flex items-center justify-end gap-2">
-            <button className="text-green-600 hover:text-green-700" title={t('delivery.items.save')} disabled={update.isPending} onClick={save}>
+            <button className="text-green-600 hover:text-green-700 dark:text-green-400" title={t('delivery.items.save')} disabled={update.isPending} onClick={save}>
               <Check size={16} />
             </button>
-            <button className="text-slate-400 hover:text-red-500" title={t('delivery.items.cancel')} onClick={cancelEdit}>
+            <button className="text-slate-400 hover:text-red-500 dark:text-slate-500" title={t('delivery.items.cancel')} onClick={cancelEdit}>
               <X size={16} />
             </button>
           </div>
@@ -630,24 +634,24 @@ function DeliveryItemRow({
           <span className="font-medium">{item.item_name}{isDO && item.size ? ` · ${item.size}` : ''}</span>
           <span className="font-mono font-semibold shrink-0">{item.amount}</span>
         </div>
-        <div className="text-xs text-slate-400 mt-1">
+        <div className="text-xs text-slate-400 mt-1 dark:text-slate-500">
           {isDO ? t('delivery.items.boxColon', { number: item.box_number ?? '—' }) : t('delivery.items.packageColon', { number: item.box_number ?? '—' })}
         </div>
         {/* Roomier actions: the row people tap most on a phone. */}
         <div className="flex items-center gap-4 mt-3 flex-wrap">
-          <button className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1.5" title={t('delivery.items.duplicateTooltip')}
+          <button className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1.5 dark:text-slate-500" title={t('delivery.items.duplicateTooltip')}
             onClick={() => onDuplicate(item)}>
             <Copy size={14} /> {t('delivery.items.copy')}
           </button>
-          <button className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1.5" title={t('delivery.items.editTooltip')}
+          <button className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1.5 dark:text-slate-500" title={t('delivery.items.editTooltip')}
             onClick={startEdit}>
             <Pencil size={14} /> {t('delivery.items.edit')}
           </button>
-          <button className="text-slate-400 hover:text-navy-600 text-xs" title={t('delivery.items.changeItemTooltip')}
+          <button className="text-slate-400 hover:text-navy-600 text-xs dark:text-slate-500" title={t('delivery.items.changeItemTooltip')}
             onClick={() => onFullEdit(item)}>
             {t('delivery.items.changeItem')}
           </button>
-          <button className="text-slate-400 hover:text-red-500 text-xs"
+          <button className="text-slate-400 hover:text-red-500 text-xs dark:text-slate-500"
             onClick={() => onRequestDelete(item)}>
             {t('delivery.items.delete')}
           </button>
@@ -657,26 +661,26 @@ function DeliveryItemRow({
   }
 
   return (
-    <tr className="border-b border-slate-50 hover:bg-slate-50">
+    <tr className="border-b border-slate-50 hover:bg-slate-50 dark:border-navy-800/60 dark:hover:bg-white/5">
       <td className="p-3 font-medium">{item.item_name}</td>
       {isDO && <td className="p-3">{item.size ?? '—'}</td>}
       <td className="p-3 text-right">{item.amount}</td>
-      <td className="p-3 text-right font-mono text-slate-400">{item.box_number ?? '—'}</td>
+      <td className="p-3 text-right font-mono text-slate-400 dark:text-slate-500">{item.box_number ?? '—'}</td>
       <td className="p-3 text-right">
         <div className="flex items-center justify-end gap-3">
-          <button className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1" title={t('delivery.items.duplicateTooltip')}
+          <button className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1 dark:text-slate-500" title={t('delivery.items.duplicateTooltip')}
             onClick={() => onDuplicate(item)}>
             <Copy size={12} /> {t('delivery.items.copy')}
           </button>
-          <button className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1" title={t('delivery.items.editTooltip')}
+          <button className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1 dark:text-slate-500" title={t('delivery.items.editTooltip')}
             onClick={startEdit}>
             <Pencil size={12} /> {t('delivery.items.edit')}
           </button>
-          <button className="text-slate-400 hover:text-navy-600 text-xs" title={t('delivery.items.changeItemTooltip')}
+          <button className="text-slate-400 hover:text-navy-600 text-xs dark:text-slate-500" title={t('delivery.items.changeItemTooltip')}
             onClick={() => onFullEdit(item)}>
             {t('delivery.items.changeItem')}
           </button>
-          <button className="text-slate-400 hover:text-red-500 text-xs"
+          <button className="text-slate-400 hover:text-red-500 text-xs dark:text-slate-500"
             onClick={() => onRequestDelete(item)}>
             {t('delivery.items.delete')}
           </button>
@@ -725,7 +729,7 @@ function DeliveryOrderForm({ editing, onClose }: { editing: DeliveryItem; onClos
   return (
     <div className="space-y-4">
       <FormField label={t('delivery.items.deliveryReadOnly')}>
-        <input className="field font-mono bg-slate-50" readOnly value={form.delivery_id} />
+        <input className="field font-mono bg-slate-50 dark:bg-navy-950" readOnly value={form.delivery_id} />
       </FormField>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {isDO && orderId ? (
@@ -762,7 +766,7 @@ function DeliveryOrderForm({ editing, onClose }: { editing: DeliveryItem; onClos
               setForm(p => ({ ...p, amount: maxAmount != null ? Math.min(val, maxAmount) : val }))
             }} />
           {maxAmount != null && (
-            <p className="text-xs text-slate-400 mt-1">{t('delivery.items.maxAvailable', { max: maxAmount })}</p>
+            <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">{t('delivery.items.maxAvailable', { max: maxAmount })}</p>
           )}
         </FormField>
         <FormField label={isDO ? t('delivery.items.boxNumber') : t('delivery.items.packageCode')}>

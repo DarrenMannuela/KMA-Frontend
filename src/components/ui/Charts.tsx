@@ -35,7 +35,7 @@ export function StackedBarChart({
   const hasData = totals.some(t => t > 0)
 
   if (!hasData) {
-    return <div className="text-sm text-slate-400 italic py-10 text-center">{emptyLabel}</div>
+    return <div className="text-sm text-slate-400 dark:text-slate-500 italic py-10 text-center">{emptyLabel}</div>
   }
 
   return (
@@ -91,7 +91,7 @@ export function StackedBarChart({
                 style={{ height: `${barHeightPct}%` }}
               >
                 {total <= 0 ? (
-                  <div className="w-full h-full bg-slate-100" />
+                  <div className="w-full h-full bg-slate-100 dark:bg-navy-800" />
                 ) : (
                   segments.map(seg => {
                     const v = d.values[seg.key] ?? 0
@@ -106,7 +106,7 @@ export function StackedBarChart({
                   })
                 )}
               </div>
-              <span className={`text-[10px] mt-1.5 truncate text-center ${isSelected ? 'text-navy-700 font-semibold' : 'text-slate-400'}`}>
+              <span className={`text-[10px] mt-1.5 truncate text-center ${isSelected ? 'text-navy-700 dark:text-slate-100 font-semibold' : 'text-slate-400 dark:text-slate-500'}`}>
                 {d.category}
               </span>
             </Wrapper>
@@ -115,7 +115,7 @@ export function StackedBarChart({
       </div>
       <div className="flex items-center gap-4 mt-4 justify-center flex-wrap">
         {segments.map(seg => (
-          <span key={seg.key} className="flex items-center gap-1.5 text-xs text-slate-500">
+          <span key={seg.key} className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: seg.color }} aria-hidden="true" />
             {seg.label}
           </span>

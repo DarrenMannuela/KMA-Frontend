@@ -69,7 +69,7 @@ export function AddItemsDialog({ clientId, catalogue, year, initialName = '', in
           <div className="flex flex-wrap gap-1.5 mt-1">
             {[...new Set([...PRESET_SIZES, ...sizes])].map(s => (
               <button key={s} type="button" onClick={() => toggle(s)}
-                className={`px-3 py-1 rounded-lg text-sm border ${sizes.includes(s) ? 'bg-navy-900 text-white border-navy-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}>
+                className={`px-3 py-1 rounded-lg text-sm border ${sizes.includes(s) ? 'bg-navy-900 text-white border-navy-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 dark:bg-navy-900 dark:text-slate-300 dark:border-navy-700 dark:hover:border-navy-600'}`}>
                 {s}
               </button>
             ))}
@@ -78,7 +78,7 @@ export function AddItemsDialog({ clientId, catalogue, year, initialName = '', in
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustom() } }}
               onBlur={addCustom} />
           </div>
-          {!sizes.length && <p className="text-xs text-slate-400 mt-1">No size picked: one item without a size.</p>}
+          {!sizes.length && <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">No size picked: one item without a size.</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -92,10 +92,10 @@ export function AddItemsDialog({ clientId, catalogue, year, initialName = '', in
         </div>
 
         {sizes.length > 1 && (
-          <div className="border border-slate-100 rounded-xl divide-y divide-slate-50">
+          <div className="border border-slate-100 rounded-xl divide-y divide-slate-50 dark:border-navy-800 dark:divide-navy-800/60">
             {sizes.map(s => (
               <div key={s} className="flex items-center gap-3 px-3 py-1.5 text-sm">
-                <span className="w-14 font-medium text-navy-900">{s}</span>
+                <span className="w-14 font-medium text-navy-900 dark:text-slate-100">{s}</span>
                 <input className="field !py-1 font-mono flex-1" inputMode="numeric" placeholder={allPrice ? formatThousands(allPrice) : 'price'}
                   value={own[s] != null ? formatThousands(own[s]) : ''}
                   onChange={e => { const v = stripCommas(e.target.value); setOwn(p => ({ ...p, [s]: v })) }}
@@ -107,7 +107,7 @@ export function AddItemsDialog({ clientId, catalogue, year, initialName = '', in
           </div>
         )}
         {sizes.length <= 1 && name && existing.has(exact(name, sizes[0] ?? '')) && (
-          <p className="text-xs text-amber-700">This item is already in the catalogue: saving sets its {priceYear} price.</p>
+          <p className="text-xs text-amber-700 dark:text-amber-400">This item is already in the catalogue: saving sets its {priceYear} price.</p>
         )}
 
         <div className="flex gap-2 pt-1">

@@ -9,6 +9,18 @@
          Safari Share → Add to Home Screen). Needs the HTTPS address. -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#ffffff" />
+    <!-- Sets the dark class before first paint, so there's no flash of the
+         wrong theme while React loads. Mirrors ThemeContext's own storage
+         key and fallback — see src/contexts/ThemeContext.tsx. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('kma-theme');
+          var dark = stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (dark) document.documentElement.classList.add('dark');
+        } catch (e) {}
+      })();
+    </script>
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />

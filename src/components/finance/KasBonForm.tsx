@@ -173,7 +173,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
               list="kasbon-ids"
             />
             <datalist id="kasbon-ids">{headers.slice(-200).map(h => <option key={h.id} value={h.id} />)}</datalist>
-            {!existing && target && <span className="text-[11px] text-amber-600">Exists: lines will be added to it</span>}
+            {!existing && target && <span className="text-[11px] text-amber-600 dark:text-amber-400">Exists: lines will be added to it</span>}
           </label>
           <label className="block">
             <span className="field-label">Date</span>
@@ -190,8 +190,8 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
           </label>
         </div>
 
-        <div className="rounded-xl border border-slate-100 overflow-hidden">
-          <div className="hidden md:grid grid-cols-[1.5rem_minmax(0,1.6fr)_minmax(0,1.3fr)_4.5rem_5.5rem_7rem_7rem_minmax(0,1fr)_2rem] gap-2 px-3 py-2 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div className="rounded-xl border border-slate-100 overflow-hidden dark:border-navy-800">
+          <div className="hidden md:grid grid-cols-[1.5rem_minmax(0,1.6fr)_minmax(0,1.3fr)_4.5rem_5.5rem_7rem_7rem_minmax(0,1fr)_2rem] gap-2 px-3 py-2 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:bg-navy-950 dark:text-slate-500">
             <span />
             <span>Bahan / item</span>
             <span>Supplier / category</span>
@@ -202,7 +202,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
             <span>Order</span>
             <span />
           </div>
-          <div className="divide-y divide-slate-100 max-h-[45vh] overflow-y-auto">
+          <div className="divide-y divide-slate-100 max-h-[45vh] overflow-y-auto dark:divide-navy-800">
             {lines.map((l, i) => {
               const problem = showErrors && !isBlank(l) ? draftProblem(l, supplierIds) : null
               const keys = { onKeyDown: (e: React.KeyboardEvent) => onLineKey(e, i), onPaste: (e: React.ClipboardEvent) => onLinePaste(e, i) }
@@ -213,9 +213,9 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
               const catCode = catalogue && catMatch ? colorCodeFromText(catMatch, l.name) : undefined
               const catColors = catalogue && catMatch ? catalogue.colorsFor(catMatch) : []
               return (
-                <div key={l.key} className={`px-3 py-2 ${problem ? 'bg-red-50/50' : ''}`}>
+                <div key={l.key} className={`px-3 py-2 ${problem ? 'bg-red-50/50 dark:bg-red-500/10' : ''}`}>
                   <div className="grid grid-cols-2 md:grid-cols-[1.5rem_minmax(0,1.6fr)_minmax(0,1.3fr)_4.5rem_5.5rem_7rem_7rem_minmax(0,1fr)_2rem] gap-2 items-center">
-                    <span className="hidden md:flex text-slate-300" title={prod ? 'Production line' : 'Operation cost'}>
+                    <span className="hidden md:flex text-slate-300 dark:text-navy-700" title={prod ? 'Production line' : 'Operation cost'}>
                       {prod ? <Factory size={14} /> : <Wrench size={14} />}
                     </span>
                     <input
@@ -276,7 +276,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
                       onChange={e => setLine(l.key, { price: e.target.value.replace(/\D/g, '') })}
                       {...keys}
                     />
-                    <span className="text-right font-mono text-sm text-slate-700 tabular-nums">{formatRp(draftTotal(l))}</span>
+                    <span className="text-right font-mono text-sm text-slate-700 tabular-nums dark:text-slate-300">{formatRp(draftTotal(l))}</span>
                     <input
                       className="field !py-1.5 font-mono text-xs"
                       placeholder="Order (optional)"
@@ -285,14 +285,14 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
                       onChange={e => setLine(l.key, { order_id: e.target.value.toUpperCase() })}
                       {...keys}
                     />
-                    <button type="button" onClick={() => removeLine(l.key)} className="justify-self-end p-1 text-slate-300 hover:text-red-500" title="Remove line">
+                    <button type="button" onClick={() => removeLine(l.key)} className="justify-self-end p-1 text-slate-300 hover:text-red-500 dark:text-navy-700" title="Remove line">
                       <Trash2 size={14} />
                     </button>
                   </div>
-                  {problem && <p className="mt-1 text-[11px] text-red-500">{problem}</p>}
+                  {problem && <p className="mt-1 text-[11px] text-red-500 dark:text-red-400">{problem}</p>}
                   {!problem && catalogue && catMatch && (
                     <>
-                      <p className="mt-1 text-[11px] text-slate-400">
+                      <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
                         {catMatch.composition}
                         {catMatch.widthCm != null && catMatch.rollYards != null && <> · roll {catMatch.widthCm} cm × {catMatch.rollYards} yd</>}
                       </p>
@@ -310,15 +310,15 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
               )
             })}
           </div>
-          <div className="flex flex-wrap items-center gap-3 px-3 py-2 bg-slate-50/60 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-3 px-3 py-2 bg-slate-50/60 border-t border-slate-100 dark:bg-navy-950/60 dark:border-navy-800">
             <button type="button" onClick={() => { addLine(kind); focusLine(lines.length) }} className="btn-ghost btn-sm">
               <Plus size={13} /> {kind === 'production' ? 'Add bahan' : 'Add cost'}
             </button>
             <button type="button" onClick={() => { addLine(kind === 'production' ? 'operation' : 'production'); focusLine(lines.length) }} className="btn-ghost btn-sm">
               <Plus size={13} /> {kind === 'production' ? 'Add an operation cost (ojek, parkir…)' : 'Add a bahan line'}
             </button>
-            <span className="ml-auto text-sm text-slate-500">
-              {filled.length} line{filled.length === 1 ? '' : 's'} · <span className="font-mono font-semibold text-navy-900">{formatRp(total)}</span>
+            <span className="ml-auto text-sm text-slate-500 dark:text-slate-400">
+              {filled.length} line{filled.length === 1 ? '' : 's'} · <span className="font-mono font-semibold text-navy-900 dark:text-slate-50">{formatRp(total)}</span>
             </span>
           </div>
         </div>
@@ -335,10 +335,10 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
           </datalist>
         ))}
 
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-slate-400 dark:text-slate-500">
           Enter moves to the next line · paste rows copied from Excel into any line · Ctrl+Enter saves
         </p>
-        {showErrors && !filled.length && <p className="text-sm text-red-500">Add at least one line.</p>}
+        {showErrors && !filled.length && <p className="text-sm text-red-500 dark:text-red-400">Add at least one line.</p>}
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" className="btn-secondary" onClick={close}>Cancel</button>
           <button type="button" className="btn-primary" onClick={submit} disabled={save.isPending}>
@@ -370,18 +370,18 @@ function MaterialColorPicker({ material, colors, selectedCode, onPick }: {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mt-1 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 active:bg-slate-100 text-xs"
+        className="mt-1 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 active:bg-slate-100 text-xs dark:border-navy-700 dark:hover:bg-white/5 dark:active:bg-white/10"
       >
         {selected ? (
           <>
             <span className="w-3.5 h-3.5 rounded-full ring-1 ring-black/10 shrink-0" style={{ background: selected.hex }} />
-            <span className="font-mono text-slate-700">{selected.code}</span>
-            {selected.category && <span className="text-slate-400">· {selected.category}</span>}
+            <span className="font-mono text-slate-700 dark:text-slate-300">{selected.code}</span>
+            {selected.category && <span className="text-slate-400 dark:text-slate-500">· {selected.category}</span>}
           </>
         ) : (
           <>
-            <Palette size={11} className="text-slate-400" />
-            <span className="text-slate-500">Pick a colour ({colors.length})</span>
+            <Palette size={11} className="text-slate-400 dark:text-slate-500" />
+            <span className="text-slate-500 dark:text-slate-400">Pick a colour ({colors.length})</span>
           </>
         )}
       </button>
@@ -417,7 +417,7 @@ function MaterialColorPickerModal({ material, colors, selectedCode, onPick, onCl
     <Modal title={`${materialLabel(material)} — colours`} onClose={onClose} size="lg">
       <div className="space-y-3">
         <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           <input
             autoFocus
             type="text"
@@ -427,9 +427,9 @@ function MaterialColorPickerModal({ material, colors, selectedCode, onPick, onCl
             className="field !pl-9"
           />
         </div>
-        <p className="text-xs text-slate-400">{filtered.length} of {colors.length} colours</p>
+        <p className="text-xs text-slate-400 dark:text-slate-500">{filtered.length} of {colors.length} colours</p>
         {filtered.length === 0 ? (
-          <p className="text-sm text-slate-400 text-center py-10">No colour matches "{query}".</p>
+          <p className="text-sm text-slate-400 text-center py-10 dark:text-slate-500">No colour matches "{query}".</p>
         ) : (
           <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2.5 max-h-[55vh] overflow-y-auto pr-1 -mr-1">
             {filtered.map(c => (
@@ -437,11 +437,11 @@ function MaterialColorPickerModal({ material, colors, selectedCode, onPick, onCl
                 type="button"
                 key={c.code}
                 onClick={() => onPick(c.code)}
-                className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border transition-colors ${selectedCode === c.code ? 'border-navy-700 bg-navy-50' : 'border-transparent hover:border-slate-200 hover:bg-slate-50 active:bg-slate-100'}`}
+                className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border transition-colors ${selectedCode === c.code ? 'border-navy-700 bg-navy-50' : 'border-transparent hover:border-slate-200 hover:bg-slate-50 active:bg-slate-100 dark:hover:bg-white/5 dark:active:bg-white/10'}`}
               >
                 <span className="w-10 h-10 rounded-full ring-1 ring-black/10 shrink-0" style={{ background: c.hex }} />
-                <span className="font-mono text-xs text-navy-900">{c.code}</span>
-                {c.category && <span className="text-[10px] text-slate-400 text-center leading-tight">{c.category}</span>}
+                <span className="font-mono text-xs text-navy-900 dark:text-slate-50">{c.code}</span>
+                {c.category && <span className="text-[10px] text-slate-400 text-center leading-tight dark:text-slate-500">{c.category}</span>}
               </button>
             ))}
           </div>

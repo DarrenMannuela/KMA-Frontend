@@ -18,10 +18,10 @@ export function ChangeFields({ change, onChange }: { change: Change & { text: st
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       <FormField label="Change by">
-        <div className="flex rounded-xl border border-slate-200 overflow-hidden text-sm">
+        <div className="flex rounded-xl border border-slate-200 overflow-hidden text-sm dark:border-navy-700">
           {(['pct', 'rp'] as const).map(m => (
             <button key={m} type="button" onClick={() => onChange({ ...change, mode: m, text: '', amount: 0 })}
-              className={`flex-1 py-2 ${change.mode === m ? 'bg-navy-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+              className={`flex-1 py-2 ${change.mode === m ? 'bg-navy-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 dark:bg-navy-900 dark:text-slate-300 dark:hover:bg-white/5'}`}>
               {m === 'pct' ? 'Percent' : 'Rupiah'}
             </button>
           ))}
@@ -97,15 +97,15 @@ export function RaisePricesDialog({ clientId, items, pricesByItem, defaultYear, 
             <input className="field" type="date" value={from} onChange={e => { setFrom(e.target.value); setFromTouched(true) }} />
           </FormField>
         </div>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           Each item starts from its last price before {year}.
           {replacing > 0 && <> {replacing} already {replacing === 1 ? 'has a' : 'have'} {year} price, which will be replaced.</>}
           {skipped > 0 && <> {skipped} with no earlier price {skipped === 1 ? 'is' : 'are'} left out.</>}
         </p>
 
-        <div className="border border-slate-100 rounded-xl max-h-[45vh] overflow-y-auto">
+        <div className="border border-slate-100 rounded-xl max-h-[45vh] overflow-y-auto dark:border-navy-800">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500">
+            <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500 dark:bg-navy-950 dark:text-slate-400">
               <tr>
                 <th className="text-left px-3 py-2 font-medium">Item</th>
                 <th className="text-right px-3 py-2 font-medium">Now</th>
@@ -114,23 +114,23 @@ export function RaisePricesDialog({ clientId, items, pricesByItem, defaultYear, 
                 <th className="text-right px-3 py-2 font-medium">Change</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-slate-50 dark:divide-navy-800/60">
               {plan.map(({ item, base, current, next }) => {
                 const pct = base && next != null ? pctChange(base.price, next) : null
                 return (
-                  <tr key={item.id} className={next == null ? 'text-slate-300' : ''}>
+                  <tr key={item.id} className={next == null ? 'text-slate-300 dark:text-navy-700' : ''}>
                     <td className="px-3 py-1.5">{itemLabel(item)}</td>
-                    <td className="px-3 py-1.5 text-right font-mono text-slate-500">
-                      {base ? <>{formatRp(base.price)} <span className="text-[10px] text-slate-400">{base.year}</span></> : 'no price'}
+                    <td className="px-3 py-1.5 text-right font-mono text-slate-500 dark:text-slate-400">
+                      {base ? <>{formatRp(base.price)} <span className="text-[10px] text-slate-400 dark:text-slate-500">{base.year}</span></> : 'no price'}
                     </td>
-                    <td className="px-1 text-slate-300"><ArrowRight size={12} /></td>
-                    <td className="px-3 py-1.5 text-right font-mono font-semibold text-navy-900">
+                    <td className="px-1 text-slate-300 dark:text-navy-700"><ArrowRight size={12} /></td>
+                    <td className="px-3 py-1.5 text-right font-mono font-semibold text-navy-900 dark:text-slate-100">
                       {next != null ? formatRp(next) : '—'}
                       {current && current.price !== next && (
-                        <span className="block text-[10px] font-normal text-amber-600">replaces {formatRp(current.price)}</span>
+                        <span className="block text-[10px] font-normal text-amber-600 dark:text-amber-400">replaces {formatRp(current.price)}</span>
                       )}
                     </td>
-                    <td className={`px-3 py-1.5 text-right text-xs ${pct == null ? 'text-slate-300' : pct > 0 ? 'text-green-700' : pct < 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                    <td className={`px-3 py-1.5 text-right text-xs ${pct == null ? 'text-slate-300 dark:text-navy-700' : pct > 0 ? 'text-green-700 dark:text-green-400' : pct < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}>
                       {pct == null ? '' : `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`}
                     </td>
                   </tr>

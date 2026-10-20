@@ -50,18 +50,18 @@ export function SetPasswordPage() {
   // Opened without a token, not from the emailed link.
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 dark:bg-navy-950">
         <div className="w-full max-w-sm text-center">
           <div className="w-12 h-12 rounded-xl bg-navy-900 flex items-center justify-center mx-auto mb-4">
             <KeyRound className="w-5 h-5 text-gold-400" />
           </div>
-          <h1 className="text-xl font-bold text-navy-900">Invalid link</h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <h1 className="text-xl font-bold text-navy-900 dark:text-slate-50">Invalid link</h1>
+          <p className="text-sm text-slate-400 mt-1 dark:text-slate-500">
             This page needs an invite link to work — check the email your administrator sent you, or ask them to send a new one.
           </p>
           <button
             onClick={() => navigate('/login')}
-            className="mt-6 text-sm font-semibold text-navy-700 hover:text-navy-900 transition-colors"
+            className="mt-6 text-sm font-semibold text-navy-700 hover:text-navy-900 transition-colors dark:text-slate-200 dark:hover:text-slate-50"
           >
             Go to sign in
           </button>
@@ -71,28 +71,28 @@ export function SetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 dark:bg-navy-950">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-xl bg-navy-900 flex items-center justify-center mx-auto mb-4">
             <KeyRound className="w-5 h-5 text-gold-400" />
           </div>
-          <h1 className="text-xl font-bold text-navy-900">Set your password</h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <h1 className="text-xl font-bold text-navy-900 dark:text-slate-50">Set your password</h1>
+          <p className="text-sm text-slate-400 mt-1 dark:text-slate-500">
             Choose a password for your KMA account. You'll be signed in automatically.
           </p>
         </div>
 
         <form
           onSubmit={handleSubmit}
-          className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 flex flex-col gap-4"
+          className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 flex flex-col gap-4 dark:bg-navy-900 dark:border-navy-800"
         >
           <div>
-            <label htmlFor="new" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">
+            <label htmlFor="new" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">
               New password
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2 dark:text-navy-700" />
               <input
                 id="new"
                 type={showPasswords ? 'text' : 'password'}
@@ -100,14 +100,14 @@ export function SetPasswordPage() {
                 required
                 value={newPassword}
                 onChange={e => setNewPassword(e.target.value)}
-                className="w-full pl-9 pr-9 py-2.5 rounded-lg border border-slate-200 text-sm text-navy-900
-                           focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors"
+                className="w-full pl-9 pr-9 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-navy-900
+                           focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors dark:bg-navy-900 dark:border-navy-700 dark:text-slate-50"
                 placeholder="••••••••••••"
               />
               <button
                 type="button"
                 onClick={() => setShowPasswords(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors dark:text-navy-700 dark:hover:text-slate-400"
                 tabIndex={-1}
               >
                 {showPasswords ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -116,11 +116,11 @@ export function SetPasswordPage() {
           </div>
 
           <div>
-            <label htmlFor="confirm" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">
+            <label htmlFor="confirm" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">
               Confirm password
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2 dark:text-navy-700" />
               <input
                 id="confirm"
                 type={showPasswords ? 'text' : 'password'}
@@ -128,15 +128,15 @@ export function SetPasswordPage() {
                 required
                 value={confirmPassword}
                 onChange={e => setConfirmPassword(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 text-sm text-navy-900
-                           focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors"
+                className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-navy-900
+                           focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors dark:bg-navy-900 dark:border-navy-700 dark:text-slate-50"
                 placeholder="••••••••••••"
               />
             </div>
           </div>
 
           {error && (
-            <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
+            <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 dark:bg-red-500/10 dark:text-red-400">{error}</p>
           )}
 
           <button

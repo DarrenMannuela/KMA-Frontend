@@ -65,7 +65,7 @@ export function CopyFromClientDialog({ clientId, catalogue, allPrices, year, onC
 
         {fromId && (
           <>
-            <label className="flex items-center gap-2 text-sm text-slate-600">
+            <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
               <input type="checkbox" checked={withPrices} onChange={e => setWithPrices(e.target.checked)} />
               Copy their latest prices too, as this client's prices for
               <input className="field !w-24 !py-1" type="number" value={priceYear} disabled={!withPrices}
@@ -73,9 +73,9 @@ export function CopyFromClientDialog({ clientId, catalogue, allPrices, year, onC
             </label>
             {withPrices && <ChangeFields change={change} onChange={setChange} />}
 
-            <div className="border border-slate-100 rounded-xl max-h-[40vh] overflow-y-auto">
+            <div className="border border-slate-100 rounded-xl max-h-[40vh] overflow-y-auto dark:border-navy-800">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500">
+                <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500 dark:bg-navy-950 dark:text-slate-400">
                   <tr>
                     <th className="px-3 py-2 w-8">
                       <input type="checkbox" checked={allPicked} aria-label="All"
@@ -86,27 +86,27 @@ export function CopyFromClientDialog({ clientId, catalogue, allPrices, year, onC
                     {withPrices && <th className="text-right px-3 py-2 font-medium">Here, {priceYear}</th>}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
+                <tbody className="divide-y divide-slate-50 dark:divide-navy-800/60">
                   {rows.length === 0 && (
-                    <tr><td colSpan={4} className="px-3 py-6 text-center text-slate-400">This client has no catalogue items.</td></tr>
+                    <tr><td colSpan={4} className="px-3 py-6 text-center text-slate-400 dark:text-slate-500">This client has no catalogue items.</td></tr>
                   )}
                   {rows.map(({ item, latest, next, there }) => (
-                    <tr key={item.id} className="cursor-pointer hover:bg-slate-50" onClick={() => toggle(item.id)}>
+                    <tr key={item.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5" onClick={() => toggle(item.id)}>
                       <td className="px-3 py-1.5"><input type="checkbox" checked={picked.has(item.id)} readOnly /></td>
                       <td className="px-3 py-1.5">
                         {itemLabel(item)}
                         {there && <span className="ml-2 badge-amber text-[10px]">already here</span>}
                       </td>
-                      <td className="px-3 py-1.5 text-right font-mono text-slate-500">
-                        {latest ? <>{formatRp(latest.price)} <span className="text-[10px] text-slate-400">{latest.year}</span></> : '—'}
+                      <td className="px-3 py-1.5 text-right font-mono text-slate-500 dark:text-slate-400">
+                        {latest ? <>{formatRp(latest.price)} <span className="text-[10px] text-slate-400 dark:text-slate-500">{latest.year}</span></> : '—'}
                       </td>
-                      {withPrices && <td className="px-3 py-1.5 text-right font-mono font-semibold text-navy-900">{next != null ? formatRp(next) : '—'}</td>}
+                      {withPrices && <td className="px-3 py-1.5 text-right font-mono font-semibold text-navy-900 dark:text-slate-100">{next != null ? formatRp(next) : '—'}</td>}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-slate-400">Items already in this catalogue keep their notes; with prices on, their {priceYear} price is set.</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Items already in this catalogue keep their notes; with prices on, their {priceYear} price is set.</p>
           </>
         )}
 

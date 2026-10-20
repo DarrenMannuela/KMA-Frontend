@@ -372,11 +372,11 @@ export function Ledger({ kind, initial, title, icon }: {
   const columns: Col[] = [
     ...(!byKasBon ? [
       { key: 'header_id', header: 'Kas Bon', width: '6.5rem', sortKey: 'header_id' as SortKey, field: 'header_id' as EditField, type: 'text' as const, suggestions: headerSuggestions, value: (r: LedgerRow) => r.header_id, render: (r: LedgerRow) => <span className="font-mono text-xs">{r.header_id}</span> },
-      { key: 'date', header: 'Date', width: '6.5rem', sortKey: 'date' as SortKey, field: 'date' as EditField, type: 'date' as const, value: (r: LedgerRow) => r.date.slice(0, 10), render: (r: LedgerRow) => <span className="text-xs font-medium text-slate-700">{formatDateShort(r.date)}</span> },
-      { key: 'description', header: 'Description', width: '11rem', field: 'description' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.description, render: (r: LedgerRow) => <span className="text-slate-600">{r.description}</span> },
+      { key: 'date', header: 'Date', width: '6.5rem', sortKey: 'date' as SortKey, field: 'date' as EditField, type: 'date' as const, value: (r: LedgerRow) => r.date.slice(0, 10), render: (r: LedgerRow) => <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{formatDateShort(r.date)}</span> },
+      { key: 'description', header: 'Description', width: '11rem', field: 'description' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.description, render: (r: LedgerRow) => <span className="text-slate-600 dark:text-slate-300">{r.description}</span> },
     ] : []),
     ...(kind === 'production' ? [
-      { key: 'name', header: 'Bahan', width: 'auto', sortKey: 'name' as SortKey, field: 'name' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.name, render: (r: LedgerRow) => <span className="font-medium text-slate-800">{r.name}</span> },
+      { key: 'name', header: 'Bahan', width: 'auto', sortKey: 'name' as SortKey, field: 'name' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.name, render: (r: LedgerRow) => <span className="font-medium text-slate-800 dark:text-slate-200">{r.name}</span> },
       { key: 'supplier', header: 'Supplier', width: '11rem', sortKey: 'group' as SortKey, field: 'supplier_id' as EditField, type: 'select' as const, options: supplierOptions, value: (r: LedgerRow) => r.supplier_id,
         render: (r: LedgerRow) => {
           const s = suppliers.find(x => x.id === r.supplier_id)
@@ -386,12 +386,12 @@ export function Ledger({ kind, initial, title, icon }: {
       { key: 'unit', header: 'Unit', width: '5rem', field: 'unit' as EditField, type: 'select' as const, options: unitOptions, value: (r: LedgerRow) => r.unit },
     ] : [
       { key: 'category', header: 'Category', width: '9rem', sortKey: 'group' as SortKey, field: 'category' as EditField, type: 'text' as const, suggestions: categories, value: (r: LedgerRow) => r.category },
-      { key: 'name', header: 'Item', width: 'auto', sortKey: 'name' as SortKey, field: 'name' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.name, render: (r: LedgerRow) => <span className="font-medium text-slate-800">{r.name}</span> },
+      { key: 'name', header: 'Item', width: 'auto', sortKey: 'name' as SortKey, field: 'name' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.name, render: (r: LedgerRow) => <span className="font-medium text-slate-800 dark:text-slate-200">{r.name}</span> },
     ]),
     { key: 'price', header: 'Price', width: '7.5rem', sortKey: 'price', align: 'right', field: 'price', type: 'number', value: r => r.price, render: r => money(r.price) },
     ...(kind === 'production' ? [{ key: 'total', header: 'Total', width: '8rem', sortKey: 'total' as SortKey, align: 'right' as const, value: (r: LedgerRow) => r.total, render: (r: LedgerRow) => <span className="font-mono tabular-nums font-semibold">{formatRp(r.total)}</span> }] : []),
     { key: 'order', header: 'Order', width: '8rem', sortKey: 'order_id', field: 'order_id', type: 'text', suggestions: orderSuggestions, value: r => r.order_id ?? '',
-      render: r => (r.order_id ? <span className="font-mono text-xs text-navy-700" title={orderLabel(orders, r.order_id)}>{r.order_id}</span> : <span className="text-slate-300">—</span>) },
+      render: r => (r.order_id ? <span className="font-mono text-xs text-navy-700 dark:text-slate-200" title={orderLabel(orders, r.order_id)}>{r.order_id}</span> : <span className="text-slate-300 dark:text-navy-700">—</span>) },
   ]
 
   const moveFocus = (rowId: number, col: number, dRow: number, dCol: number) => {
@@ -414,11 +414,11 @@ export function Ledger({ kind, initial, title, icon }: {
       const others = otherCount.get(key) ?? 0
       return (
         <>
-          <span className="font-mono font-semibold text-navy-900">{key}</span>
-          <span className="text-slate-500 truncate">{first.description || 'No description'}</span>
-          <span className="text-slate-400 text-xs whitespace-nowrap">{formatDateShort(first.date)}</span>
+          <span className="font-mono font-semibold text-navy-900 dark:text-slate-50">{key}</span>
+          <span className="text-slate-500 truncate dark:text-slate-400">{first.description || 'No description'}</span>
+          <span className="text-slate-400 text-xs whitespace-nowrap dark:text-slate-500">{formatDateShort(first.date)}</span>
           {others > 0 && <span className="badge-slate !text-[10px]" title={`This Kas Bon also has ${others} ${kind === 'production' ? 'operation' : 'production'} line(s)`}>+{others} {kind === 'production' ? 'ops' : 'bahan'}</span>}
-          <span className="ml-auto font-mono tabular-nums text-slate-700">{formatRp(sum)}</span>
+          <span className="ml-auto font-mono tabular-nums text-slate-700 dark:text-slate-300">{formatRp(sum)}</span>
         </>
       )
     }
@@ -427,9 +427,9 @@ export function Ledger({ kind, initial, title, icon }: {
       : kind === 'production' ? supplierLabel(suppliers, Number(key)) : key || 'Uncategorized'
     return (
       <>
-        <span className="font-semibold text-navy-900">{label}</span>
-        <span className="text-slate-400 text-xs">{rows.length} line{rows.length === 1 ? '' : 's'}</span>
-        <span className="ml-auto font-mono tabular-nums text-slate-700">{formatRp(sum)}</span>
+        <span className="font-semibold text-navy-900 dark:text-slate-50">{label}</span>
+        <span className="text-slate-400 text-xs dark:text-slate-500">{rows.length} line{rows.length === 1 ? '' : 's'}</span>
+        <span className="ml-auto font-mono tabular-nums text-slate-700 dark:text-slate-300">{formatRp(sum)}</span>
       </>
     )
   }
@@ -457,7 +457,7 @@ export function Ledger({ kind, initial, title, icon }: {
       {/* Filters */}
       <div className="card p-3.5 flex flex-wrap items-center gap-2.5">
         <div className="relative flex-1 min-w-[12rem]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           <input
             ref={searchRef}
             className="field !pl-8 !py-1.5"
@@ -465,7 +465,7 @@ export function Ledger({ kind, initial, title, icon }: {
             value={filters.q}
             onChange={e => setFilter('q', e.target.value)}
           />
-          {filters.q && <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" onClick={() => setFilter('q', '')} aria-label="Clear search"><X size={14} /></button>}
+          {filters.q && <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300" onClick={() => setFilter('q', '')} aria-label="Clear search"><X size={14} /></button>}
         </div>
         <PeriodPicker value={filters.period} onChange={p => setFilter('period', p)} />
         <select className="field !w-auto !py-1.5 text-xs max-w-[12rem]" value={filters.group} onChange={e => setFilter('group', e.target.value)} aria-label={kind === 'production' ? 'Supplier' : 'Category'}>
@@ -490,22 +490,22 @@ export function Ledger({ kind, initial, title, icon }: {
       {/* Summary: the total, how it compares, and where it went */}
       <div className="card p-4 space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
-          <span className="text-2xl font-semibold text-navy-900 font-mono tabular-nums">{formatRp(total)}</span>
-          <span className="text-sm text-slate-500">
+          <span className="text-2xl font-semibold text-navy-900 font-mono tabular-nums dark:text-slate-50">{formatRp(total)}</span>
+          <span className="text-sm text-slate-500 dark:text-slate-400">
             {visible.length} line{visible.length === 1 ? '' : 's'} · {kasBonCount} Kas Bon · {searching ? 'all months' : periodLabel(searchPeriod)}
           </span>
           {change != null && Number.isFinite(change) && (
-            <span className={`text-xs font-medium ${change > 0 ? 'text-red-600' : 'text-green-600'}`}>
+            <span className={`text-xs font-medium ${change > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
               {change > 0 ? '▲' : '▼'} {Math.abs(change)}% vs {prevName}
             </span>
           )}
           {budget != null && (
-            <span className="flex items-center gap-2 text-xs text-slate-500 min-w-[14rem] ml-auto">
+            <span className="flex items-center gap-2 text-xs text-slate-500 min-w-[14rem] ml-auto dark:text-slate-400">
               Budget {formatRp(budget)}
-              <span className="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden">
+              <span className="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden dark:bg-white/10">
                 <span className={`block h-full rounded-full ${total > budget ? 'bg-red-500' : total > budget * 0.8 ? 'bg-amber-400' : 'bg-green-500'}`} style={{ width: `${Math.min(100, (total / budget) * 100)}%` }} />
               </span>
-              <span className={total > budget ? 'text-red-600 font-medium' : ''}>{Math.round((total / budget) * 100)}%</span>
+              <span className={total > budget ? 'text-red-600 font-medium dark:text-red-400' : ''}>{Math.round((total / budget) * 100)}%</span>
             </span>
           )}
         </div>
@@ -519,15 +519,15 @@ export function Ledger({ kind, initial, title, icon }: {
                 <button
                   key={key || 'none'}
                   onClick={() => setFilter('group', on ? '' : key)}
-                  className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${on ? 'border-navy-900 bg-navy-50' : 'border-transparent hover:border-slate-200 hover:bg-slate-50'}`}
+                  className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${on ? 'border-navy-900 bg-navy-50' : 'border-transparent hover:border-slate-200 hover:bg-slate-50 dark:hover:bg-white/5'}`}
                   title={on ? 'Show all again' : `Only ${kind === 'production' ? 'this supplier' : 'this category'}`}
                 >
-                  <span className="flex items-center gap-1.5 text-xs text-slate-600 truncate">
+                  <span className="flex items-center gap-1.5 text-xs text-slate-600 truncate dark:text-slate-300">
                     {s && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: CATEGORY_COLORS[s.supplier_category] }} />}
                     <span className="truncate">{kind === 'production' ? supplierLabel(suppliers, Number(key)) : key || 'Uncategorized'}</span>
                   </span>
-                  <span className="block font-mono text-sm tabular-nums text-navy-900">{formatRp(sum)}</span>
-                  <span className="block h-1 mt-1 rounded-full bg-slate-100 overflow-hidden">
+                  <span className="block font-mono text-sm tabular-nums text-navy-900 dark:text-slate-50">{formatRp(sum)}</span>
+                  <span className="block h-1 mt-1 rounded-full bg-slate-100 overflow-hidden dark:bg-white/10">
                     <span className="block h-full rounded-full bg-navy-500" style={{ width: `${(sum / max) * 100}%` }} />
                   </span>
                 </button>
@@ -538,7 +538,7 @@ export function Ledger({ kind, initial, title, icon }: {
       </div>
 
       {!visible.length ? (
-        <div className="card p-10 text-center text-sm text-slate-400">
+        <div className="card p-10 text-center text-sm text-slate-400 dark:text-slate-500">
           {allRows.length ? 'Nothing matches. Try another period, or clear the search and filters.' : 'No lines yet.'}
           <div className="mt-3 flex justify-center gap-2">
             <button className="btn-primary btn-sm" onClick={() => setForm({})}><Plus size={14} /> New Kas Bon</button>
@@ -556,11 +556,11 @@ export function Ledger({ kind, initial, title, icon }: {
           {shown.map(({ group, rows }) => (
             <div key={group.key || 'all'} className="card overflow-hidden">
               {filters.groupBy !== 'none' && (
-                <button className="w-full flex flex-wrap items-center gap-x-2 gap-y-0.5 px-4 py-2.5 bg-slate-50 text-sm text-left" onClick={() => setCollapsed(c => { const n = new Set(c); n.has(group.key) ? n.delete(group.key) : n.add(group.key); return n })}>
+                <button className="w-full flex flex-wrap items-center gap-x-2 gap-y-0.5 px-4 py-2.5 bg-slate-50 text-sm text-left dark:bg-navy-950" onClick={() => setCollapsed(c => { const n = new Set(c); n.has(group.key) ? n.delete(group.key) : n.add(group.key); return n })}>
                   {groupHeader(group.key, group.rows)}
                 </button>
               )}
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-slate-100 dark:divide-navy-800">
                 {rows.map(r => (
                   <li key={r.id}>
                     <button
@@ -569,19 +569,19 @@ export function Ledger({ kind, initial, title, icon }: {
                     >
                       {selectMode && <input type="checkbox" readOnly checked={selected.has(r.id)} className="mt-1" />}
                       <span className="flex-1 min-w-0">
-                        <span className="block font-medium text-slate-800 truncate">{r.name || r.category}</span>
-                        <span className="block text-xs text-slate-400 truncate">
+                        <span className="block font-medium text-slate-800 truncate dark:text-slate-200">{r.name || r.category}</span>
+                        <span className="block text-xs text-slate-400 truncate dark:text-slate-500">
                           {kind === 'production' ? `${supplierLabel(suppliers, r.supplier_id)} · ${r.qty.toLocaleString('id-ID')} ${r.unit} × ${formatRp(r.price)}` : r.category}
                           {!byKasBon && ` · ${r.header_id} · ${formatDateShort(r.date)}`}
                           {r.order_id && ` · ${r.order_id}`}
                         </span>
                       </span>
-                      <span className="font-mono text-sm tabular-nums text-navy-900">{formatRp(r.total)}</span>
+                      <span className="font-mono text-sm tabular-nums text-navy-900 dark:text-slate-50">{formatRp(r.total)}</span>
                     </button>
                   </li>
                 ))}
                 {byKasBon && rows.length > 0 && (
-                  <li><button className="w-full px-4 py-2 text-xs text-navy-600 text-left" onClick={() => setForm({ headerId: group.key })}><Plus size={12} className="inline" /> Add lines</button></li>
+                  <li><button className="w-full px-4 py-2 text-xs text-navy-600 text-left dark:text-navy-300" onClick={() => setForm({ headerId: group.key })}><Plus size={12} className="inline" /> Add lines</button></li>
                 )}
               </ul>
             </div>
@@ -602,15 +602,15 @@ export function Ledger({ kind, initial, title, icon }: {
                 {columns.map(c => <col key={c.key} style={c.width === 'auto' ? { minWidth: '12rem' } : { width: c.width }} />)}
                 <col style={{ width: '2.25rem' }} />
               </colgroup>
-              <thead className="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_#f1f5f9]">
+              <thead className="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_#f1f5f9] dark:bg-navy-950 dark:shadow-[0_1px_0_#0a0f1e]">
                 <tr>
                   <th className="px-2 py-2.5">
                     <input type="checkbox" aria-label="Select everything shown" checked={allVisibleSelected} onChange={e => setMany(visible, e.target.checked)} />
                   </th>
                   {columns.map(c => (
-                    <th key={c.key} className={`px-2 py-2.5 overflow-hidden whitespace-nowrap text-ellipsis text-[11px] font-semibold uppercase tracking-wider text-slate-400 ${c.align === 'right' ? 'text-right' : 'text-left'}`}>
+                    <th key={c.key} className={`px-2 py-2.5 overflow-hidden whitespace-nowrap text-ellipsis text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 ${c.align === 'right' ? 'text-right' : 'text-left'}`}>
                       {c.sortKey ? (
-                        <button className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-slate-700 ${sort.key === c.sortKey ? 'text-navy-700' : ''}`} onClick={() => sortBy(c.sortKey)}>
+                        <button className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-slate-700 dark:hover:text-slate-200 ${sort.key === c.sortKey ? 'text-navy-700 dark:text-slate-200' : ''}`} onClick={() => sortBy(c.sortKey)}>
                           {c.header}
                           {sort.key === c.sortKey && (sort.dir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
                         </button>
@@ -627,7 +627,7 @@ export function Ledger({ kind, initial, title, icon }: {
                   return (
                     <React.Fragment key={group.key || 'all'}>
                       {filters.groupBy !== 'none' && (
-                        <tr className="bg-slate-50/60 border-b border-slate-100 group/gh">
+                        <tr className="bg-slate-50/60 border-b border-slate-100 group/gh dark:bg-navy-950/60 dark:border-navy-800">
                           <td className="px-2 py-2.5">
                             <input
                               type="checkbox" aria-label="Select this group" checked={allIn} onChange={e => setMany(group.rows, e.target.checked)}
@@ -636,7 +636,7 @@ export function Ledger({ kind, initial, title, icon }: {
                           </td>
                           <td colSpan={columns.length} className="px-2 py-2.5">
                             <div className="flex items-center gap-2.5 text-sm min-w-0">
-                              <button onClick={() => setCollapsed(c => { const n = new Set(c); n.has(group.key) ? n.delete(group.key) : n.add(group.key); return n })} className="text-slate-400 hover:text-slate-700" aria-label={isCollapsed ? 'Expand' : 'Collapse'}>
+                              <button onClick={() => setCollapsed(c => { const n = new Set(c); n.has(group.key) ? n.delete(group.key) : n.add(group.key); return n })} className="text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-200" aria-label={isCollapsed ? 'Expand' : 'Collapse'}>
                                 <ChevronRight size={14} className={`transition-transform ${isCollapsed ? '' : 'rotate-90'}`} />
                               </button>
                               {groupHeader(group.key, group.rows)}
@@ -644,7 +644,7 @@ export function Ledger({ kind, initial, title, icon }: {
                           </td>
                           <td className="px-1 text-center">
                             {byKasBon && (
-                              <button className="opacity-0 group-hover/gh:opacity-100 text-slate-400 hover:text-navy-700" title={`Add lines to ${group.key}`} onClick={() => setForm({ headerId: group.key })}>
+                              <button className="opacity-0 group-hover/gh:opacity-100 text-slate-400 hover:text-navy-700 dark:text-slate-500" title={`Add lines to ${group.key}`} onClick={() => setForm({ headerId: group.key })}>
                                 <Plus size={14} />
                               </button>
                             )}
@@ -652,7 +652,7 @@ export function Ledger({ kind, initial, title, icon }: {
                         </tr>
                       )}
                       {rows.map((r, ri) => (
-                        <tr key={r.id} className={`border-b border-slate-50 group ${selected.has(r.id) ? 'bg-navy-50/70' : ri % 2 ? 'bg-slate-50/40 hover:bg-slate-100/70' : 'hover:bg-slate-50/60'}`}>
+                        <tr key={r.id} className={`border-b border-slate-50 group dark:border-navy-800 ${selected.has(r.id) ? 'bg-navy-50/70' : ri % 2 ? 'bg-slate-50/40 hover:bg-slate-100/70 dark:bg-white/5 dark:hover:bg-white/10' : 'hover:bg-slate-50/60 dark:hover:bg-white/5'}`}>
                           <td className="px-2 py-2">
                             <input
                               type="checkbox" aria-label="Select line" checked={selected.has(r.id)} onChange={() => undefined} onClick={e => toggle(r.id, e.shiftKey)}
@@ -687,7 +687,7 @@ export function Ledger({ kind, initial, title, icon }: {
                             </td>
                           ))}
                           <td className="px-1 text-center">
-                            <button onClick={() => setConfirmDeleteRow(r)} className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-slate-300 hover:text-red-500" title="Delete line">
+                            <button onClick={() => setConfirmDeleteRow(r)} className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-slate-300 hover:text-red-500 dark:text-navy-700" title="Delete line">
                               <Trash2 size={14} />
                             </button>
                           </td>
@@ -699,14 +699,14 @@ export function Ledger({ kind, initial, title, icon }: {
               </tbody>
             </table>
             {flatShown.length < visible.length && (
-              <div className="p-3 text-center border-t border-slate-100">
+              <div className="p-3 text-center border-t border-slate-100 dark:border-navy-800">
                 <button className="btn-secondary btn-sm" onClick={() => setLimit(l => l + PAGE)}>Show more ({visible.length - flatShown.length} left)</button>
               </div>
             )}
           </div>
-          <div className="flex items-center gap-4 px-4 py-2 border-t border-slate-100 bg-slate-50/60 text-xs text-slate-400">
+          <div className="flex items-center gap-4 px-4 py-2 border-t border-slate-100 bg-slate-50/60 text-xs text-slate-400 dark:border-navy-800 dark:bg-navy-950/60 dark:text-slate-500">
             <span>Click a cell to edit · arrows move · shift-click selects a range · Ctrl+V pastes rows from Excel · Ctrl+Z undoes</span>
-            <span className="ml-auto font-mono text-sm text-navy-900 font-semibold tabular-nums">{formatRp(total)}</span>
+            <span className="ml-auto font-mono text-sm text-navy-900 font-semibold tabular-nums dark:text-slate-50">{formatRp(total)}</span>
           </div>
         </div>
       )}

@@ -10,13 +10,13 @@ import { invoiceHooks } from '@/hooks'
 import type { Invoice } from '@/types'
 
 const STATUS_BADGE: Record<string, string> = {
-  unpaid: 'bg-red-50 text-red-600',
-  paid:   'bg-green-50 text-green-700',
+  unpaid: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  paid:   'bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400',
 }
 
 const TYPE_BADGE: Record<string, string> = {
-  dp:         'bg-blue-50 text-blue-700',
-  pelunasan:  'bg-purple-50 text-purple-700',
+  dp:         'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400',
+  pelunasan:  'bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400',
 }
 
 export function InvoiceListPage() {
@@ -80,14 +80,14 @@ export function InvoiceListPage() {
       onRetry={refetch}
       searchKeys={['id', 'kepada_yth', 'order_id']}
       filterBar={
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-1 dark:bg-white/10">
           {(['unpaid', 'paid', 'all'] as const).map(f => (
             <button
               key={f}
               type="button"
               onClick={() => setStatusFilter(f)}
               className={`px-3 py-1 rounded-md text-xs font-medium capitalize transition-colors ${
-                statusFilter === f ? 'bg-white shadow-sm text-navy-900' : 'text-slate-500 hover:text-navy-700'
+                statusFilter === f ? 'bg-white shadow-sm text-navy-900 dark:bg-navy-900 dark:text-slate-50' : 'text-slate-500 hover:text-navy-700 dark:text-slate-400'
               }`}
             >
               {f}
@@ -98,15 +98,15 @@ export function InvoiceListPage() {
       columns={[
         { header: 'Invoice No.',  key: 'id',
           render: r => <span className="id-chip font-mono">{r.id}</span> },
-        { header: 'Order ID',     key: 'order_id',
-          render: r => <span className="font-mono text-xs text-slate-500">{r.order_id}</span> },
+        { header: 'Order ID',     key: 'order_id',          secondary: true,
+          render: r => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.order_id}</span> },
         { header: 'Client',       key: 'kepada_yth',
           render: r => <span className="font-medium">{r.kepada_yth}</span> },
-        { header: 'Type',         key: 'type',
+        { header: 'Type',         key: 'type',              secondary: true,
           render: r => {
             const isFullInvoice = isFull(r)
             return (
-              <span className={`badge ${TYPE_BADGE[r.type] ?? 'bg-slate-100 text-slate-600'}`}>
+              <span className={`badge ${TYPE_BADGE[r.type] ?? 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'}`}>
                 {isFullInvoice ? 'Full Invoice' : r.type === 'dp' ? 'Down Payment' : 'Pelunasan'}
               </span>
             )
@@ -120,7 +120,7 @@ export function InvoiceListPage() {
             return (
               <div>
                 <span className="font-mono">{formatRp(due)}</span>
-                <div className="text-[10px] text-slate-400">of {formatRp(r.total)} total</div>
+                <div className="text-[10px] text-slate-400 dark:text-slate-500">of {formatRp(r.total)} total</div>
               </div>
             )
           }},
@@ -130,7 +130,7 @@ export function InvoiceListPage() {
           render: r => (
             <button
               type="button"
-              className={`badge ${STATUS_BADGE[r.status] ?? 'bg-slate-100 text-slate-600'} cursor-pointer hover:opacity-75 transition-opacity inline-block w-16 text-center`}
+              className={`badge ${STATUS_BADGE[r.status] ?? 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'} cursor-pointer hover:opacity-75 transition-opacity inline-block w-16 text-center`}
               onClick={() => toggleStatus(r)}
               disabled={update.isPending}
               title={r.status === 'paid' ? 'Mark as unpaid' : 'Mark as paid'}

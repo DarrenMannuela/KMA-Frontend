@@ -39,12 +39,12 @@ export function DeliveryDetailPage() {
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="font-display font-semibold text-navy-900 leading-tight">{delivery.id}</h1>
-            <span className={`badge text-xs ${isDO ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
+            <h1 className="font-display font-semibold text-navy-900 leading-tight dark:text-slate-50">{delivery.id}</h1>
+            <span className={`badge text-xs ${isDO ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'}`}>
               {isDO ? t('delivery.deliveryOrder') : t('delivery.suratJalan')}
             </span>
           </div>
-          <p className="text-slate-400 text-xs truncate">
+          <p className="text-slate-400 text-xs truncate dark:text-slate-500">
             {delivery.address}
             {delivery.contact_person && ` · ${delivery.contact_person}`}
             {delivery.date && ` · ${format(new Date(delivery.date), 'dd MMM yyyy', { locale: dateLocale })}`}

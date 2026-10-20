@@ -62,7 +62,7 @@ function ClientContactForm({ clientId, editing, onClose }: { clientId: number; e
         <UppercaseField as="textarea" className="field resize-none" rows={2} value={form.address ?? ''}
           onChange={v => setForm(p => ({ ...p, address: v || null }))} />
       </FormField>
-      <label className="flex items-center gap-2 text-sm text-slate-600">
+      <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
         <input type="checkbox" checked={form.is_primary}
           onChange={e => setForm(p => ({ ...p, is_primary: e.target.checked }))} />
         Primary contact
@@ -125,8 +125,8 @@ export function ClientDetailPage() {
             <ArrowLeft size={14} />
           </button>
           <div>
-            <h1 className="font-display font-semibold text-navy-900 leading-tight">{client.client_name}</h1>
-            {client.address && <p className="text-slate-400 text-xs">{client.address}</p>}
+            <h1 className="font-display font-semibold text-navy-900 leading-tight dark:text-slate-50">{client.client_name}</h1>
+            {client.address && <p className="text-slate-400 text-xs dark:text-slate-500">{client.address}</p>}
           </div>
         </div>
         <button
@@ -139,17 +139,17 @@ export function ClientDetailPage() {
       </div>
 
       {client.notes && (
-        <div className="card p-3 bg-amber-50 border-amber-100 text-sm text-amber-800">
+        <div className="card p-3 bg-amber-50 border-amber-100 text-sm text-amber-800 dark:bg-amber-500/10 dark:border-amber-500/20 dark:text-amber-400">
           {client.notes}
         </div>
       )}
 
       {/* Tabs: Contacts, and Catalogue with its prices. */}
-      <div className="flex gap-1 border-b border-slate-200">
+      <div className="flex gap-1 border-b border-slate-200 dark:border-navy-700">
         <button
           onClick={() => setTab('contacts')}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-            tab === 'contacts' ? 'border-navy-900 text-navy-900' : 'border-transparent text-slate-400 hover:text-slate-600'
+            tab === 'contacts' ? 'border-navy-900 text-navy-900 dark:text-slate-50' : 'border-transparent text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
           }`}
         >
           Points of Contact ({contacts.length})
@@ -157,7 +157,7 @@ export function ClientDetailPage() {
         <button
           onClick={() => setTab('catalogue')}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-            tab === 'catalogue' ? 'border-navy-900 text-navy-900' : 'border-transparent text-slate-400 hover:text-slate-600'
+            tab === 'catalogue' ? 'border-navy-900 text-navy-900 dark:text-slate-50' : 'border-transparent text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
           }`}
         >
           Catalogue & Pricing ({catalogueItems.length})
@@ -175,15 +175,15 @@ export function ClientDetailPage() {
           searchKeys={['name', 'role', 'location_label']}
           columns={[
             { header: 'Name', key: 'name', render: r => (
-              <span className="font-medium text-navy-900 inline-flex items-center gap-1.5">
+              <span className="font-medium text-navy-900 inline-flex items-center gap-1.5 dark:text-slate-100">
                 {r.name}
-                {r.is_primary && <span className="badge bg-amber-50 text-amber-700 text-[10px]">Primary</span>}
+                {r.is_primary && <span className="badge bg-amber-50 text-amber-700 text-[10px] dark:bg-amber-500/10 dark:text-amber-400">Primary</span>}
               </span>
             )},
-            { header: 'Role',     key: 'role',           render: r => <span className="text-slate-500">{r.role ?? '—'}</span> },
-            { header: 'Phone',    key: 'phone_number',    render: r => <span className="text-slate-500">{r.phone_number ?? '—'}</span> },
-            { header: 'Email',    key: 'email',           render: r => <span className="text-slate-500">{r.email ?? '—'}</span> },
-            { header: 'Location', key: 'location_label',  render: r => <span className="text-slate-500">{r.location_label ?? '—'}</span> },
+            { header: 'Role',     key: 'role',           render: r => <span className="text-slate-500 dark:text-slate-400">{r.role ?? '—'}</span> },
+            { header: 'Phone',    key: 'phone_number',    render: r => <span className="text-slate-500 dark:text-slate-400">{r.phone_number ?? '—'}</span> },
+            { header: 'Email',    key: 'email',           render: r => <span className="text-slate-500 dark:text-slate-400">{r.email ?? '—'}</span> },
+            { header: 'Location', key: 'location_label',  render: r => <span className="text-slate-500 dark:text-slate-400">{r.location_label ?? '—'}</span> },
           ]}
           formTitle={e => e ? 'Edit Contact' : 'Add Contact'}
           renderForm={(editing, onClose) => <ClientContactForm clientId={clientId} editing={editing} onClose={onClose} />}

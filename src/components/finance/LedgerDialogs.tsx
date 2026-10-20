@@ -36,13 +36,13 @@ export function MoveDialog({ rows, headers, onApply, onClose }: {
           <datalist id="move-kasbon">{headers.slice(-300).reverse().map(h => <option key={h.id} value={h.id}>{h.description}</option>)}</datalist>
         </label>
         {id.trim() && !target && (
-          <div className="rounded-lg bg-amber-50 p-3 space-y-2">
-            <p className="text-xs text-amber-700">{id.trim()} is new: it will be created.</p>
+          <div className="rounded-lg bg-amber-50 p-3 space-y-2 dark:bg-amber-500/10">
+            <p className="text-xs text-amber-700 dark:text-amber-400">{id.trim()} is new: it will be created.</p>
             <input type="date" className="field" value={date} onChange={e => setDate(e.target.value)} />
             <input className="field" placeholder="Description" value={description} onChange={e => setDescription(e.target.value.toUpperCase())} />
           </div>
         )}
-        <button className="text-xs text-navy-600 hover:underline" onClick={() => setId(suggestNextKasBonId(headers))}>
+        <button className="text-xs text-navy-600 hover:underline dark:text-navy-300" onClick={() => setId(suggestNextKasBonId(headers))}>
           Use the next new number
         </button>
         <div className="flex justify-end gap-2">
@@ -100,7 +100,7 @@ export function SetFieldDialog({ rows, field, suppliers, orders, categories, onA
             </datalist>
           </>
         )}
-        {error && <p className="text-xs text-red-500">{error}</p>}
+        {error && <p className="text-xs text-red-500 dark:text-red-400">{error}</p>}
         <div className="flex justify-end gap-2">
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
           <button className="btn-primary" onClick={apply}>Apply</button>
@@ -199,10 +199,10 @@ export function LineEditor({ row, suppliers, orders, categories, onApply, onDele
           <input className="field font-mono" list="line-orders" value={v.order_id} onChange={e => set({ order_id: e.target.value.toUpperCase() })} />
           <datalist id="line-orders">{orders.slice(-300).reverse().map(o => <option key={o.id} value={o.id}>{o.company ?? ''}</option>)}</datalist>
         </label>
-        <p className="text-sm text-slate-500">Total <span className="font-mono font-semibold text-navy-900">{formatRp(total)}</span></p>
-        {error && <p className="text-xs text-red-500">{error}</p>}
+        <p className="text-sm text-slate-500 dark:text-slate-400">Total <span className="font-mono font-semibold text-navy-900 dark:text-slate-50">{formatRp(total)}</span></p>
+        {error && <p className="text-xs text-red-500 dark:text-red-400">{error}</p>}
         <div className="flex items-center gap-2 pt-1">
-          <button className="btn-ghost text-red-600" onClick={onDelete}><Trash2 size={14} /> Delete</button>
+          <button className="btn-ghost text-red-600 dark:text-red-400" onClick={onDelete}><Trash2 size={14} /> Delete</button>
           <span className="flex-1" />
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
           <button className="btn-primary" onClick={save}>Save</button>

@@ -146,15 +146,15 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
           )}
         </div>
         {idAlreadyExists ? (
-          <p className="text-xs text-red-500 mt-1">
+          <p className="text-xs text-red-500 mt-1 dark:text-red-400">
             {t('orders.idExists')}
           </p>
         ) : idChanged ? (
-          <p className="text-xs text-amber-600 mt-1">
+          <p className="text-xs text-amber-600 mt-1 dark:text-amber-400">
             {t('orders.idRenaming', { id: editing!.id })}
           </p>
         ) : !editing ? (
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
             {t('orders.idSuggested', { year: new Date().getFullYear() })}
           </p>
         ) : null}
@@ -164,7 +164,7 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
           <option value="">{t('orders.noLinkedClient')}</option>
           {clients.map(c => <option key={c.id} value={c.id}>{c.client_name}</option>)}
         </select>
-        <p className="text-xs text-slate-400 mt-1">
+        <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
           {t('orders.clientHint')}
         </p>
       </FormField>
@@ -220,8 +220,8 @@ export function OrdersPage() {
       searchKeys={['company', 'po_number']}
       columns={[
         { header: t('orders.columns.orderId'),  key: 'id',         render: r => <span className="id-chip">{r.id}</span> },
-        { header: t('orders.columns.company'),   key: 'company',     render: r => <span className="font-medium text-navy-900">{r.company ?? '—'}</span> },
-        { header: t('orders.columns.client'),    key: 'client_id',   render: r => r.client_id ? (
+        { header: t('orders.columns.company'),   key: 'company',     render: r => <span className="font-medium text-navy-900 dark:text-slate-50">{r.company ?? '—'}</span> },
+        { header: t('orders.columns.client'),    key: 'client_id',   secondary: true, render: r => r.client_id ? (
             <button
               onClick={(e) => { e.stopPropagation(); navigate(`/clients/${r.client_id}`) }}
               className="inline-flex items-center gap-1 text-sm font-medium text-navy-600 hover:text-navy-800"
@@ -229,10 +229,10 @@ export function OrdersPage() {
             >
               <Building2 size={12} /> {t('common.view')} <ArrowRight size={12} />
             </button>
-          ) : <span className="text-slate-300 text-xs">{t('orders.notLinked')}</span> },
-        { header: t('orders.columns.poNumber'), key: 'po_number',   render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
+          ) : <span className="text-slate-300 text-xs dark:text-navy-700">{t('orders.notLinked')}</span> },
+        { header: t('orders.columns.poNumber'), key: 'po_number',   secondary: true, render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
         { header: t('orders.columns.date'),      key: 'date',        render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
-        { header: t('orders.columns.value'),     key: 'value', render: r => value.get(r.id) ? <span className="font-mono tabular-nums whitespace-nowrap">{formatRp(value.get(r.id)!)}</span> : <span className="text-slate-300 text-xs">{t('orders.noItems')}</span> },
+        { header: t('orders.columns.value'),     key: 'value', render: r => value.get(r.id) ? <span className="font-mono tabular-nums whitespace-nowrap">{formatRp(value.get(r.id)!)}</span> : <span className="text-slate-300 text-xs dark:text-navy-700">{t('orders.noItems')}</span> },
         { header: t('orders.columns.payment'),   key: 'payment', render: r => {
             const st = orderPaymentStatus(r.id, invoices)
             return <span className={`badge ${st.className}`}>{st.label}</span>

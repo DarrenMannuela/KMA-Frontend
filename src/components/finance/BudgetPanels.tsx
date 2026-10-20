@@ -24,19 +24,19 @@ export function BudgetPanel({ year, month, costs, categories }: { year: number; 
   return (
     <div className="card p-5">
       <div className="flex items-center gap-2 mb-3">
-        <h3 className="font-semibold text-navy-900 text-sm">{t('finance.budgets.budgetsHeading', { month: monthLabel(year, month) })}</h3>
+        <h3 className="font-semibold text-navy-900 text-sm dark:text-slate-50">{t('finance.budgets.budgetsHeading', { month: monthLabel(year, month) })}</h3>
         <button className="ml-auto btn-ghost btn-sm" onClick={() => setEditing(true)}><Pencil size={13} /> {t('finance.budgets.setBudgets')}</button>
       </div>
       {!lines.length ? (
-        <p className="py-6 text-center text-sm text-slate-400">{t('finance.budgets.noBudgetsYet')}</p>
+        <p className="py-6 text-center text-sm text-slate-400 dark:text-slate-500">{t('finance.budgets.noBudgetsYet')}</p>
       ) : (
         <ul className="space-y-3">
           {lines.map(({ b, label, spent: s }) => (
             <li key={b.id}>
               <div className="flex items-baseline gap-2 text-sm mb-1">
-                <span className={b.category ? 'text-slate-700' : 'font-medium text-navy-900'}>{label}</span>
-                <span className="ml-auto font-mono tabular-nums text-xs text-slate-500">{formatRp(s)} / {formatRp(b.amount)}</span>
-                <span className={`w-10 text-right text-xs tabular-nums ${s > b.amount ? 'text-red-600 font-semibold' : 'text-slate-400'}`}>{Math.round((s / b.amount) * 100)}%</span>
+                <span className={b.category ? 'text-slate-700 dark:text-slate-300' : 'font-medium text-navy-900 dark:text-slate-50'}>{label}</span>
+                <span className="ml-auto font-mono tabular-nums text-xs text-slate-500 dark:text-slate-400">{formatRp(s)} / {formatRp(b.amount)}</span>
+                <span className={`w-10 text-right text-xs tabular-nums ${s > b.amount ? 'text-red-600 font-semibold dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}>{Math.round((s / b.amount) * 100)}%</span>
               </div>
               <Meter value={s} max={b.amount} />
             </li>
@@ -77,19 +77,19 @@ function BudgetEditor({ categories, onClose }: { categories: string[]; onClose: 
   return (
     <Modal title={t('finance.budgets.modalTitle')} onClose={onClose}>
       <div className="space-y-2">
-        <p className="text-xs text-slate-500">{t('finance.budgets.modalHint')}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{t('finance.budgets.modalHint')}</p>
         {rows.map(r => {
           const k = `${r.scope}|${r.category}`
           return (
             <label key={k} className="flex items-center gap-3">
-              <span className={`flex-1 text-sm ${r.category ? 'text-slate-600 pl-3' : 'font-medium text-navy-900'}`}>{r.label}</span>
+              <span className={`flex-1 text-sm ${r.category ? 'text-slate-600 pl-3 dark:text-slate-300' : 'font-medium text-navy-900 dark:text-slate-50'}`}>{r.label}</span>
               <input className="field !w-40 text-right font-mono" inputMode="numeric" placeholder="—"
                 value={values[k] ? Number(values[k]).toLocaleString('id-ID') : ''}
                 onChange={e => setValues(v => ({ ...v, [k]: e.target.value.replace(/\D/g, '') }))} />
             </label>
           )
         })}
-        <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
+        <div className="flex items-center gap-3 pt-2 border-t border-slate-100 dark:border-navy-800">
           <input className="field flex-1" placeholder={t('finance.budgets.anotherCategoryPlaceholder')} value={newCategory} onChange={e => setNewCategory(e.target.value.toUpperCase())} />
           <input className="field !w-40 text-right font-mono" inputMode="numeric" placeholder="—"
             value={values.__new ? Number(values.__new).toLocaleString('id-ID') : ''}
@@ -130,36 +130,36 @@ export function RecurringPanel({ categories }: { categories: string[] }) {
     <div className="card p-5">
       <div className="flex items-center gap-2 mb-3">
         <Repeat size={15} className="text-navy-500" />
-        <h3 className="font-semibold text-navy-900 text-sm">{t('finance.budgets.recurringCosts')}</h3>
-        <span className="text-xs text-slate-400">{t('finance.budgets.aMonth', { amount: formatRp(monthlyTotal) })}</span>
+        <h3 className="font-semibold text-navy-900 text-sm dark:text-slate-50">{t('finance.budgets.recurringCosts')}</h3>
+        <span className="text-xs text-slate-400 dark:text-slate-500">{t('finance.budgets.aMonth', { amount: formatRp(monthlyTotal) })}</span>
         <button className="ml-auto btn-ghost btn-sm" onClick={() => setEditing({ active: true, category: '', description: '', price: 0, last_posted: '' })}><Plus size={13} /> {t('finance.budgets.add')}</button>
       </div>
       {!costs.length ? (
-        <p className="py-6 text-center text-sm text-slate-400">{t('finance.budgets.noRecurringYet')}</p>
+        <p className="py-6 text-center text-sm text-slate-400 dark:text-slate-500">{t('finance.budgets.noRecurringYet')}</p>
       ) : (
-        <ul className="divide-y divide-slate-50">
+        <ul className="divide-y divide-slate-50 dark:divide-navy-800">
           {costs.map(c => (
             <li key={c.id} className="flex items-center gap-3 py-2 text-sm">
               <label className="inline-flex" title={c.active ? t('finance.budgets.active') : t('finance.budgets.paused')}>
                 <input type="checkbox" checked={c.active} onChange={e => save.mutate({ ...c, active: e.target.checked })} />
               </label>
               <button className="flex-1 min-w-0 text-left" onClick={() => setEditing(c)}>
-                <span className={`block truncate ${c.active ? 'text-slate-700' : 'text-slate-400 line-through'}`}>{c.description || c.category}</span>
-                <span className="block text-xs text-slate-400">{c.category}{c.last_posted ? ` ${t('finance.budgets.lastAdded', { date: c.last_posted })}` : ''}</span>
+                <span className={`block truncate ${c.active ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 line-through dark:text-slate-500'}`}>{c.description || c.category}</span>
+                <span className="block text-xs text-slate-400 dark:text-slate-500">{c.category}{c.last_posted ? ` ${t('finance.budgets.lastAdded', { date: c.last_posted })}` : ''}</span>
               </button>
-              <span className="font-mono tabular-nums text-slate-800">{formatRp(c.price)}</span>
+              <span className="font-mono tabular-nums text-slate-800 dark:text-slate-200">{formatRp(c.price)}</span>
             </li>
           ))}
         </ul>
       )}
       {costs.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-slate-100">
+        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-navy-800">
           {due.length ? (
             <button className="btn-primary btn-sm w-full justify-center" onClick={postMonth} disabled={post.isPending}>
               {t('finance.budgets.addMonthCosts', { month: monthLabel(now.getFullYear(), now.getMonth()), count: due.length, total: formatRp(dueTotal) })}
             </button>
           ) : (
-            <p className="text-xs text-center text-green-700">{t('finance.budgets.allAddedFor', { month: monthLabel(now.getFullYear(), now.getMonth()) })}</p>
+            <p className="text-xs text-center text-green-700 dark:text-green-400">{t('finance.budgets.allAddedFor', { month: monthLabel(now.getFullYear(), now.getMonth()) })}</p>
           )}
         </div>
       )}
@@ -197,7 +197,7 @@ function RecurringEditor({ value, categories, onSave, onDelete, onClose }: {
           <input className="field font-mono" inputMode="numeric" value={v.price ? v.price.toLocaleString('id-ID') : ''} onChange={e => setV({ ...v, price: Number(e.target.value.replace(/\D/g, '')) })} />
         </label>
         <div className="flex items-center gap-2 pt-1">
-          {onDelete && <button className="btn-ghost text-red-600" onClick={onDelete}><Trash2 size={14} /> {t('common.delete')}</button>}
+          {onDelete && <button className="btn-ghost text-red-600 dark:text-red-400" onClick={onDelete}><Trash2 size={14} /> {t('common.delete')}</button>}
           <span className="flex-1" />
           <button className="btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
           <button className="btn-primary" disabled={!ok} onClick={() => onSave(v)}>{t('common.save')}</button>

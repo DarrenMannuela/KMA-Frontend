@@ -57,13 +57,13 @@ export function Modal({ title, onClose, children, size = 'md' }: ModalProps) {
         className="fixed inset-0 z-50 flex items-end bg-navy-950/30 backdrop-blur-sm fade-in"
         onClick={e => e.target === e.currentTarget && guardedClose()}
       >
-        <div className="bg-white w-full rounded-t-3xl shadow-2xl slide-up flex flex-col max-h-[88vh]">
+        <div className="bg-white w-full rounded-t-3xl shadow-2xl slide-up flex flex-col max-h-[88vh] dark:bg-navy-900">
           {/* The grab handle is only a visual cue; the backdrop and X close it. */}
           <div className="shrink-0 pt-2.5 pb-1 flex justify-center">
-            <div className="w-9 h-1 rounded-full bg-slate-200" />
+            <div className="w-9 h-1 rounded-full bg-slate-200 dark:bg-navy-700" />
           </div>
           <div className="flex items-center justify-between px-5 pb-3 shrink-0">
-            <h3 className="font-display font-semibold text-navy-900 text-base">{title}</h3>
+            <h3 className="font-display font-semibold text-navy-900 text-base dark:text-slate-50">{title}</h3>
             <button className="btn-ghost !px-2 !py-1.5" onClick={guardedClose}>
               <X className="w-4 h-4" />
             </button>
@@ -79,9 +79,9 @@ export function Modal({ title, onClose, children, size = 'md' }: ModalProps) {
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/50 backdrop-blur-sm fade-in"
       onClick={e => e.target === e.currentTarget && guardedClose()}
     >
-      <div className={`bg-white w-full ${sizes[size]} rounded-2xl shadow-2xl fade-up flex flex-col max-h-[90vh]`}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
-          <h3 className="font-display font-semibold text-navy-900 text-base">{title}</h3>
+      <div className={`bg-white w-full ${sizes[size]} rounded-2xl shadow-2xl fade-up flex flex-col max-h-[90vh] dark:bg-navy-900`}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0 dark:border-navy-800">
+          <h3 className="font-display font-semibold text-navy-900 text-base dark:text-slate-50">{title}</h3>
           <button className="btn-ghost !px-2 !py-1.5" onClick={guardedClose}>
             <X className="w-4 h-4" />
           </button>

@@ -1,6 +1,6 @@
 import { PageHeader, ErrorState } from './Page'
 import { useState } from 'react'
-import { Plus, Pencil, Trash2, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, ChevronDown } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Modal } from '@/components/ui/Modal'
@@ -14,6 +14,13 @@ interface Column<T> {
   /** Mobile cards only: use this column as the card's title instead of the first
    *  column (when the first is a bare id). Set on one column at most. */
   primary?: boolean
+  /** Mobile cards only: tucked behind a "Show more" toggle instead of
+   *  printed on every card by default. A 6-7 column table (common here)
+   *  becomes 6-7 label:value lines per card on a phone — fine for the
+   *  desktop table, a lot to scroll past on mobile. Mark the columns that
+   *  aren't needed for an at-a-glance read of the row; leave the rest
+   *  (including columns with neither flag) visible as before. */
+  secondary?: boolean
 }
 
 interface CrudPageProps<T extends { id: string | number }> {
@@ -121,23 +128,44 @@ export function CrudPage<T extends { id: string | number }>({
             : <EmptyState icon={Icon} title={t('common.noItemsYet', { items: title.toLowerCase() })} subtitle={t('common.clickAddNew')} />
         ) : isMobile ? (
           // Phone width: one card per row (title column first, the rest as
-          // label: value), with the row actions as icons underneath.
-          <div className="divide-y divide-slate-100">
-            {filtered.map(row => (
+          // label: value), with the row actions as icons underneath. Columns
+          // marked `secondary` sit behind a "Show more" toggle instead of
+          // printing on every card — the desktop table still shows all of
+          // them unconditionally, since it isn't the one doing the scrolling.
+          <div className="divide-y divide-slate-100 dark:divide-navy-800">
+            {filtered.map(row => {
+              const renderLine = (c: Column<typeof row>) => {
+                const rendered = c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—')
+                return (
+                  <div key={String(c.key)} className="flex items-baseline gap-1.5 text-sm">
+                    <span className="text-slate-400 text-xs shrink-0 dark:text-slate-500">{c.header}:</span>
+                    <span className="text-slate-700 truncate dark:text-slate-300">{rendered}</span>
+                  </div>
+                )
+              }
+              const visibleCols = columns.filter(c => c.key !== titleKey && !c.secondary)
+              const hiddenCols = columns.filter(c => c.key !== titleKey && c.secondary)
+              const titleCol = columns.find(c => c.key === titleKey)
+              return (
               <div key={row.id} className="px-5 py-3">
                 <div className="space-y-0.5">
-                  {columns.map((c) => {
-                    const rendered = c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—')
-                    if (c.key === titleKey) {
-                      return <div key={String(c.key)} className="text-sm font-medium text-navy-900">{rendered}</div>
-                    }
-                    return (
-                      <div key={String(c.key)} className="flex items-baseline gap-1.5 text-sm">
-                        <span className="text-slate-400 text-xs shrink-0">{c.header}:</span>
-                        <span className="text-slate-700 truncate">{rendered}</span>
+                  {titleCol && (
+                    <div className="text-sm font-medium text-navy-900 dark:text-slate-100">
+                      {titleCol.render ? titleCol.render(row) : String((row as Record<string, unknown>)[titleCol.key as string] ?? '—')}
+                    </div>
+                  )}
+                  {visibleCols.map(renderLine)}
+                  {hiddenCols.length > 0 && (
+                    <details className="group">
+                      <summary className="flex items-center gap-1 text-xs text-navy-500 dark:text-navy-300 cursor-pointer select-none [&::-webkit-details-marker]:hidden [&::marker]:content-none pt-0.5">
+                        <ChevronDown className="w-3 h-3 transition-transform group-open:rotate-180" />
+                        {t('common.showMore')}
+                      </summary>
+                      <div className="space-y-0.5 pt-0.5">
+                        {hiddenCols.map(renderLine)}
                       </div>
-                    )
-                  })}
+                    </details>
+                  )}
                 </div>
                 <div className="flex items-center justify-end gap-1 mt-1.5">
                   {rowActions && rowActions(row)}
@@ -152,7 +180,8 @@ export function CrudPage<T extends { id: string | number }>({
                   </button>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         ) : (
           <div className="overflow-x-auto">

@@ -105,9 +105,9 @@ function ItemForm({ editing, onClose }: { editing: Item | null; onClose: () => v
             onChange={priceField.onChange} />
         </FormField>
       </div>
-      <div className="bg-slate-50 rounded-lg px-4 py-3 flex justify-between items-center">
-        <span className="text-sm text-slate-500">{t('items.form.subtotal')}</span>
-        <span className="font-mono font-semibold text-navy-900">{formatRp(subTotal)}</span>
+      <div className="bg-slate-50 rounded-lg px-4 py-3 flex justify-between items-center dark:bg-navy-950">
+        <span className="text-sm text-slate-500 dark:text-slate-400">{t('items.form.subtotal')}</span>
+        <span className="font-mono font-semibold text-navy-900 dark:text-slate-50">{formatRp(subTotal)}</span>
       </div>
       <div className="flex gap-2 pt-1">
         <button className="btn-primary" disabled={busy} onClick={handleSubmit}>
@@ -138,13 +138,13 @@ export function ItemsPage() {
       onRetry={refetch}
       searchKeys={['item_name']}
       columns={[
-        { header: t('items.columns.orderId'),  key: 'order_id', render: r => <span className="font-mono text-xs text-slate-500">{r.order_id}</span> },
+        { header: t('items.columns.orderId'),  key: 'order_id', secondary: true, render: r => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.order_id}</span> },
         // A key of its own, distinct from the Order ID column's.
-        { header: t('items.columns.client'),    key: 'client',   render: r => clientNameByOrderId.get(r.order_id) ?? '—' },
+        { header: t('items.columns.client'),    key: 'client',   secondary: true, render: r => clientNameByOrderId.get(r.order_id) ?? '—' },
         { header: t('items.columns.item'),      key: 'item_name', primary: true, render: r => <span className="font-medium">{r.item_name}</span> },
         { header: t('items.columns.size'),      key: 'size',      render: r => r.size ? <span className="badge-slate">{r.size}</span> : '—' },
         { header: t('items.columns.qty'),       key: 'amount' },
-        { header: t('items.columns.price'),     key: 'price',     render: r => <span className="currency">{formatRp(r.price)}</span> },
+        { header: t('items.columns.price'),     key: 'price',     secondary: true, render: r => <span className="currency">{formatRp(r.price)}</span> },
         { header: t('items.columns.subtotal'),  key: 'sub_total', render: r => <span className="currency font-semibold">{formatRp(r.sub_total)}</span> },
       ]}
       formTitle={e => e ? t('items.formTitleEdit') : t('items.formTitleNew')}

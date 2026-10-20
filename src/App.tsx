@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Topbar } from '@/components/layout/Topbar'
 import { AuthProvider } from '@/contexts/AuthContext'
+import { ThemeProvider } from '@/contexts/ThemeContext'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { AdminRoute } from '@/components/auth/AdminRoute'
 import { MustChangePasswordRoute } from '@/components/auth/MustChangePasswordRoute'
@@ -43,8 +44,8 @@ const UsersPage = lazy(() => import('@/pages/users/UsersPage').then(m => ({ defa
 // same visual language as ProtectedRoute's own loading state.
 function FullPageSpinner() {
   return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-50">
-      <div className="w-8 h-8 rounded-full border-2 border-navy-200 border-t-navy-900 animate-spin" />
+    <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-navy-950">
+      <div className="w-8 h-8 rounded-full border-2 border-navy-200 dark:border-navy-800 border-t-navy-900 dark:border-t-gold-400 animate-spin" />
     </div>
   )
 }
@@ -55,7 +56,7 @@ function FullPageSpinner() {
 function ContentSpinner() {
   return (
     <div className="flex items-center justify-center py-24">
-      <div className="w-8 h-8 rounded-full border-2 border-navy-200 border-t-navy-900 animate-spin" />
+      <div className="w-8 h-8 rounded-full border-2 border-navy-200 dark:border-navy-800 border-t-navy-900 dark:border-t-gold-400 animate-spin" />
     </div>
   )
 }
@@ -73,7 +74,7 @@ function AppShell() {
          tables scroll inside their own containers instead of the whole page. */}
       <div className="flex-1 flex flex-col md:ml-[240px] min-h-screen min-w-0">
         <Topbar onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 overflow-y-auto bg-slate-50">
+        <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-navy-950">
           {/* Only routed content is behind the boundary; it resets on navigation. */}
           <ErrorBoundary resetKeys={[location.pathname]}>
           <Suspense fallback={<ContentSpinner />}>
@@ -109,6 +110,7 @@ function AppShell() {
 
 export default function App() {
   return (
+    <ThemeProvider>
     <AuthProvider>
       <>
         <Suspense fallback={<FullPageSpinner />}>
@@ -161,5 +163,6 @@ export default function App() {
         />
       </>
     </AuthProvider>
+    </ThemeProvider>
   )
 }
