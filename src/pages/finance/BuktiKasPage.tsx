@@ -56,7 +56,7 @@ export function BuktiKasPage() {
       />
 
       {headers.length === 0 ? (
-        <div className="card p-10 text-center text-slate-400 text-sm dark:text-slate-500">
+        <div className="card p-10 text-center text-slate-500 text-sm dark:text-slate-400">
           No Bukti Kas yet — click Add New to record cash received.
         </div>
       ) : (
@@ -87,12 +87,12 @@ export function BuktiKasPage() {
                           <span className="font-medium">{r.item_description}</span>
                           <span className="font-mono font-semibold shrink-0">{formatRp(r.price)}</span>
                         </div>
-                        {r.order_id && <div className="text-xs text-slate-400 mt-1 dark:text-slate-500">Order: {orderLabel(orders, r.order_id)}</div>}
+                        {r.order_id && <div className="text-xs text-slate-500 mt-1 dark:text-slate-400">Order: {orderLabel(orders, r.order_id)}</div>}
                         <div className="flex items-center gap-4 mt-3">
-                          <button className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1.5 dark:text-slate-500" onClick={() => setEditingRow(r)}>
+                          <button className="text-slate-500 hover:text-blue-500 text-xs flex items-center gap-1.5 dark:text-slate-400" onClick={() => setEditingRow(r)}>
                             <Pencil size={14} /> Edit
                           </button>
-                          <button className="text-slate-400 hover:text-red-500 text-xs flex items-center gap-1.5 dark:text-slate-500" onClick={() => setConfirmDeleteRow(r)}>
+                          <button className="text-slate-500 hover:text-red-500 text-xs flex items-center gap-1.5 dark:text-slate-400" onClick={() => setConfirmDeleteRow(r)}>
                             <Trash2 size={14} /> Delete
                           </button>
                         </div>

@@ -416,7 +416,7 @@ export function Ledger({ kind, initial, title, icon }: {
         <>
           <span className="font-mono font-semibold text-navy-900 dark:text-slate-50">{key}</span>
           <span className="text-slate-500 truncate dark:text-slate-400">{first.description || 'No description'}</span>
-          <span className="text-slate-400 text-xs whitespace-nowrap dark:text-slate-500">{formatDateShort(first.date)}</span>
+          <span className="text-slate-500 text-xs whitespace-nowrap dark:text-slate-400">{formatDateShort(first.date)}</span>
           {others > 0 && <span className="badge-slate !text-[10px]" title={`This Kas Bon also has ${others} ${kind === 'production' ? 'operation' : 'production'} line(s)`}>+{others} {kind === 'production' ? 'ops' : 'bahan'}</span>}
           <span className="ml-auto font-mono tabular-nums text-slate-700 dark:text-slate-300">{formatRp(sum)}</span>
         </>
@@ -428,7 +428,7 @@ export function Ledger({ kind, initial, title, icon }: {
     return (
       <>
         <span className="font-semibold text-navy-900 dark:text-slate-50">{label}</span>
-        <span className="text-slate-400 text-xs dark:text-slate-500">{rows.length} line{rows.length === 1 ? '' : 's'}</span>
+        <span className="text-slate-500 text-xs dark:text-slate-400">{rows.length} line{rows.length === 1 ? '' : 's'}</span>
         <span className="ml-auto font-mono tabular-nums text-slate-700 dark:text-slate-300">{formatRp(sum)}</span>
       </>
     )
@@ -457,7 +457,7 @@ export function Ledger({ kind, initial, title, icon }: {
       {/* Filters */}
       <div className="card p-3.5 flex flex-wrap items-center gap-2.5">
         <div className="relative flex-1 min-w-[12rem]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400" />
           <input
             ref={searchRef}
             className="field !pl-8 !py-1.5"
@@ -465,7 +465,7 @@ export function Ledger({ kind, initial, title, icon }: {
             value={filters.q}
             onChange={e => setFilter('q', e.target.value)}
           />
-          {filters.q && <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300" onClick={() => setFilter('q', '')} aria-label="Clear search"><X size={14} /></button>}
+          {filters.q && <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-300" onClick={() => setFilter('q', '')} aria-label="Clear search"><X size={14} /></button>}
         </div>
         <PeriodPicker value={filters.period} onChange={p => setFilter('period', p)} />
         <select className="field !w-auto !py-1.5 text-xs max-w-[12rem]" value={filters.group} onChange={e => setFilter('group', e.target.value)} aria-label={kind === 'production' ? 'Supplier' : 'Category'}>
@@ -538,7 +538,7 @@ export function Ledger({ kind, initial, title, icon }: {
       </div>
 
       {!visible.length ? (
-        <div className="card p-10 text-center text-sm text-slate-400 dark:text-slate-500">
+        <div className="card p-10 text-center text-sm text-slate-500 dark:text-slate-400">
           {allRows.length ? 'Nothing matches. Try another period, or clear the search and filters.' : 'No lines yet.'}
           <div className="mt-3 flex justify-center gap-2">
             <button className="btn-primary btn-sm" onClick={() => setForm({})}><Plus size={14} /> New Kas Bon</button>
@@ -556,7 +556,7 @@ export function Ledger({ kind, initial, title, icon }: {
           {shown.map(({ group, rows }) => (
             <div key={group.key || 'all'} className="card overflow-hidden">
               {filters.groupBy !== 'none' && (
-                <button className="w-full flex flex-wrap items-center gap-x-2 gap-y-0.5 px-4 py-2.5 bg-slate-50 text-sm text-left dark:bg-navy-950" onClick={() => setCollapsed(c => { const n = new Set(c); n.has(group.key) ? n.delete(group.key) : n.add(group.key); return n })}>
+                <button className="w-full flex flex-wrap items-center gap-x-2 gap-y-0.5 px-4 py-2.5 bg-slate-50 text-sm text-left dark:bg-navy-950" onClick={() => setCollapsed(c => { const n = new Set(c); if (n.has(group.key)) n.delete(group.key); else n.add(group.key); return n })}>
                   {groupHeader(group.key, group.rows)}
                 </button>
               )}
@@ -570,7 +570,7 @@ export function Ledger({ kind, initial, title, icon }: {
                       {selectMode && <input type="checkbox" readOnly checked={selected.has(r.id)} className="mt-1" />}
                       <span className="flex-1 min-w-0">
                         <span className="block font-medium text-slate-800 truncate dark:text-slate-200">{r.name || r.category}</span>
-                        <span className="block text-xs text-slate-400 truncate dark:text-slate-500">
+                        <span className="block text-xs text-slate-500 truncate dark:text-slate-400">
                           {kind === 'production' ? `${supplierLabel(suppliers, r.supplier_id)} · ${r.qty.toLocaleString('id-ID')} ${r.unit} × ${formatRp(r.price)}` : r.category}
                           {!byKasBon && ` · ${r.header_id} · ${formatDateShort(r.date)}`}
                           {r.order_id && ` · ${r.order_id}`}
@@ -608,7 +608,7 @@ export function Ledger({ kind, initial, title, icon }: {
                     <input type="checkbox" aria-label="Select everything shown" checked={allVisibleSelected} onChange={e => setMany(visible, e.target.checked)} />
                   </th>
                   {columns.map(c => (
-                    <th key={c.key} className={`px-2 py-2.5 overflow-hidden whitespace-nowrap text-ellipsis text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 ${c.align === 'right' ? 'text-right' : 'text-left'}`}>
+                    <th key={c.key} className={`px-2 py-2.5 overflow-hidden whitespace-nowrap text-ellipsis text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 ${c.align === 'right' ? 'text-right' : 'text-left'}`}>
                       {c.sortKey ? (
                         <button className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-slate-700 dark:hover:text-slate-200 ${sort.key === c.sortKey ? 'text-navy-700 dark:text-slate-200' : ''}`} onClick={() => sortBy(c.sortKey)}>
                           {c.header}
@@ -636,7 +636,7 @@ export function Ledger({ kind, initial, title, icon }: {
                           </td>
                           <td colSpan={columns.length} className="px-2 py-2.5">
                             <div className="flex items-center gap-2.5 text-sm min-w-0">
-                              <button onClick={() => setCollapsed(c => { const n = new Set(c); n.has(group.key) ? n.delete(group.key) : n.add(group.key); return n })} className="text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-200" aria-label={isCollapsed ? 'Expand' : 'Collapse'}>
+                              <button onClick={() => setCollapsed(c => { const n = new Set(c); if (n.has(group.key)) n.delete(group.key); else n.add(group.key); return n })} className="text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200" aria-label={isCollapsed ? 'Expand' : 'Collapse'}>
                                 <ChevronRight size={14} className={`transition-transform ${isCollapsed ? '' : 'rotate-90'}`} />
                               </button>
                               {groupHeader(group.key, group.rows)}
@@ -644,7 +644,7 @@ export function Ledger({ kind, initial, title, icon }: {
                           </td>
                           <td className="px-1 text-center">
                             {byKasBon && (
-                              <button className="opacity-0 group-hover/gh:opacity-100 text-slate-400 hover:text-navy-700 dark:text-slate-500" title={`Add lines to ${group.key}`} onClick={() => setForm({ headerId: group.key })}>
+                              <button className="opacity-0 group-hover/gh:opacity-100 text-slate-500 hover:text-navy-700 dark:text-slate-400" title={`Add lines to ${group.key}`} onClick={() => setForm({ headerId: group.key })}>
                                 <Plus size={14} />
                               </button>
                             )}
@@ -704,7 +704,7 @@ export function Ledger({ kind, initial, title, icon }: {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-4 px-4 py-2 border-t border-slate-100 bg-slate-50/60 text-xs text-slate-400 dark:border-navy-800 dark:bg-navy-950/60 dark:text-slate-500">
+          <div className="flex items-center gap-4 px-4 py-2 border-t border-slate-100 bg-slate-50/60 text-xs text-slate-500 dark:border-navy-800 dark:bg-navy-950/60 dark:text-slate-400">
             <span>Click a cell to edit · arrows move · shift-click selects a range · Ctrl+V pastes rows from Excel · Ctrl+Z undoes</span>
             <span className="ml-auto font-mono text-sm text-navy-900 font-semibold tabular-nums dark:text-slate-50">{formatRp(total)}</span>
           </div>

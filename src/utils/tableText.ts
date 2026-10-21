@@ -9,7 +9,7 @@ export type Grid = Cell[][]
  *  newlines and doubled quotes. The separator is guessed from the first line
  *  when not given (Indonesian Excel writes ";"). */
 export function parseDelimited(text: string, sep?: string): Grid {
-  text = text.replace(/^﻿/, '')
+  text = text.replace(/^\uFEFF/, '')
   if (!sep) {
     const first = text.split(/\r?\n/, 1)[0] ?? ''
     const count = (c: string) => first.split(c).length - 1
@@ -45,7 +45,7 @@ export function parseDelimited(text: string, sep?: string): Grid {
 export function parseNumber(value: Cell | undefined | null): number | null {
   if (value == null) return null
   if (typeof value === 'number') return Number.isFinite(value) ? value : null
-  let s = value.replace(/rp\.?/i, '').replace(/[\s ]/g, '')
+  let s = value.replace(/rp\.?/i, '').replace(/[\s\u00A0]/g, '')
   if (!s) return null
   const negative = /^\(.*\)$/.test(s) || s.startsWith('-')
   s = s.replace(/[()\-+]/g, '')
@@ -92,11 +92,11 @@ export function parseDate(value: Cell | undefined | null): string | null {
   } else if ((match = s.match(/^(\d{1,2})[/.\- ]([a-z]{3})[a-z]*[/.\- ](\d{2,4})$/i))) {
     m = MONTHS[match[2].toLowerCase()]
     ;[d, y] = [Number(match[1]), Number(match[3])]
-  } else if ((match = s.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})$/))) {
+  } else if ((match = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/))) {
     ;[d, m, y] = [Number(match[1]), Number(match[2]), Number(match[3])]
   } else {
     const serial = parseNumber(s)
-    return serial != null && !/[/.\-]/.test(s) ? parseDate(serial) : null
+    return serial != null && !/[/.-]/.test(s) ? parseDate(serial) : null
   }
   if (y < 100) y += 2000
   if (!m || m > 12 || d < 1 || d > 31) return null

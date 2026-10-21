@@ -35,7 +35,7 @@ export function StackedBarChart({
   const hasData = totals.some(t => t > 0)
 
   if (!hasData) {
-    return <div className="text-sm text-slate-400 dark:text-slate-500 italic py-10 text-center">{emptyLabel}</div>
+    return <div className="text-sm text-slate-500 dark:text-slate-400 italic py-10 text-center">{emptyLabel}</div>
   }
 
   return (
@@ -106,7 +106,7 @@ export function StackedBarChart({
                   })
                 )}
               </div>
-              <span className={`text-[10px] mt-1.5 truncate text-center ${isSelected ? 'text-navy-700 dark:text-slate-100 font-semibold' : 'text-slate-400 dark:text-slate-500'}`}>
+              <span className={`text-[10px] mt-1.5 truncate text-center ${isSelected ? 'text-navy-700 dark:text-slate-100 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
                 {d.category}
               </span>
             </Wrapper>

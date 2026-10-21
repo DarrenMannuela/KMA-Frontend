@@ -27,5 +27,19 @@ dist
 !.vscode/extensions.json
 .idea
 
+# Local AI-agent tooling (skills, hooks, agent configs) — personal/
+# machine-specific, not something every clone of this repo should inherit.
+.claude/
+.agents/
+.codex/
+.impeccable/
+skills-lock.json
+
+# Playwright E2E — generated run output, plus a real logged-in session
+# cookie written by tests/e2e/global-setup.ts. Never commit either.
+/test-results/
+/playwright-report/
+/tests/e2e/.auth/
+
 # OS
 .DS_Store

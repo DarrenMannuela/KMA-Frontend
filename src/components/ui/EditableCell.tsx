@@ -6,11 +6,18 @@ interface SelectOption {
 }
 
 interface EditableCellProps {
+  // The real type is picked at runtime by the `type` prop below (text/date
+  // give a string, number gives a number, select gives a SelectOption's
+  // value), not by a compile-time generic — a caller can't pass `type` and
+  // `value` as independently-typed props any other way without a larger
+  // discriminated-union rewrite of every call site. `any` is deliberate here.
+  /* eslint-disable @typescript-eslint/no-explicit-any */
   value: any
   type?: 'text' | 'number' | 'select' | 'date'
   options?: SelectOption[]
   onSave: (val: any) => void
   format?: (val: any) => React.ReactNode
+  /* eslint-enable @typescript-eslint/no-explicit-any */
   placeholder?: string
   /** Suggestions shown in a <datalist> (type="text" only); new values are still allowed. */
   suggestions?: string[]
@@ -82,6 +89,7 @@ export function EditableCell({
     setIsEditing(true)
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- same runtime-typed value as EditableCellProps above
   const commit = (raw: any) => {
     if (committed.current) return
     committed.current = true

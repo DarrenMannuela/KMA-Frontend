@@ -117,6 +117,7 @@ export interface SheetSpec {
 
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
   // Characters XML 1.0 doesn't allow at all.
+  // eslint-disable-next-line no-control-regex -- deliberate: stripping exactly these makes the generated xlsx's XML valid
   .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')
 
 function colName(i: number): string {

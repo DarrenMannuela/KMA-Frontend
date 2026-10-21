@@ -51,7 +51,6 @@ export function usePaperFormat(invoiceId: string | undefined): [PaperFormat, (ne
   // Reload when moving to another invoice without a remount.
   useEffect(() => {
     setFormatState(loadFormat(invoiceId))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceId])
 
   const setFormat = (next: PaperFormat) => {

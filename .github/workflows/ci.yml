@@ -1,0 +1,33 @@
+name: CI
+
+# Lint, type-check and build on every push and PR. Deliberately frontend-only:
+# the E2E suite (tests/e2e/) needs a live KMA + KMA-Auth backend, which lives
+# in sibling repos and isn't available to this workflow — see tests/e2e/README.md
+# for how to run those locally/manually instead.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build

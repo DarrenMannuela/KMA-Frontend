@@ -169,12 +169,13 @@ export function CrudPage<T extends { id: string | number }>({
                 </div>
                 <div className="flex items-center justify-end gap-1 mt-1.5">
                   {rowActions && rowActions(row)}
-                  <button className="btn-ghost btn-sm !px-2" onClick={() => openEdit(row)}>
+                  <button className="btn-ghost btn-sm !px-2" onClick={() => openEdit(row)} aria-label={t('common.edit')}>
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
                   <button
                     className="btn-ghost btn-sm !px-1.5 hover:!text-red-600"
                     onClick={() => setConfirmRow(row)}
+                    aria-label={t('common.delete')}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -206,12 +207,13 @@ export function CrudPage<T extends { id: string | number }>({
                 <td className="text-right">
                   <div className="flex items-center justify-end gap-1">
                     {rowActions && rowActions(row)}
-                    <button className="btn-ghost btn-sm !px-2" onClick={() => openEdit(row)}>
+                    <button className="btn-ghost btn-sm !px-2" onClick={() => openEdit(row)} aria-label={t('common.edit')}>
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
                     <button
                       className="btn-ghost btn-sm !px-1.5 hover:!text-red-600"
                       onClick={() => setConfirmRow(row)}
+                      aria-label={t('common.delete')}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

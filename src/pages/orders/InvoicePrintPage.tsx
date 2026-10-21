@@ -450,7 +450,10 @@ export function InvoicePrintPage() {
       Object.keys(next.groups).length !== Object.keys(measured.groups).length ||
       Object.entries(next.groups).some(([name, h]) => Math.abs(h - (measured.groups[name] ?? 0)) > 0.5)
     if (changed) setMeasured(next)
-    // Re-measure when the items or sheet change, not on every render.
+    // Re-measure when the items or sheet change, not on every render — measured.*
+    // is deliberately left out: it's compared against here to decide whether to
+    // update itself, so including it would make every update retrigger the effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, pageWidthMm, pageHeightMm, invoice?.id])
 
   // One grouping for both the table and the page prediction.

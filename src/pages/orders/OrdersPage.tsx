@@ -229,10 +229,10 @@ export function OrdersPage() {
             >
               <Building2 size={12} /> {t('common.view')} <ArrowRight size={12} />
             </button>
-          ) : <span className="text-slate-300 text-xs dark:text-navy-700">{t('orders.notLinked')}</span> },
+          ) : <span className="text-slate-500 text-xs dark:text-navy-300">{t('orders.notLinked')}</span> },
         { header: t('orders.columns.poNumber'), key: 'po_number',   secondary: true, render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
         { header: t('orders.columns.date'),      key: 'date',        render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
-        { header: t('orders.columns.value'),     key: 'value', render: r => value.get(r.id) ? <span className="font-mono tabular-nums whitespace-nowrap">{formatRp(value.get(r.id)!)}</span> : <span className="text-slate-300 text-xs dark:text-navy-700">{t('orders.noItems')}</span> },
+        { header: t('orders.columns.value'),     key: 'value', render: r => value.get(r.id) ? <span className="font-mono tabular-nums whitespace-nowrap">{formatRp(value.get(r.id)!)}</span> : <span className="text-slate-500 text-xs dark:text-navy-300">{t('orders.noItems')}</span> },
         { header: t('orders.columns.payment'),   key: 'payment', render: r => {
             const st = orderPaymentStatus(r.id, invoices)
             return <span className={`badge ${st.className}`}>{st.label}</span>

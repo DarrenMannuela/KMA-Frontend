@@ -160,7 +160,9 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
     : Math.round(form.total * (dpPercentNum / 100))
   const remaining = form.total - downPayment
   // Never negative: a discount bigger than what's left floors it at 0, with a warning.
-  const arRaw = remaining - (Number(form.discount) ?? 0)
+  // form.discount is always a clean number here: useFormattedNumberField's onChange
+  // already sanitizes it (Number(...) || 0) before it ever reaches form state.
+  const arRaw = remaining - form.discount
   const ar = Math.max(0, arRaw)
   const discountExceedsRemaining = arRaw < 0
 

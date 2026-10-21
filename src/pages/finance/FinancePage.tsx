@@ -29,10 +29,10 @@ function Kpi({ label, value, sub, icon: Icon, tone = 'default' }: {
   return (
     <div className="card p-4 min-w-0">
       <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-        <Icon size={14} className="text-slate-400 dark:text-slate-500" />{label}
+        <Icon size={14} className="text-slate-500 dark:text-slate-400" />{label}
       </div>
       <div className={`mt-1.5 text-xl font-semibold font-mono tabular-nums truncate ${color}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-slate-400 truncate dark:text-slate-500">{sub}</div>}
+      {sub && <div className="mt-0.5 text-xs text-slate-500 truncate dark:text-slate-400">{sub}</div>}
     </div>
   )
 }
@@ -247,7 +247,7 @@ export function FinancePage() {
         <Kpi label="Owed to you" icon={Hourglass} value={shortRp(owed)} tone={overdue > 0 ? 'bad' : 'default'} sub={overdue > 0 ? `${shortRp(overdue)} overdue` : 'nothing overdue'} />
       </div>
 
-      <Card title={`${year} month by month`} actions={<><Legend items={TREND_LEGEND} /><span className="text-xs text-slate-400 hidden md:inline dark:text-slate-500">Click a month to look at it</span></>}>
+      <Card title={`${year} month by month`} actions={<><Legend items={TREND_LEGEND} /><span className="text-xs text-slate-500 hidden md:inline dark:text-slate-400">Click a month to look at it</span></>}>
         <TrendChart
           data={months.map((m, i) => ({ label: shortMonthLabel(m.month), invoiced: m.invoiced, cost: m.cost, profit: m.profit, lastYearProfit: lastYear[i].invoiced || lastYear[i].cost ? lastYear[i].profit : undefined }))}
           selected={selectedMonth}
@@ -261,7 +261,7 @@ export function FinancePage() {
           actions={
             <div className="inline-flex rounded-lg bg-slate-100 p-0.5 dark:bg-white/10">
               {([['supplier', 'Suppliers'], ['material', 'Bahan'], ['category', 'Operations']] as [Breakdown, string][]).map(([k, label]) => (
-                <button key={k} onClick={() => setBreakdown(k)} className={`px-2.5 py-1 text-xs font-medium rounded-md ${breakdown === k ? 'bg-white text-navy-900 shadow-sm dark:bg-navy-900 dark:text-slate-50' : 'text-slate-500 dark:text-slate-400'}`}>{label}</button>
+                <button key={k} onClick={() => setBreakdown(k)} className={`px-2.5 py-1 text-xs font-medium rounded-md ${breakdown === k ? 'bg-white text-navy-900 shadow-sm dark:bg-navy-900 dark:text-slate-50' : 'text-slate-600 dark:text-slate-400'}`}>{label}</button>
               ))}
             </div>
           }
@@ -270,7 +270,7 @@ export function FinancePage() {
             items={where}
             onSelect={id => (breakdown === 'supplier' ? openSheet('production', { group: id }) : breakdown === 'material' ? openSheet('production', { q: id }) : openSheet('operations', { group: id }))}
           />
-          <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">Click a row to open its lines.{unlinked > 0 && ` ${formatRp(unlinked)} of bahan in this period isn't linked to an order yet.`}</p>
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">Click a row to open its lines.{unlinked > 0 && ` ${formatRp(unlinked)} of bahan in this period isn't linked to an order yet.`}</p>
         </Card>
         <Card title={`Cash in and out · ${periodLabel(period)}`} actions={<Legend items={CASH_LEGEND} />}>
           <CashFlowChart data={flow} />
@@ -284,7 +284,7 @@ export function FinancePage() {
           <span className="inline-flex flex-wrap items-baseline gap-3">
             Owed to you
             <span className="font-mono font-normal text-slate-600 dark:text-slate-300">{formatRp(owed)}</span>
-            <span className="text-xs font-normal text-slate-400 dark:text-slate-500">{open.length} unpaid invoice{open.length === 1 ? '' : 's'}</span>
+            <span className="text-xs font-normal text-slate-500 dark:text-slate-400">{open.length} unpaid invoice{open.length === 1 ? '' : 's'}</span>
           </span>
         }
       >
@@ -303,10 +303,10 @@ export function FinancePage() {
                   return (
                   <tr key={r.invoice.id} className="cursor-pointer" onClick={() => navigate(`/orders/${encodeURIComponent(r.invoice.order_id)}`)}>
                     <td className="font-medium">{r.client}</td>
-                    <td><span className="font-mono text-xs">{r.invoice.id}</span> <span className="text-xs text-slate-400 dark:text-slate-500">{r.invoice.type === 'dp' ? 'DP' : 'pelunasan'}</span></td>
+                    <td><span className="font-mono text-xs">{r.invoice.id}</span> <span className="text-xs text-slate-500 dark:text-slate-400">{r.invoice.type === 'dp' ? 'DP' : 'pelunasan'}</span></td>
                     <td className="font-mono text-xs">{r.invoice.order_id}</td>
                     <td className="text-xs">{dueOn(r.invoice)}</td>
-                    <td className={`!text-right text-xs ${r.daysLate > 30 ? 'text-red-600 font-semibold dark:text-red-400' : r.daysLate > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`}>{r.daysLate > 0 ? `${r.daysLate} days` : 'not due'}</td>
+                    <td className={`!text-right text-xs ${r.daysLate > 30 ? 'text-red-600 font-semibold dark:text-red-400' : r.daysLate > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}`}>{r.daysLate > 0 ? `${r.daysLate} days` : 'not due'}</td>
                     <td className="!text-right font-mono tabular-nums">{formatRp(r.amount)}</td>
                     <td className="!text-right">
                       {wa && (
@@ -338,7 +338,7 @@ export function FinancePage() {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
         <Card title={`Clients · ${periodLabel(period)}`} bodyClassName="p-5 overflow-x-auto">
-          {!byClient.length ? <p className="py-6 text-center text-sm text-slate-400 dark:text-slate-500">No orders in this period</p> : (
+          {!byClient.length ? <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">No orders in this period</p> : (
             <>
               <table className="kma-table text-xs [&_td]:!px-2 [&_th]:!px-2 [&_td]:whitespace-nowrap">
                 <thead><tr><th>Client</th><th className="!text-right">Orders</th><th className="!text-right">Value</th><th className="!text-right">Costs</th><th className="!text-right">Profit</th><th className="!text-right">Owed</th></tr></thead>
@@ -349,7 +349,7 @@ export function FinancePage() {
                       <td className="!text-right">{c.orders}</td>
                       <td className="!text-right font-mono tabular-nums">{shortRp(c.value)}</td>
                       <td className="!text-right font-mono tabular-nums text-slate-500 dark:text-slate-400">{shortRp(c.costs)}</td>
-                      <td className={`!text-right font-mono tabular-nums ${c.profit < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>{shortRp(c.profit)} <span className="text-[10px] text-slate-400 dark:text-slate-500">{pct(c.profit, c.value)}</span></td>
+                      <td className={`!text-right font-mono tabular-nums ${c.profit < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>{shortRp(c.profit)} <span className="text-[10px] text-slate-500 dark:text-slate-400">{pct(c.profit, c.value)}</span></td>
                       <td className={`!text-right font-mono tabular-nums ${c.outstanding ? 'text-amber-600 dark:text-amber-400' : 'text-slate-300 dark:text-navy-700'}`}>{c.outstanding ? shortRp(c.outstanding) : '—'}</td>
                     </tr>
                   ))}
@@ -364,17 +364,17 @@ export function FinancePage() {
           )}
         </Card>
         <Card title="Orders · profit after linked costs" icon={PiggyBank} bodyClassName="p-5 overflow-x-auto">
-          {!periodStats.length ? <p className="py-6 text-center text-sm text-slate-400 dark:text-slate-500">No orders in this period</p> : (
+          {!periodStats.length ? <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">No orders in this period</p> : (
             <>
               <table className="kma-table text-xs [&_td]:!px-2 [&_th]:!px-2 [&_td]:whitespace-nowrap">
                 <thead><tr><th>Order</th><th className="!text-right">Value</th><th className="!text-right">Costs</th><th className="!text-right">Profit</th><th className="!text-right">Paid</th></tr></thead>
                 <tbody>
                   {(showAllOrders ? periodStats : periodStats.slice(0, ROW_PREVIEW)).map(s => (
                     <tr key={s.order.id} className="cursor-pointer" onClick={() => navigate(`/orders/${encodeURIComponent(s.order.id)}`)}>
-                      <td><span className="font-mono text-xs">{s.order.id}</span> <span className="text-xs text-slate-400 truncate dark:text-slate-500">{s.client}</span></td>
+                      <td><span className="font-mono text-xs">{s.order.id}</span> <span className="text-xs text-slate-500 truncate dark:text-slate-400">{s.client}</span></td>
                       <td className="!text-right font-mono tabular-nums">{shortRp(s.value)}</td>
                       <td className="!text-right font-mono tabular-nums text-slate-500 dark:text-slate-400">{s.costs ? shortRp(s.costs) : <span className="text-amber-500 text-[11px] dark:text-amber-400" title="No Kas Bon lines are linked to this order yet">none linked</span>}</td>
-                      <td className={`!text-right font-mono tabular-nums ${s.profit < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>{shortRp(s.profit)} <span className="text-[10px] text-slate-400 dark:text-slate-500">{pct(s.profit, s.value)}</span></td>
+                      <td className={`!text-right font-mono tabular-nums ${s.profit < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>{shortRp(s.profit)} <span className="text-[10px] text-slate-500 dark:text-slate-400">{pct(s.profit, s.value)}</span></td>
                       <td className="!text-right text-xs text-slate-500 dark:text-slate-400">{pct(s.paid, s.value)}</td>
                     </tr>
                   ))}

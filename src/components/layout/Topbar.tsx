@@ -202,7 +202,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           </button>
           <div className="min-w-0">
             <h2 className="font-display font-semibold text-navy-900 text-base truncate dark:text-slate-50">{title}</h2>
-            <p className="text-slate-400 text-xs font-mono truncate">
+            <p className="text-slate-500 text-xs font-mono truncate dark:text-slate-400">
               {/* Short on phones, where the full date was cut off. */}
               <span className="sm:hidden">{format(new Date(), 'EEE, d MMM yyyy', { locale: dateLocale })}</span>
               <span className="hidden sm:inline">{format(new Date(), 'EEEE, d MMMM yyyy', { locale: dateLocale })}</span>

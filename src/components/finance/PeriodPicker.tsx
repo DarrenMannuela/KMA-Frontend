@@ -62,7 +62,7 @@ export function PeriodPicker({ value, onChange, modes = ['month', 'year', 'all',
             role="tab"
             aria-selected={value.mode === m.mode}
             onClick={() => onChange({ ...value, mode: m.mode })}
-            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${value.mode === m.mode ? 'bg-white text-navy-900 shadow-sm dark:bg-navy-900 dark:text-slate-50' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${value.mode === m.mode ? 'bg-white text-navy-900 shadow-sm dark:bg-navy-900 dark:text-slate-50' : 'text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
           >
             {t(m.labelKey)}
           </button>
@@ -82,7 +82,7 @@ export function PeriodPicker({ value, onChange, modes = ['month', 'year', 'all',
       {value.mode === 'range' && (
         <div className="flex items-center gap-1.5">
           <input type="date" className="field !py-1 !w-auto text-xs" value={value.from} onChange={e => onChange({ ...value, from: e.target.value })} aria-label={t('finance.periodPicker.from')} />
-          <span className="text-slate-400 text-xs dark:text-slate-500">{t('finance.periodPicker.to')}</span>
+          <span className="text-slate-500 text-xs dark:text-slate-400">{t('finance.periodPicker.to')}</span>
           <input type="date" className="field !py-1 !w-auto text-xs" value={value.to} onChange={e => onChange({ ...value, to: e.target.value })} aria-label={t('finance.periodPicker.toDate')} />
         </div>
       )}

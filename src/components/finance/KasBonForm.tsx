@@ -191,7 +191,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
         </div>
 
         <div className="rounded-xl border border-slate-100 overflow-hidden dark:border-navy-800">
-          <div className="hidden md:grid grid-cols-[1.5rem_minmax(0,1.6fr)_minmax(0,1.3fr)_4.5rem_5.5rem_7rem_7rem_minmax(0,1fr)_2rem] gap-2 px-3 py-2 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:bg-navy-950 dark:text-slate-500">
+          <div className="hidden md:grid grid-cols-[1.5rem_minmax(0,1.6fr)_minmax(0,1.3fr)_4.5rem_5.5rem_7rem_7rem_minmax(0,1fr)_2rem] gap-2 px-3 py-2 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-navy-950 dark:text-slate-400">
             <span />
             <span>Bahan / item</span>
             <span>Supplier / category</span>
@@ -292,7 +292,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
                   {problem && <p className="mt-1 text-[11px] text-red-500 dark:text-red-400">{problem}</p>}
                   {!problem && catalogue && catMatch && (
                     <>
-                      <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                         {catMatch.composition}
                         {catMatch.widthCm != null && catMatch.rollYards != null && <> · roll {catMatch.widthCm} cm × {catMatch.rollYards} yd</>}
                       </p>
@@ -335,7 +335,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
           </datalist>
         ))}
 
-        <p className="text-xs text-slate-400 dark:text-slate-500">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           Enter moves to the next line · paste rows copied from Excel into any line · Ctrl+Enter saves
         </p>
         {showErrors && !filled.length && <p className="text-sm text-red-500 dark:text-red-400">Add at least one line.</p>}
@@ -376,11 +376,11 @@ function MaterialColorPicker({ material, colors, selectedCode, onPick }: {
           <>
             <span className="w-3.5 h-3.5 rounded-full ring-1 ring-black/10 shrink-0" style={{ background: selected.hex }} />
             <span className="font-mono text-slate-700 dark:text-slate-300">{selected.code}</span>
-            {selected.category && <span className="text-slate-400 dark:text-slate-500">· {selected.category}</span>}
+            {selected.category && <span className="text-slate-500 dark:text-slate-400">· {selected.category}</span>}
           </>
         ) : (
           <>
-            <Palette size={11} className="text-slate-400 dark:text-slate-500" />
+            <Palette size={11} className="text-slate-500 dark:text-slate-400" />
             <span className="text-slate-500 dark:text-slate-400">Pick a colour ({colors.length})</span>
           </>
         )}
@@ -417,7 +417,7 @@ function MaterialColorPickerModal({ material, colors, selectedCode, onPick, onCl
     <Modal title={`${materialLabel(material)} — colours`} onClose={onClose} size="lg">
       <div className="space-y-3">
         <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400" />
           <input
             autoFocus
             type="text"
@@ -427,9 +427,9 @@ function MaterialColorPickerModal({ material, colors, selectedCode, onPick, onCl
             className="field !pl-9"
           />
         </div>
-        <p className="text-xs text-slate-400 dark:text-slate-500">{filtered.length} of {colors.length} colours</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{filtered.length} of {colors.length} colours</p>
         {filtered.length === 0 ? (
-          <p className="text-sm text-slate-400 text-center py-10 dark:text-slate-500">No colour matches "{query}".</p>
+          <p className="text-sm text-slate-500 text-center py-10 dark:text-slate-400">No colour matches "{query}".</p>
         ) : (
           <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2.5 max-h-[55vh] overflow-y-auto pr-1 -mr-1">
             {filtered.map(c => (
@@ -441,7 +441,7 @@ function MaterialColorPickerModal({ material, colors, selectedCode, onPick, onCl
               >
                 <span className="w-10 h-10 rounded-full ring-1 ring-black/10 shrink-0" style={{ background: c.hex }} />
                 <span className="font-mono text-xs text-navy-900 dark:text-slate-50">{c.code}</span>
-                {c.category && <span className="text-[10px] text-slate-400 text-center leading-tight dark:text-slate-500">{c.category}</span>}
+                {c.category && <span className="text-[10px] text-slate-500 text-center leading-tight dark:text-slate-400">{c.category}</span>}
               </button>
             ))}
           </div>

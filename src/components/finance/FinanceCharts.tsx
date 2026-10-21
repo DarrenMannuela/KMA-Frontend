@@ -185,7 +185,7 @@ export function RankBars({ items, onSelect, empty = 'Nothing in this period' }: 
 }) {
   const max = Math.max(1, ...items.map(i => i.value))
   const total = items.reduce((n, i) => n + i.value, 0) || 1
-  if (!items.length) return <p className="py-8 text-center text-sm text-slate-400 dark:text-slate-500">{empty}</p>
+  if (!items.length) return <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">{empty}</p>
   return (
     <ul className="space-y-1">
       {items.map(i => (
@@ -194,9 +194,9 @@ export function RankBars({ items, onSelect, empty = 'Nothing in this period' }: 
             <div className="flex items-baseline gap-2 text-sm">
               {i.color && <span className="w-2 h-2 rounded-full shrink-0 self-center" style={{ background: i.color }} />}
               <span className="truncate text-slate-700 group-hover:text-navy-900 dark:text-slate-300 dark:group-hover:text-slate-50">{i.label}</span>
-              {i.sub && <span className="text-xs text-slate-400 truncate dark:text-slate-500">{i.sub}</span>}
+              {i.sub && <span className="text-xs text-slate-500 truncate dark:text-slate-400">{i.sub}</span>}
               <span className="ml-auto font-mono tabular-nums text-slate-800 dark:text-slate-200">{formatRp(i.value)}</span>
-              <span className="w-10 text-right text-xs text-slate-400 tabular-nums dark:text-slate-500">{Math.round((i.value / total) * 100)}%</span>
+              <span className="w-10 text-right text-xs text-slate-500 tabular-nums dark:text-slate-400">{Math.round((i.value / total) * 100)}%</span>
             </div>
             <div className="mt-1 h-1.5 rounded-full bg-slate-100 overflow-hidden dark:bg-white/10">
               <div className="h-full rounded-full bg-navy-500 group-hover:bg-navy-700 transition-colors" style={{ width: `${(i.value / max) * 100}%` }} />

@@ -28,7 +28,7 @@ export function BudgetPanel({ year, month, costs, categories }: { year: number; 
         <button className="ml-auto btn-ghost btn-sm" onClick={() => setEditing(true)}><Pencil size={13} /> {t('finance.budgets.setBudgets')}</button>
       </div>
       {!lines.length ? (
-        <p className="py-6 text-center text-sm text-slate-400 dark:text-slate-500">{t('finance.budgets.noBudgetsYet')}</p>
+        <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">{t('finance.budgets.noBudgetsYet')}</p>
       ) : (
         <ul className="space-y-3">
           {lines.map(({ b, label, spent: s }) => (
@@ -36,7 +36,7 @@ export function BudgetPanel({ year, month, costs, categories }: { year: number; 
               <div className="flex items-baseline gap-2 text-sm mb-1">
                 <span className={b.category ? 'text-slate-700 dark:text-slate-300' : 'font-medium text-navy-900 dark:text-slate-50'}>{label}</span>
                 <span className="ml-auto font-mono tabular-nums text-xs text-slate-500 dark:text-slate-400">{formatRp(s)} / {formatRp(b.amount)}</span>
-                <span className={`w-10 text-right text-xs tabular-nums ${s > b.amount ? 'text-red-600 font-semibold dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}>{Math.round((s / b.amount) * 100)}%</span>
+                <span className={`w-10 text-right text-xs tabular-nums ${s > b.amount ? 'text-red-600 font-semibold dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>{Math.round((s / b.amount) * 100)}%</span>
               </div>
               <Meter value={s} max={b.amount} />
             </li>
@@ -131,11 +131,11 @@ export function RecurringPanel({ categories }: { categories: string[] }) {
       <div className="flex items-center gap-2 mb-3">
         <Repeat size={15} className="text-navy-500" />
         <h3 className="font-semibold text-navy-900 text-sm dark:text-slate-50">{t('finance.budgets.recurringCosts')}</h3>
-        <span className="text-xs text-slate-400 dark:text-slate-500">{t('finance.budgets.aMonth', { amount: formatRp(monthlyTotal) })}</span>
+        <span className="text-xs text-slate-500 dark:text-slate-400">{t('finance.budgets.aMonth', { amount: formatRp(monthlyTotal) })}</span>
         <button className="ml-auto btn-ghost btn-sm" onClick={() => setEditing({ active: true, category: '', description: '', price: 0, last_posted: '' })}><Plus size={13} /> {t('finance.budgets.add')}</button>
       </div>
       {!costs.length ? (
-        <p className="py-6 text-center text-sm text-slate-400 dark:text-slate-500">{t('finance.budgets.noRecurringYet')}</p>
+        <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">{t('finance.budgets.noRecurringYet')}</p>
       ) : (
         <ul className="divide-y divide-slate-50 dark:divide-navy-800">
           {costs.map(c => (
@@ -144,8 +144,8 @@ export function RecurringPanel({ categories }: { categories: string[] }) {
                 <input type="checkbox" checked={c.active} onChange={e => save.mutate({ ...c, active: e.target.checked })} />
               </label>
               <button className="flex-1 min-w-0 text-left" onClick={() => setEditing(c)}>
-                <span className={`block truncate ${c.active ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 line-through dark:text-slate-500'}`}>{c.description || c.category}</span>
-                <span className="block text-xs text-slate-400 dark:text-slate-500">{c.category}{c.last_posted ? ` ${t('finance.budgets.lastAdded', { date: c.last_posted })}` : ''}</span>
+                <span className={`block truncate ${c.active ? 'text-slate-700 dark:text-slate-300' : 'text-slate-500 line-through dark:text-slate-400'}`}>{c.description || c.category}</span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400">{c.category}{c.last_posted ? ` ${t('finance.budgets.lastAdded', { date: c.last_posted })}` : ''}</span>
               </button>
               <span className="font-mono tabular-nums text-slate-800 dark:text-slate-200">{formatRp(c.price)}</span>
             </li>
