@@ -169,6 +169,13 @@ export function DashboardPage() {
 
   const orderInvoiceStatus = (orderId: string) => orderPaymentStatus(orderId, safeInvoices as Invoice[])
 
+  // Recent Orders / AR Breakdown desktop rows are keyboard-activatable `<tr>`s
+  // (a real <a>/<button> can't wrap a <tr> or its cells cleanly), so Enter/Space
+  // need to trigger the same navigation a click does.
+  const onRowActivate = (e: React.KeyboardEvent, go: () => void) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go() }
+  }
+
   // This month's costs against last month's, to the same day while it runs.
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
   const upToToday = (d: string) => Number(d.slice(8, 10)) <= now.getDate()
@@ -279,8 +286,11 @@ export function DashboardPage() {
                     return (
                       <tr
                         key={o.id}
-                        className="cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5"
+                        role="button"
+                        tabIndex={0}
+                        className="cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-400 focus-visible:ring-inset"
                         onClick={() => navigate(`/orders/${encodeURIComponent(o.id)}`)}
+                        onKeyDown={(e) => onRowActivate(e, () => navigate(`/orders/${encodeURIComponent(o.id)}`))}
                       >
                         <td><span className="id-chip">{o.id}</span></td>
                         <td className="font-medium text-navy-900 dark:text-slate-50">{o.company ?? '—'}</td>
@@ -369,12 +379,19 @@ export function DashboardPage() {
                         </span>
                       </button>
                       {wa && (
+                        // p-3.5 -m-2: the same 44px-tap-target-via-padding trick as
+                        // Topbar's menu button and Sidebar's close button — the icon's
+                        // own size and visual position don't change, only the invisible
+                        // hit area grows. Worth the extra care here specifically: this
+                        // is the one control on the Dashboard that opens a pre-filled
+                        // WhatsApp message to a real client about money they owe, so a
+                        // mis-tap matters more than it does elsewhere.
                         <a
                           href={wa}
                           target="_blank"
                           rel="noopener noreferrer"
                           title={t('dashboard.remindOnWhatsapp')}
-                          className="w-6 h-6 mr-2 rounded-md flex items-center justify-center text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-500/10 transition-colors shrink-0"
+                          className="p-3.5 -m-2 rounded-md flex items-center justify-center text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-500/10 transition-colors shrink-0"
                         >
                           <MessageCircle className="w-3.5 h-3.5" />
                         </a>
@@ -394,11 +411,16 @@ export function DashboardPage() {
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3 dark:text-slate-400">{t('dashboard.quickActions')}</p>
             <div className="space-y-1.5">
               {[
+                // Finance isn't listed here: it's already a direct Sidebar
+                // entry, so repeating it kept this card at 5 links — one
+                // over the app's own ≤4-per-decision-point guideline — and
+                // gave it the same visual weight as the Overdue Invoices
+                // card beside it, despite being pure navigation rather than
+                // something with real financial urgency.
                 { label: t('dashboard.newOrder'),      href: '/orders',     icon: ShoppingBag },
                 { label: t('dashboard.newDelivery'),   href: '/delivery',   icon: Truck },
                 { label: t('dashboard.addProduction'), href: '/production', icon: Factory },
                 { label: t('dashboard.addSupplier'),  href: '/suppliers',  icon: Users },
-                { label: t('dashboard.finance'),  href: '/finance', icon: BarChart3 },
               ].map(({ label, href, icon: Icon }) => (
                 <a
                   key={href}
@@ -480,8 +502,11 @@ export function DashboardPage() {
                   return (
                     <tr
                       key={inv.id}
-                      className="cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5"
+                      role="button"
+                      tabIndex={0}
+                      className="cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-400 focus-visible:ring-inset"
                       onClick={() => navigate(`/invoice/${encodeURIComponent(inv.id)}`)}
+                      onKeyDown={(e) => onRowActivate(e, () => navigate(`/invoice/${encodeURIComponent(inv.id)}`))}
                     >
                       <td><span className="id-chip font-mono">{inv.id}</span></td>
                       <td className="font-medium text-navy-900 dark:text-slate-50">{inv.kepada_yth}</td>

@@ -106,7 +106,7 @@
     "overdueBy_one": "{{count}} day overdue",
     "overdueBy_other": "{{count}} days overdue",
     "overdueParenthetical": "(overdue)",
-    "remindOnWhatsapp": "Remind on WhatsApp",
+    "remindOnWhatsapp": "Open a WhatsApp reminder — review before sending",
     "ordersCategory": "Orders",
     "costsCategory": "Costs",
     "arBreakdown": "AR Receivable Breakdown",
