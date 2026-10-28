@@ -250,6 +250,11 @@ export function Ledger({ kind, initial, title, icon }: {
       if (v && !orders.some(o => o.id === v)) return void toast.error(`There's no order ${v}`)
       value = v || null
     }
+    if (field === 'date') {
+      const d = String(value ?? '').trim()
+      if (!d || Number.isNaN(new Date(d).getTime())) return void toast.error('Date is required')
+      value = d
+    }
     if (field === 'header_id') {
       const id = String(value).trim().toUpperCase()
       if (!id || id === r.header_id) return
@@ -719,7 +724,7 @@ export function Ledger({ kind, initial, title, icon }: {
             <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" onClick={() => setDialog('move')}><ArrowRightLeft size={13} /> Move</button>
             <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" onClick={() => setDialog(kind === 'production' ? 'supplier_id' : 'category')}><Tag size={13} /> {kind === 'production' ? 'Supplier' : 'Category'}</button>
             <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" onClick={() => setDialog('order_id')}><Link2 size={13} /> Order</button>
-            <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" onClick={() => duplicateRows(selectedRows)}><Copy size={13} /> Copy</button>
+            <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" disabled={batch.isPending} onClick={() => duplicateRows(selectedRows)}><Copy size={13} /> Copy</button>
             <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" onClick={() => exportRows(selectedRows, 'selection')}><Download size={13} /> Export</button>
             <button className="btn-sm btn rounded-lg text-red-200 hover:bg-red-500/20" onClick={() => setDialog('delete')}><Trash2 size={13} /> Delete</button>
             <button className="p-1.5 rounded-lg hover:bg-white/10" onClick={() => setSelected(new Set())} aria-label="Clear selection"><X size={14} /></button>
@@ -736,9 +741,9 @@ export function Ledger({ kind, initial, title, icon }: {
       {importGrid !== undefined && (
         <ImportDialog kind={kind} headers={headers} suppliers={suppliers} orders={orders} initialGrid={importGrid ?? undefined} onClose={() => setImportGrid(undefined)} />
       )}
-      {dialog === 'move' && <MoveDialog rows={selectedRows} headers={headers} onApply={(b, l) => apply(b, l)} onClose={() => setDialog(null)} />}
+      {dialog === 'move' && <MoveDialog rows={selectedRows} headers={headers} saving={batch.isPending} onApply={(b, l) => apply(b, l)} onClose={() => setDialog(null)} />}
       {(dialog === 'supplier_id' || dialog === 'category' || dialog === 'order_id') && (
-        <SetFieldDialog rows={selectedRows} field={dialog} suppliers={suppliers} orders={orders} categories={categories} onApply={(b, l) => apply(b, l)} onClose={() => setDialog(null)} />
+        <SetFieldDialog rows={selectedRows} field={dialog} suppliers={suppliers} orders={orders} categories={categories} saving={batch.isPending} onApply={(b, l) => apply(b, l)} onClose={() => setDialog(null)} />
       )}
       {dialog === 'delete' && (
         <ConfirmDialog
@@ -755,7 +760,7 @@ export function Ledger({ kind, initial, title, icon }: {
         />
       )}
       {editing && (
-        <LineEditor row={editing} suppliers={suppliers} orders={orders} categories={categories}
+        <LineEditor row={editing} suppliers={suppliers} orders={orders} categories={categories} saving={batch.isPending}
           onApply={(b, l) => apply(b, l, () => setEditing(null))}
           onDelete={() => setConfirmDeleteRow(editing)}
           onClose={() => setEditing(null)} />

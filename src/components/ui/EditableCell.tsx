@@ -99,9 +99,16 @@ export function EditableCell({
     let value = raw
     if (type === 'number') {
       value = Number(raw)
+      // Typing just "." (allowDecimal) or clearing the field produces
+      // NaN, which JSON.stringify serializes as null — revert instead of
+      // committing an unparseable quantity/price.
+      if (!Number.isFinite(value)) value = initialValue
     } else if (type === 'select' && options) {
       const matched = options.find(o => String(o.value) === String(raw))
-      if (matched) value = matched.value
+      // No match (e.g. the always-present blank "Select…" option) must not
+      // fall through as the raw string — revert instead of blanking a
+      // non-nullable field like supplier_id/unit.
+      value = matched ? matched.value : initialValue
     }
     if (value !== initialValue && !(value === '' && (initialValue === null || initialValue === undefined))) {
       onSave(value)

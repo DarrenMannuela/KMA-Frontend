@@ -129,6 +129,7 @@ export function ImportDialog({ kind, headers, suppliers, orders, initialGrid, on
   const runImport = async () => {
     if (!good.length || missingDates.length) return
     setBusy(true)
+    const results: FinanceBatchResult[] = []
     try {
       // New suppliers first, so their lines can point at them.
       const supplierIdFor = new Map<string, number>()
@@ -174,13 +175,12 @@ export function ImportDialog({ kind, headers, suppliers, orders, initialGrid, on
       }
       if (size) batches.push(current)
 
-      const results: FinanceBatchResult[] = []
       for (const b of batches) results.push(await financeBatchApi.apply(b))
-      recordBatches(qc, `Imported ${good.length} line${good.length === 1 ? '' : 's'}`, results)
       onClose()
     } catch (e) {
-      toast.error(`Import stopped: ${friendlyError(e)}. Anything saved before that can be undone with Ctrl+Z.`)
+      toast.error(`Import stopped: ${friendlyError(e)}.${results.length ? ' Anything saved before that can be undone with Ctrl+Z.' : ''}`)
     } finally {
+      if (results.length) recordBatches(qc, `Imported ${good.length} line${good.length === 1 ? '' : 's'}`, results)
       setBusy(false)
     }
   }

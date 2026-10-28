@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 import type { ReactNode } from 'react'
 import { authApi, AuthApiError } from '@/api/authApi'
 import { endClosedSession, forgetTab, markTabSignedIn, visitIsStillOpen } from '@/utils/tabSession'
+import { clearAllDrafts } from '@/hooks/useUnsavedChanges'
 import {AuthUser} from '@/types'
 
 interface AuthContextValue {
@@ -97,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Clear local state even if the network call fails — the user
       // clicked logout and expects to land back at the login screen.
       forgetTab()
+      clearAllDrafts()
       setUser(null)
       setStatus('unauthenticated')
     }

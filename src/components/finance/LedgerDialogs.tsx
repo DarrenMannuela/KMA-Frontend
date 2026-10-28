@@ -9,9 +9,10 @@ import type { FinanceBatch, FinanceHeader, Order, Supplier } from '@/types'
 import { editBatch, supplierWithCategory, type EditField, type LedgerRow } from './ledgerModel'
 
 /** Moves lines to another Kas Bon, or to a new one. */
-export function MoveDialog({ rows, headers, onApply, onClose }: {
+export function MoveDialog({ rows, headers, saving, onApply, onClose }: {
   rows: LedgerRow[]
   headers: FinanceHeader[]
+  saving: boolean
   onApply: (batch: FinanceBatch, label: string) => void
   onClose: () => void
 }) {
@@ -47,7 +48,7 @@ export function MoveDialog({ rows, headers, onApply, onClose }: {
         </button>
         <div className="flex justify-end gap-2">
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={apply} disabled={!id.trim()}>Move</button>
+          <button className="btn-primary" onClick={apply} disabled={!id.trim() || saving}>Move</button>
         </div>
       </div>
     </Modal>
@@ -55,12 +56,13 @@ export function MoveDialog({ rows, headers, onApply, onClose }: {
 }
 
 /** Sets one field on many lines: supplier, category or order. */
-export function SetFieldDialog({ rows, field, suppliers, orders, categories, onApply, onClose }: {
+export function SetFieldDialog({ rows, field, suppliers, orders, categories, saving, onApply, onClose }: {
   rows: LedgerRow[]
   field: 'supplier_id' | 'category' | 'order_id'
   suppliers: Supplier[]
   orders: Order[]
   categories: string[]
+  saving: boolean
   onApply: (batch: FinanceBatch, label: string) => void
   onClose: () => void
 }) {
@@ -103,7 +105,7 @@ export function SetFieldDialog({ rows, field, suppliers, orders, categories, onA
         {error && <p className="text-xs text-red-500 dark:text-red-400">{error}</p>}
         <div className="flex justify-end gap-2">
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={apply}>Apply</button>
+          <button className="btn-primary" onClick={apply} disabled={saving}>Apply</button>
         </div>
       </div>
     </Modal>
@@ -111,11 +113,12 @@ export function SetFieldDialog({ rows, field, suppliers, orders, categories, onA
 }
 
 /** Edits every field of one line (the phone layout's way to edit). */
-export function LineEditor({ row, suppliers, orders, categories, onApply, onDelete, onClose }: {
+export function LineEditor({ row, suppliers, orders, categories, saving, onApply, onDelete, onClose }: {
   row: LedgerRow
   suppliers: Supplier[]
   orders: Order[]
   categories: string[]
+  saving: boolean
   onApply: (batch: FinanceBatch, label: string) => void
   onDelete: () => void
   onClose: () => void
@@ -205,7 +208,7 @@ export function LineEditor({ row, suppliers, orders, categories, onApply, onDele
           <button className="btn-ghost text-red-600 dark:text-red-400" onClick={onDelete}><Trash2 size={14} /> Delete</button>
           <span className="flex-1" />
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={save}>Save</button>
+          <button className="btn-primary" onClick={save} disabled={saving}>Save</button>
         </div>
       </div>
     </Modal>

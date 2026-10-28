@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Pencil, Plus, Repeat, Trash2 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 import { formatRp } from '@/components/ui'
 import { Modal } from '@/components/ui/Modal'
@@ -64,13 +65,19 @@ function BudgetEditor({ categories, onClose }: { categories: string[]; onClose: 
   const [newCategory, setNewCategory] = useState('')
 
   const save = async () => {
+    const failed: string[] = []
     for (const r of rows) {
       const amount = Number(values[`${r.scope}|${r.category}`] || 0)
-      if (amount !== current(r.scope, r.category)) await setBudget.mutateAsync({ scope: r.scope, category: r.category, amount })
+      if (amount !== current(r.scope, r.category)) {
+        try { await setBudget.mutateAsync({ scope: r.scope, category: r.category, amount }) }
+        catch { failed.push(r.label) }
+      }
     }
     if (newCategory.trim() && Number(values.__new || 0) > 0) {
-      await setBudget.mutateAsync({ scope: 'operation', category: newCategory.trim().toUpperCase(), amount: Number(values.__new) })
+      try { await setBudget.mutateAsync({ scope: 'operation', category: newCategory.trim().toUpperCase(), amount: Number(values.__new) }) }
+      catch { failed.push(newCategory.trim()) }
     }
+    if (failed.length) { toast.error(`Saved the rest, but couldn't save: ${failed.join(', ')}`); return }
     onClose()
   }
 

@@ -4,6 +4,7 @@ import { Modal } from '@/components/ui/Modal'
 import { formatRp } from '@/components/ui'
 import { useFinanceBatch } from '@/hooks'
 import { useIsDirty, useUnsavedChanges, useAutosaveDraft, loadDraft, clearDraft } from '@/hooks/useUnsavedChanges'
+import { useAuth } from '@/contexts/AuthContext'
 import { ApiError } from '@/api'
 import { SI_UNITS } from '@/utils/Units'
 import { todayISODate } from '@/utils/MonthUtils'
@@ -48,7 +49,10 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
   // typed Kas Bon with it — only for a brand-new one; adding lines to an
   // existing Kas Bon isn't drafted (there's a real record to just reopen).
   type Draft = { date: string; id: string; description: string; lines: DraftLine[] }
-  const draftKey = `kasbon.${kind}.new`
+  const { user } = useAuth()
+  // Scoped to the signed-in account so a shared browser never offers one
+  // account's unsubmitted draft to a different account that signs in later.
+  const draftKey = `kasbon.${user?.id ?? 'anon'}.${kind}.new`
   const restoredRef = useRef(false)
   useEffect(() => {
     if (existing || restoredRef.current) return
@@ -69,7 +73,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
   useAutosaveDraft(draftKey, { date, id, description, lines }, !!existing)
 
   const isDirty = useIsDirty({ date, id, description, lines })
-  const { guardClose } = useUnsavedChanges(isDirty)
+  const { guardClose } = useUnsavedChanges(isDirty, () => clearDraft(draftKey))
   const close = () => guardClose(onClose)
 
   const supplierIds = useMemo(() => new Set(suppliers.map(s => s.id)), [suppliers])

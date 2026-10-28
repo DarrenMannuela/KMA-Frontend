@@ -68,6 +68,34 @@ function zip(files: { name: string; data: Uint8Array }[]): Uint8Array<ArrayBuffe
   return out
 }
 
+// A crafted zip entry can expand up to ~1000:1 under DEFLATE. This caps the
+// total decompressed bytes across every entry in one file, not just one
+// entry, so a zip bomb can't balloon the importing user's own tab into
+// freezing or crashing. 200MB is far beyond any real spreadsheet's XML.
+const MAX_DECOMPRESSED_BYTES = 200 * 1024 * 1024
+
+async function readCapped(stream: ReadableStream<Uint8Array>, budget: { left: number }): Promise<Uint8Array> {
+  const reader = stream.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.length
+      budget.left -= value.length
+      if (budget.left < 0) throw new Error('This Excel file is too large to read (decompressed content exceeds the size limit)')
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  const out = new Uint8Array(total)
+  let at = 0
+  for (const c of chunks) { out.set(c, at); at += c.length }
+  return out
+}
+
 async function unzip(buf: ArrayBuffer, wanted: (name: string) => boolean): Promise<Map<string, string>> {
   const view = new DataView(buf)
   let end = -1
@@ -79,6 +107,7 @@ async function unzip(buf: ArrayBuffer, wanted: (name: string) => boolean): Promi
   let p = view.getUint32(end + 16, true)
   const dec = new TextDecoder()
   const out = new Map<string, string>()
+  const budget = { left: MAX_DECOMPRESSED_BYTES }
   for (let i = 0; i < count; i++) {
     const method = view.getUint16(p + 10, true)
     const size = view.getUint32(p + 20, true)
@@ -95,7 +124,7 @@ async function unzip(buf: ArrayBuffer, wanted: (name: string) => boolean): Promi
       out.set(name, dec.decode(raw))
     } else if (method === 8) {
       const stream = new Blob([raw.slice()]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
-      out.set(name, await new Response(stream).text())
+      out.set(name, dec.decode(await readCapped(stream, budget)))
     } else {
       throw new Error(`Unsupported compression in ${name}`)
     }

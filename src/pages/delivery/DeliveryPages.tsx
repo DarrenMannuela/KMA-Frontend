@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
 import { Truck, Eye, RotateCcw, Printer, Building2, ArrowRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { useTranslation } from 'react-i18next'
@@ -192,21 +193,28 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
       } else {
         create.mutate(payload, {
           onSuccess: async (newDelivery) => {
-            onClose()
             if (type === 'SJ' && form.order_id) {
               const linkedOrder = orders.find(o => o.id === form.order_id)
               const orderInvoices = invoices.filter(inv => inv.order_id === form.order_id)
-              // One at a time, so the documents keep their Kwitansi → Invoice → PO order.
-              for (const doc of suggestSJDocuments(linkedOrder, orderInvoices)) {
-                await createItem.mutateAsync({
-                  delivery_id: newDelivery.id,
-                  item_name: doc.item_name,
-                  size: null,
-                  amount: doc.amount,
-                  box_number: 1,
-                })
+              const docs = suggestSJDocuments(linkedOrder, orderInvoices)
+              let added = 0
+              try {
+                // One at a time, so the documents keep their Kwitansi → Invoice → PO order.
+                for (const doc of docs) {
+                  await createItem.mutateAsync({
+                    delivery_id: newDelivery.id,
+                    item_name: doc.item_name,
+                    size: null,
+                    amount: doc.amount,
+                    box_number: 1,
+                  })
+                  added++
+                }
+              } catch {
+                toast.error(`Only added ${added} of ${docs.length} documents to ${newDelivery.id} — add the rest from its page.`)
               }
             }
+            onClose()
             navigate(`/delivery/${encodeURIComponent(newDelivery.id)}`)
           }
         })

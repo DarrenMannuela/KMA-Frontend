@@ -25,7 +25,12 @@ export function makeCrudHooks<T, C, U>(
       const qc = useQueryClient()
       return useMutation({
         mutationFn: (body: C) => api.create(body),
-        onSuccess: () => { qc.invalidateQueries({ queryKey: [key] }); toast.success(`${label} created`) },
+        // Awaited so isPending (and anything disabled by it) stays true
+        // until the list actually reflects the new record, not just until
+        // the create request itself settles — otherwise a derived value
+        // like "remaining quantity" can still read the pre-create state
+        // when a second submit becomes possible again.
+        onSuccess: async () => { await qc.invalidateQueries({ queryKey: [key] }); toast.success(`${label} created`) },
         onError:   (e: Error) => toast.error(friendlyError(e)),
       })
     },

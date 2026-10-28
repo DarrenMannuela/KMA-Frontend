@@ -20,6 +20,18 @@ export function clearDraft(key: string) {
   } catch { /* private mode / storage unavailable — nothing to clean up */ }
 }
 
+/** Removes every autosaved draft, regardless of key — call on logout so a
+ *  different account signing in on the same browser never gets offered a
+ *  draft that wasn't theirs. */
+export function clearAllDrafts() {
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i)
+      if (k?.startsWith(DRAFT_PREFIX)) localStorage.removeItem(k)
+    }
+  } catch { /* private mode / storage unavailable */ }
+}
+
 /** Saves `value` to localStorage under `key` shortly after it changes
  *  (debounced, so fast typing doesn't write on every keystroke), so a
  *  crashed tab or a closed browser doesn't take unsaved form input with it —
@@ -58,7 +70,7 @@ export function useIsDirty<T>(value: T): boolean {
  *     covers all three the same way.
  *  Pass a form's live `isDirty` (see useIsDirty); re-renders don't re-wire
  *  the listener, so this is cheap to use in every form. */
-export function useUnsavedChanges(isDirty: boolean) {
+export function useUnsavedChanges(isDirty: boolean, onDiscard?: () => void) {
   const isDirtyRef = useRef(isDirty)
   isDirtyRef.current = isDirty
 
@@ -74,6 +86,10 @@ export function useUnsavedChanges(isDirty: boolean) {
 
   const guardClose = (close: () => void) => {
     if (isDirtyRef.current && !window.confirm('Discard unsaved changes?')) return
+    // Every path that discards instead of saving (Cancel, X, Escape,
+    // backdrop — they all funnel through this one guard) must not leave a
+    // stale autosaved draft behind for the next person to be offered.
+    onDiscard?.()
     close()
   }
 
