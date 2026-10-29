@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {
   ArrowDown, ArrowUp, ChevronRight, Download, FileUp, Link2, Plus, Printer, Search, Trash2, X,
-  ArrowRightLeft, Tag, Copy, CheckSquare,
+  ArrowRightLeft, Tag, Copy, CheckSquare, Pencil, Palette,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { EditableCell, formatRp } from '@/components/ui'
@@ -18,7 +18,9 @@ import { SI_UNITS } from '@/utils/Units'
 import { formatDateShort, shortMonthLabel as monthShort, monthLabel } from '@/utils/MonthUtils'
 import { parseDelimited } from '@/utils/tableText'
 import { CATEGORY_COLORS } from '@/constants/supplierCategories'
-import { colorFromText } from '@/data/materialCatalogue'
+import { colorFromText, catalogueForSupplier, materialFromText, materialLabel, colorCodeFromText } from '@/data/materialCatalogue'
+import type { CatalogueMaterial, CatalogueColor } from '@/data/materialCatalogue'
+import { MaterialColorPickerModal } from './MaterialColorPicker'
 import type { FinanceBatch } from '@/types'
 import {
   fromProduction, fromOperation, editBatch, deleteBatch, inPeriod, previousPeriod, searchText, matchesSearch,
@@ -111,6 +113,11 @@ export function Ledger({ kind, initial, title, icon }: {
   const [importGrid, setImportGrid] = useState<Grid | null | undefined>(undefined)
   const [dialog, setDialog] = useState<null | 'move' | 'supplier_id' | 'category' | 'order_id' | 'delete'>(null)
   const [editing, setEditing] = useState<LedgerRow | null>(null)
+  // The desktop table's swatch/palette icon in the Bahan column opens the
+  // colour grid directly on click, rather than needing the row's own name
+  // cell (plain text editing) or the separate Edit-line dialog first —
+  // clicking the swatch itself didn't do anything before this.
+  const [colorPickFor, setColorPickFor] = useState<{ row: LedgerRow; material: CatalogueMaterial; colors: CatalogueColor[]; selectedCode?: string } | null>(null)
   // A single line's delete also confirms first — unlike the bulk one above,
   // it has no selecting-then-clicking-Delete step of its own to catch a
   // mis-click, just the one small icon.
@@ -426,10 +433,31 @@ export function Ledger({ kind, initial, title, icon }: {
           // own name ("… - CODE"), the same code a Kas Bon line's colour
           // picker would have appended — so a known colour reads at a
           // glance on the sheet itself, not only while editing the line.
-          const c = colorFromText(supplierLabel(suppliers, r.supplier_id), r.name)
+          // Clickable (stopping the cell's own click-to-edit-text behavior)
+          // so it opens the colour grid directly — the swatch used to be
+          // purely decorative, which read as broken when clicking it did
+          // nothing. A muted palette icon stands in before any colour has
+          // been picked yet, so a first-time pick doesn't need the Edit-
+          // line dialog either.
+          const catalogue = catalogueForSupplier(supplierLabel(suppliers, r.supplier_id))
+          const catMatch = catalogue ? materialFromText(catalogue, r.name) : undefined
+          const catColors = catalogue && catMatch ? catalogue.colorsFor(catMatch) : []
+          const catCode = catMatch ? colorCodeFromText(catMatch, r.name) : undefined
+          const c = catCode ? catColors.find(x => x.code === catCode) : undefined
           return (
             <span className="inline-flex items-center gap-1.5 min-w-0">
-              {c && <span className="w-2.5 h-2.5 rounded-full ring-1 ring-black/10 shrink-0" style={{ background: c.hex }} title={`${c.code}${c.category ? ` · ${c.category}` : ''}`} />}
+              {catMatch && catColors.length > 0 && (
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); setColorPickFor({ row: r, material: catMatch, colors: catColors, selectedCode: catCode }) }}
+                  className="shrink-0 rounded-full"
+                  title={c ? `${c.code}${c.category ? ` · ${c.category}` : ''} — click to change` : 'Pick a colour'}
+                >
+                  {c
+                    ? <span className="block w-2.5 h-2.5 rounded-full ring-1 ring-black/10 hover:ring-2 hover:ring-navy-400" style={{ background: c.hex }} />
+                    : <Palette size={12} className="text-slate-300 hover:text-navy-600 dark:text-navy-700 dark:hover:text-slate-300" />}
+                </button>
+              )}
               <span className="font-medium text-slate-800 truncate dark:text-slate-200">{r.name}</span>
             </span>
           )
@@ -848,9 +876,18 @@ export function Ledger({ kind, initial, title, icon }: {
                             </td>
                           ))}
                           <td className="border border-slate-200 px-1 text-center dark:border-navy-800">
-                            <button onClick={() => setConfirmDeleteRow(r)} className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-slate-300 hover:text-red-500 dark:text-navy-700" title="Delete line">
-                              <Trash2 size={14} />
-                            </button>
+                            <span className="inline-flex items-center gap-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+                              {/* The desktop table's only route to the full
+                                 line editor — per-cell edits cover most
+                                 changes, but re-picking a catalogue colour
+                                 needs the picker LineEditor carries. */}
+                              <button onClick={() => setEditing(r)} className="text-slate-300 hover:text-navy-700 dark:text-navy-700 dark:hover:text-slate-200" title="Edit line">
+                                <Pencil size={13} />
+                              </button>
+                              <button onClick={() => setConfirmDeleteRow(r)} className="text-slate-300 hover:text-red-500 dark:text-navy-700" title="Delete line">
+                                <Trash2 size={14} />
+                              </button>
+                            </span>
                           </td>
                         </tr>
                       ))}
@@ -920,6 +957,18 @@ export function Ledger({ kind, initial, title, icon }: {
           onApply={(b, l) => apply(b, l, () => setEditing(null))}
           onDelete={() => setConfirmDeleteRow(editing)}
           onClose={() => setEditing(null)} />
+      )}
+      {colorPickFor && (
+        <MaterialColorPickerModal
+          material={colorPickFor.material}
+          colors={colorPickFor.colors}
+          selectedCode={colorPickFor.selectedCode}
+          onPick={code => {
+            editRow(colorPickFor.row, 'name', `${materialLabel(colorPickFor.material)} - ${code}`)
+            setColorPickFor(null)
+          }}
+          onClose={() => setColorPickFor(null)}
+        />
       )}
     </div>
   )

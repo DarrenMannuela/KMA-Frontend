@@ -5,8 +5,10 @@ import { formatRp } from '@/components/ui'
 import { SI_UNITS } from '@/utils/Units'
 import { todayISODate } from '@/utils/MonthUtils'
 import { suggestNextKasBonId } from '@/utils/KasBonId'
+import { catalogueForSupplier, materialFromText, materialLabel, colorCodeFromText } from '@/data/materialCatalogue'
 import type { FinanceBatch, FinanceHeader, Order, Supplier } from '@/types'
-import { editBatch, supplierWithCategory, type EditField, type LedgerRow } from './ledgerModel'
+import { editBatch, supplierLabel, supplierWithCategory, type EditField, type LedgerRow } from './ledgerModel'
+import { MaterialColorPicker } from './MaterialColorPicker'
 
 /** Moves lines to another Kas Bon, or to a new one. */
 export function MoveDialog({ rows, headers, saving, onApply, onClose }: {
@@ -131,6 +133,14 @@ export function LineEditor({ row, suppliers, orders, categories, saving, onApply
   const prod = row.kind === 'production'
   const set = (patch: Partial<typeof v>) => { setV(x => ({ ...x, ...patch })); setError('') }
 
+  // Same catalogue/colour lookup the Kas Bon entry form does per line —
+  // so fixing an existing line's colour (not just picking one for a new
+  // one) has the same picker, not just a plain text field.
+  const catalogue = prod ? catalogueForSupplier(supplierLabel(suppliers, v.supplier_id)) : undefined
+  const catMatch = catalogue ? materialFromText(catalogue, v.name) : undefined
+  const catCode = catalogue && catMatch ? colorCodeFromText(catMatch, v.name) : undefined
+  const catColors = catalogue && catMatch ? catalogue.colorsFor(catMatch) : []
+
   const save = () => {
     const order = v.order_id.trim().toUpperCase()
     if (order && !orders.some(o => o.id === order)) return setError(`There's no order ${order}`)
@@ -172,6 +182,24 @@ export function LineEditor({ row, suppliers, orders, categories, saving, onApply
         {prod ? (
           <>
             <label className="block"><span className="field-label">Bahan</span><input className="field" value={v.name} onChange={e => set({ name: e.target.value.toUpperCase() })} /></label>
+            {catalogue && catMatch && (
+              <div className="-mt-1.5">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {catMatch.composition}
+                  {catMatch.widthCm != null && catMatch.rollYards != null && <> · roll {catMatch.widthCm} cm × {catMatch.rollYards} yd</>}
+                </p>
+                {catColors.length > 0 ? (
+                  <MaterialColorPicker
+                    material={catMatch}
+                    colors={catColors}
+                    selectedCode={catCode}
+                    onPick={code => set({ name: `${materialLabel(catMatch)} - ${code}` })}
+                  />
+                ) : (
+                  <p className="mt-1 text-[11px] text-slate-400 italic dark:text-navy-600">No colour list recorded for this fabric yet — type the colour/code after the name if you know it.</p>
+                )}
+              </div>
+            )}
             <label className="block"><span className="field-label">Supplier</span>
               <select className="field" value={v.supplier_id || ''} onChange={e => set({ supplier_id: Number(e.target.value) })}>
                 <option value="">Supplier…</option>
