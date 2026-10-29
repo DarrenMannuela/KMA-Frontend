@@ -507,7 +507,10 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 dark:text-slate-500">
           Items on this invoice ({items.length})
         </p>
-        <div className="rounded-lg border border-slate-100 overflow-hidden text-xs dark:border-navy-800">
+        {/* overflow-x-auto, not overflow-hidden: a long item name at phone
+           width was pushing Qty/Subtotal past the edge and clipping them
+           off entirely with no way to reach them — scroll instead of hide. */}
+        <div className="rounded-lg border border-slate-100 overflow-x-auto text-xs dark:border-navy-800">
           <table className="w-full">
             <thead className="bg-slate-50 dark:bg-navy-950">
               <tr className="text-xs font-semibold text-slate-400 uppercase tracking-wider dark:text-slate-500">

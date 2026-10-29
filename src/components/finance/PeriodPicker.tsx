@@ -55,21 +55,26 @@ export function PeriodPicker({ value, onChange, modes = ['month', 'year', 'all',
   }
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="inline-flex rounded-lg bg-slate-100 p-0.5 dark:bg-white/10" role="tablist" aria-label={t('finance.periodPicker.periodLabel')}>
+      {/* Full-width with evenly split tabs below `sm:` — auto-width,
+         left-hugging tabs left a ragged strip of empty space to their
+         right once the search bar above forced this onto its own line on
+         a phone; back to the original compact/auto-sized version from
+         `sm:` up, where it sits inline next to other filter controls. */}
+      <div className="flex w-full sm:w-auto sm:inline-flex rounded-lg bg-slate-100 p-0.5 dark:bg-white/10" role="tablist" aria-label={t('finance.periodPicker.periodLabel')}>
         {MODE_KEYS.filter(m => modes.includes(m.mode)).map(m => (
           <button
             key={m.mode}
             role="tab"
             aria-selected={value.mode === m.mode}
             onClick={() => onChange({ ...value, mode: m.mode })}
-            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${value.mode === m.mode ? 'bg-white text-navy-900 shadow-sm dark:bg-navy-900 dark:text-slate-50' : 'text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
+            className={`flex-1 sm:flex-initial px-2.5 py-1 text-xs font-medium rounded-md text-center transition-colors ${value.mode === m.mode ? 'bg-white text-navy-900 shadow-sm dark:bg-navy-900 dark:text-slate-50' : 'text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
           >
             {t(m.labelKey)}
           </button>
         ))}
       </div>
       {(value.mode === 'month' || value.mode === 'year') && (
-        <div className="flex items-center">
+        <div className="flex items-center justify-center w-full sm:w-auto sm:justify-start">
           <button onClick={() => step(-1)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500 dark:hover:bg-white/10 dark:text-slate-400" aria-label={t('finance.periodPicker.previous')}>
             <ChevronLeft size={16} />
           </button>
@@ -80,10 +85,10 @@ export function PeriodPicker({ value, onChange, modes = ['month', 'year', 'all',
         </div>
       )}
       {value.mode === 'range' && (
-        <div className="flex items-center gap-1.5">
-          <input type="date" className="field !py-1 !w-auto text-xs" value={value.from} onChange={e => onChange({ ...value, from: e.target.value })} aria-label={t('finance.periodPicker.from')} />
-          <span className="text-slate-500 text-xs dark:text-slate-400">{t('finance.periodPicker.to')}</span>
-          <input type="date" className="field !py-1 !w-auto text-xs" value={value.to} onChange={e => onChange({ ...value, to: e.target.value })} aria-label={t('finance.periodPicker.toDate')} />
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
+          <input type="date" className="field !py-1 flex-1 sm:flex-initial sm:!w-auto text-xs" value={value.from} onChange={e => onChange({ ...value, from: e.target.value })} aria-label={t('finance.periodPicker.from')} />
+          <span className="text-slate-500 text-xs shrink-0 dark:text-slate-400">{t('finance.periodPicker.to')}</span>
+          <input type="date" className="field !py-1 flex-1 sm:flex-initial sm:!w-auto text-xs" value={value.to} onChange={e => onChange({ ...value, to: e.target.value })} aria-label={t('finance.periodPicker.toDate')} />
         </div>
       )}
     </div>

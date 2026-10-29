@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {
-  ArrowDown, ArrowUp, ChevronRight, Download, FileUp, Link2, Plus, Search, Trash2, X,
+  ArrowDown, ArrowUp, ChevronRight, Download, FileUp, Link2, Plus, Printer, Search, Trash2, X,
   ArrowRightLeft, Tag, Copy, CheckSquare,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -14,9 +15,10 @@ import {
 } from '@/hooks'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { SI_UNITS } from '@/utils/Units'
-import { formatDateShort, shortMonthLabel as monthShort } from '@/utils/MonthUtils'
+import { formatDateShort, shortMonthLabel as monthShort, monthLabel } from '@/utils/MonthUtils'
 import { parseDelimited } from '@/utils/tableText'
 import { CATEGORY_COLORS } from '@/constants/supplierCategories'
+import { colorFromText } from '@/data/materialCatalogue'
 import type { FinanceBatch } from '@/types'
 import {
   fromProduction, fromOperation, editBatch, deleteBatch, inPeriod, previousPeriod, searchText, matchesSearch,
@@ -75,6 +77,7 @@ export function Ledger({ kind, initial, title, icon }: {
 }) {
   const isMobile = useIsMobile()
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const production = productionHooks.useList()
   const operations = operationHooks.useList()
   const source = kind === 'production' ? production : operations
@@ -201,6 +204,42 @@ export function Ledger({ kind, initial, title, icon }: {
     if (filters.groupBy === 'order') list.sort((a, b) => Number(!a.key) - Number(!b.key))
     return list
   }, [sorted, filters.groupBy, kind])
+
+  // Viewing a whole year, grouped by Kas Bon, would otherwise just be every
+  // single Kas Bon of the year listed flat — a lot to scroll past with no
+  // sense of "what month am I looking at". A plain, non-editable divider
+  // row before each month's first Kas Bon — "January 2026 · 01/KB/26 –
+  // 25/KB/26" — gives that same "a few Kas Bon a month" shape the paper/
+  // Excel process already has, without turning this into a second level of
+  // real grouping (collapsing, selection, etc. all stay exactly Kas-Bon-
+  // scoped; this is purely a label inserted between them at render time).
+  const monthDividers = useMemo(() => {
+    const result = new Map<string, string>() // group.key -> label shown above it
+    if (filters.period.mode !== 'year' || filters.groupBy !== 'kasbon') return result
+    const idsByMonth = new Map<string, string[]>()
+    const monthOf = new Map<string, string>()
+    for (const g of groups) {
+      const first = g.rows[0]
+      if (!first) continue
+      const d = new Date(first.date)
+      if (isNaN(d.getTime())) continue
+      const mk = `${d.getFullYear()}-${d.getMonth()}`
+      monthOf.set(g.key, mk)
+      if (!idsByMonth.has(mk)) idsByMonth.set(mk, [])
+      idsByMonth.get(mk)!.push(g.key)
+    }
+    let lastMonth: string | null = null
+    for (const g of groups) {
+      const mk = monthOf.get(g.key)
+      if (mk == null || mk === lastMonth) continue
+      lastMonth = mk
+      const [y, m] = mk.split('-').map(Number)
+      const ids = [...(idsByMonth.get(mk) ?? [])].sort((a, b) => kasBonOrder(a) - kasBonOrder(b))
+      const range = ids.length > 1 ? `${ids[0]} – ${ids[ids.length - 1]}` : ids[0]
+      result.set(g.key, `${monthLabel(y, m)} · ${range}`)
+    }
+    return result
+  }, [groups, filters.period.mode, filters.groupBy])
 
   // What's actually on screen, in order (for range selection and paging).
   const shown = useMemo(() => {
@@ -381,7 +420,20 @@ export function Ledger({ kind, initial, title, icon }: {
       { key: 'description', header: 'Description', width: '11rem', field: 'description' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.description, render: (r: LedgerRow) => <span className="text-slate-600 dark:text-slate-300">{r.description}</span> },
     ] : []),
     ...(kind === 'production' ? [
-      { key: 'name', header: 'Bahan', width: 'auto', sortKey: 'name' as SortKey, field: 'name' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.name, render: (r: LedgerRow) => <span className="font-medium text-slate-800 dark:text-slate-200">{r.name}</span> },
+      { key: 'name', header: 'Bahan', width: 'auto', sortKey: 'name' as SortKey, field: 'name' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.name,
+        render: (r: LedgerRow) => {
+          // A swatch for whatever colour is already baked into this line's
+          // own name ("… - CODE"), the same code a Kas Bon line's colour
+          // picker would have appended — so a known colour reads at a
+          // glance on the sheet itself, not only while editing the line.
+          const c = colorFromText(supplierLabel(suppliers, r.supplier_id), r.name)
+          return (
+            <span className="inline-flex items-center gap-1.5 min-w-0">
+              {c && <span className="w-2.5 h-2.5 rounded-full ring-1 ring-black/10 shrink-0" style={{ background: c.hex }} title={`${c.code}${c.category ? ` · ${c.category}` : ''}`} />}
+              <span className="font-medium text-slate-800 truncate dark:text-slate-200">{r.name}</span>
+            </span>
+          )
+        } },
       { key: 'supplier', header: 'Supplier', width: '11rem', sortKey: 'group' as SortKey, field: 'supplier_id' as EditField, type: 'select' as const, options: supplierOptions, value: (r: LedgerRow) => r.supplier_id,
         render: (r: LedgerRow) => {
           const s = suppliers.find(x => x.id === r.supplier_id)
@@ -412,18 +464,30 @@ export function Ledger({ kind, initial, title, icon }: {
   if (source.isLoading) return <LoadingState label={`Loading the ${kind} lines…`} />
   if (source.isError) return <div className="p-4 md:p-6"><div className="card"><ErrorState what={`the ${kind} lines`} onRetry={() => source.refetch()} /></div></div>
 
+  // The group's running sum: a separate value from the label content below,
+  // since the desktop table now places it in its own cell aligned under a
+  // real column (Total, or Price when there's no Total column) instead of
+  // floating it to the row's far right — which used to land it right under
+  // the Order column header and read as if it were an order-related figure.
+  const groupSum = (rows: LedgerRow[]) => rows.reduce((n, r) => n + r.total, 0)
   const groupHeader = (key: string, rows: LedgerRow[]) => {
-    const sum = rows.reduce((n, r) => n + r.total, 0)
     if (filters.groupBy === 'kasbon') {
       const first = rows[0]
       const others = otherCount.get(key) ?? 0
+      // A Kas Bon with exactly one line has nothing to summarize — the line
+      // right below already says everything this header's total would, so
+      // that figure is left out for it (the caller decides this; see its
+      // own comment). The heading itself stays the same size either way:
+      // the Kas Bon is the real-world container (a physical voucher), and
+      // varying how big its own id looks depending on how many lines happen
+      // to be under it reads as arbitrary, not meaningful, when scanning
+      // several of them in a row.
       return (
         <>
-          <span className="font-mono font-semibold text-navy-900 dark:text-slate-50">{key}</span>
-          <span className="text-slate-500 truncate dark:text-slate-400">{first.description || 'No description'}</span>
+          <span className="font-mono text-base font-bold text-navy-900 dark:text-slate-50">{key}</span>
+          <span className="text-sm text-slate-500 truncate dark:text-slate-400">{first.description || 'No description'}</span>
           <span className="text-slate-500 text-xs whitespace-nowrap dark:text-slate-400">{formatDateShort(first.date)}</span>
           {others > 0 && <span className="badge-slate !text-[10px]" title={`This Kas Bon also has ${others} ${kind === 'production' ? 'operation' : 'production'} line(s)`}>+{others} {kind === 'production' ? 'ops' : 'bahan'}</span>}
-          <span className="ml-auto font-mono tabular-nums text-slate-700 dark:text-slate-300">{formatRp(sum)}</span>
         </>
       )
     }
@@ -434,10 +498,15 @@ export function Ledger({ kind, initial, title, icon }: {
       <>
         <span className="font-semibold text-navy-900 dark:text-slate-50">{label}</span>
         <span className="text-slate-500 text-xs dark:text-slate-400">{rows.length} line{rows.length === 1 ? '' : 's'}</span>
-        <span className="ml-auto font-mono tabular-nums text-slate-700 dark:text-slate-300">{formatRp(sum)}</span>
       </>
     )
   }
+  // Which column the group sum lines up under: Total for production (bahan),
+  // or Price for operations, which has no separate Total column of its own.
+  // 'price' always exists in both kinds' column lists, so this is never -1.
+  const sumColIndex = columns.findIndex(c => c.key === 'total') !== -1
+    ? columns.findIndex(c => c.key === 'total')
+    : columns.findIndex(c => c.key === 'price')
 
   const change = prevTotal ? Math.round(((total - prevTotal) / prevTotal) * 100) : null
   const groupOptions = kind === 'production'
@@ -454,6 +523,21 @@ export function Ledger({ kind, initial, title, icon }: {
           <>
             <button className="btn-secondary btn-sm" onClick={() => setImportGrid(null)} title="Import from Excel or CSV"><FileUp size={14} /><span className="hidden sm:inline">Import</span></button>
             <button className="btn-secondary btn-sm" onClick={() => exportRows(sorted)} disabled={!visible.length} title="Download what's shown as Excel"><Download size={14} /><span className="hidden sm:inline">Export</span></button>
+            <button
+              className="btn-secondary btn-sm"
+              disabled={!visible.length}
+              title="Print this period’s Kas Bon"
+              onClick={() => {
+                const p = filters.period
+                const qs = p.mode === 'range'
+                  ? `mode=range&from=${encodeURIComponent(p.from)}&to=${encodeURIComponent(p.to)}`
+                  : p.mode === 'all' ? 'mode=all'
+                  : `mode=${p.mode}&year=${p.year}&month=${p.month}`
+                navigate(`/finance/kasbon/print?${qs}`)
+              }}
+            >
+              <Printer size={14} /><span className="hidden sm:inline">Print</span>
+            </button>
             <button className="btn-primary btn-sm" onClick={() => setForm({})} title="New Kas Bon (N)"><Plus size={14} /> New Kas Bon</button>
           </>
         }
@@ -473,23 +557,32 @@ export function Ledger({ kind, initial, title, icon }: {
           {filters.q && <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-300" onClick={() => setFilter('q', '')} aria-label="Clear search"><X size={14} /></button>}
         </div>
         <PeriodPicker value={filters.period} onChange={p => setFilter('period', p)} />
-        <select className="field !w-auto !py-1.5 text-xs max-w-[12rem]" value={filters.group} onChange={e => setFilter('group', e.target.value)} aria-label={kind === 'production' ? 'Supplier' : 'Category'}>
-          <option value="">{kind === 'production' ? 'All suppliers' : 'All categories'}</option>
-          {groupOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <select className="field !w-auto !py-1.5 text-xs max-w-[11rem]" value={filters.order} onChange={e => setFilter('order', e.target.value)} aria-label="Order link">
-          <option value="any">Any order</option>
-          <option value="linked">Linked to an order</option>
-          <option value="none">Not linked</option>
-          {[...new Set([...(['any', 'none', 'linked'].includes(filters.order) ? [] : [filters.order]), ...orders.slice(-100).reverse().map(o => o.id)])]
-            .map(id => <option key={id} value={id}>{orderLabel(orders, id)}</option>)}
-        </select>
-        <select className="field !w-auto !py-1.5 text-xs" value={filters.groupBy} onChange={e => setFilter('groupBy', e.target.value as GroupBy)} aria-label="Group by">
-          <option value="kasbon">Group: Kas Bon</option>
-          <option value="group">Group: {kind === 'production' ? 'supplier' : 'category'}</option>
-          <option value="order">Group: order</option>
-          <option value="none">No groups</option>
-        </select>
+        {/* A deliberate 2-up grid below `sm:`, Group-by spanning the full
+           second row — the three selects used to each land alone on their
+           own full-width-looking line (auto-width inside a wrapped flex
+           row, with nothing beside them), every one a different width with
+           empty space trailing it. `sm:contents` drops this wrapper from
+           layout entirely from `sm:` up, so desktop is exactly as before:
+           each select flows inline in the filter bar's own flex-wrap row. */}
+        <div className="grid grid-cols-2 gap-2 w-full sm:contents">
+          <select className="field !w-full sm:!w-auto !py-1.5 text-xs sm:max-w-[12rem]" value={filters.group} onChange={e => setFilter('group', e.target.value)} aria-label={kind === 'production' ? 'Supplier' : 'Category'}>
+            <option value="">{kind === 'production' ? 'All suppliers' : 'All categories'}</option>
+            {groupOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <select className="field !w-full sm:!w-auto !py-1.5 text-xs sm:max-w-[11rem]" value={filters.order} onChange={e => setFilter('order', e.target.value)} aria-label="Order link">
+            <option value="any">Any order</option>
+            <option value="linked">Linked to an order</option>
+            <option value="none">Not linked</option>
+            {[...new Set([...(['any', 'none', 'linked'].includes(filters.order) ? [] : [filters.order]), ...orders.slice(-100).reverse().map(o => o.id)])]
+              .map(id => <option key={id} value={id}>{orderLabel(orders, id)}</option>)}
+          </select>
+          <select className="field !w-full sm:!w-auto !py-1.5 text-xs col-span-2 sm:col-span-1" value={filters.groupBy} onChange={e => setFilter('groupBy', e.target.value as GroupBy)} aria-label="Group by">
+            <option value="kasbon">Group: Kas Bon</option>
+            <option value="group">Group: {kind === 'production' ? 'supplier' : 'category'}</option>
+            <option value="order">Group: order</option>
+            <option value="none">No groups</option>
+          </select>
+        </div>
       </div>
 
       {/* Summary: the total, how it compares, and where it went */}
@@ -558,11 +651,20 @@ export function Ledger({ kind, initial, title, icon }: {
               <CheckSquare size={14} /> {selectMode ? 'Done' : 'Select'}
             </button>
           </div>
-          {shown.map(({ group, rows }) => (
-            <div key={group.key || 'all'} className="card overflow-hidden">
+          {shown.map(({ group, rows }) => {
+            const solo = filters.groupBy === 'kasbon' && group.rows.length === 1
+            const monthDivider = monthDividers.get(group.key)
+            return (
+            <div key={group.key || 'all'}>
+              {monthDivider && (
+                <div className="px-1 py-2 text-lg text-center font-bold uppercase tracking-wide text-navy-900 bg-gold-400/15 border-b-2 border-gold-500 dark:text-gold-300 dark:bg-gold-500/10 dark:border-gold-500/40">{monthDivider}</div>
+              )}
+              <div className="card overflow-hidden">
               {filters.groupBy !== 'none' && (
                 <button className="w-full flex flex-wrap items-center gap-x-2 gap-y-0.5 px-4 py-2.5 bg-slate-50 text-sm text-left dark:bg-navy-950" onClick={() => setCollapsed(c => { const n = new Set(c); if (n.has(group.key)) n.delete(group.key); else n.add(group.key); return n })}>
                   {groupHeader(group.key, group.rows)}
+                  {/* Solo line's own card row already shows this total below. */}
+                  {!solo && <span className="ml-auto font-mono tabular-nums text-xs text-slate-400 dark:text-slate-500">{formatRp(groupSum(group.rows))}</span>}
                 </button>
               )}
               <ul className="divide-y divide-slate-100 dark:divide-navy-800">
@@ -574,7 +676,13 @@ export function Ledger({ kind, initial, title, icon }: {
                     >
                       {selectMode && <input type="checkbox" readOnly checked={selected.has(r.id)} className="mt-1" />}
                       <span className="flex-1 min-w-0">
-                        <span className="block font-medium text-slate-800 truncate dark:text-slate-200">{r.name || r.category}</span>
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          {kind === 'production' && (() => {
+                            const c = colorFromText(supplierLabel(suppliers, r.supplier_id), r.name)
+                            return c && <span className="w-2.5 h-2.5 rounded-full ring-1 ring-black/10 shrink-0" style={{ background: c.hex }} />
+                          })()}
+                          <span className="block font-medium text-slate-800 truncate dark:text-slate-200">{r.name || r.category}</span>
+                        </span>
                         <span className="block text-xs text-slate-500 truncate dark:text-slate-400">
                           {kind === 'production' ? `${supplierLabel(suppliers, r.supplier_id)} · ${r.qty.toLocaleString('id-ID')} ${r.unit} × ${formatRp(r.price)}` : r.category}
                           {!byKasBon && ` · ${r.header_id} · ${formatDateShort(r.date)}`}
@@ -589,8 +697,10 @@ export function Ledger({ kind, initial, title, icon }: {
                   <li><button className="w-full px-4 py-2 text-xs text-navy-600 text-left dark:text-navy-300" onClick={() => setForm({ headerId: group.key })}><Plus size={12} className="inline" /> Add lines</button></li>
                 )}
               </ul>
+              </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       ) : (
         <div className="card overflow-hidden">
@@ -607,39 +717,66 @@ export function Ledger({ kind, initial, title, icon }: {
                 {columns.map(c => <col key={c.key} style={c.width === 'auto' ? { minWidth: '12rem' } : { width: c.width }} />)}
                 <col style={{ width: '2.25rem' }} />
               </colgroup>
-              <thead className="bg-slate-50 sticky top-0 z-20 shadow-[0_1px_0_#f1f5f9] dark:bg-navy-950 dark:shadow-[0_1px_0_#0a0f1e]">
+              {/* A real spreadsheet grid: every header and data cell gets its own
+                 border, so border-collapse draws one continuous gridline between
+                 them both across and down — columns read as columns, not just
+                 rows read as rows. */}
+              <thead className="bg-slate-200 sticky top-0 z-20 shadow-[0_2px_0_#94a3b8] dark:bg-navy-900 dark:shadow-[0_2px_0_#3e4f8f]">
                 <tr>
-                  <th className="px-2 py-2.5">
+                  <th className="border border-slate-300 px-2 py-1.5 dark:border-navy-700">
                     <input type="checkbox" aria-label="Select everything shown" checked={allVisibleSelected} onChange={e => setMany(visible, e.target.checked)} />
                   </th>
                   {columns.map(c => (
-                    <th key={c.key} className={`px-2 py-2.5 overflow-hidden whitespace-nowrap text-ellipsis text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 ${c.align === 'right' ? 'text-right' : 'text-left'}`}>
+                    <th key={c.key} className={`border border-slate-300 px-2 py-1.5 overflow-hidden whitespace-nowrap text-ellipsis text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:border-navy-700 dark:text-slate-300 ${c.align === 'right' ? 'text-right' : 'text-left'}`}>
                       {c.sortKey ? (
-                        <button className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-slate-700 dark:hover:text-slate-200 ${sort.key === c.sortKey ? 'text-navy-700 dark:text-slate-200' : ''}`} onClick={() => sortBy(c.sortKey)}>
+                        <button className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-slate-800 dark:hover:text-slate-100 ${sort.key === c.sortKey ? 'text-navy-700 dark:text-slate-100' : ''}`} onClick={() => sortBy(c.sortKey)}>
                           {c.header}
                           {sort.key === c.sortKey && (sort.dir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
                         </button>
                       ) : c.header}
                     </th>
                   ))}
-                  <th />
+                  <th className="border border-slate-300 dark:border-navy-700" />
                 </tr>
               </thead>
               <tbody>
                 {shown.map(({ group, rows }) => {
                   const isCollapsed = collapsed.has(group.key)
                   const allIn = group.rows.every(r => selected.has(r.id))
+                  // See groupHeader's own comment: a single-line Kas Bon has
+                  // nothing left to summarize, so its total is left out below
+                  // — but every group header row is otherwise the same size
+                  // and weight, solo or not, so Kas Bons don't look randomly
+                  // bigger or smaller than each other while scanning down.
+                  const solo = filters.groupBy === 'kasbon' && group.rows.length === 1
+                  // Every row's cells are individually bordered (the grid itself
+                  // never breaks), with one extra: a bolder bottom edge marking
+                  // "a new Kas Bon starts here" the way a spreadsheet's own
+                  // subtotal-row rule would.
+                  const cellBorder = 'border border-slate-200 border-b-2 border-b-slate-300 dark:border-navy-800 dark:border-b-navy-600'
+                  const monthDivider = monthDividers.get(group.key)
                   return (
                     <React.Fragment key={group.key || 'all'}>
+                      {monthDivider && (
+                        <tr>
+                          <td colSpan={columns.length + 2} className="border border-slate-200 border-b-2 border-b-gold-500 dark:border-navy-800 dark:border-b-gold-500/40 bg-gold-400/15 px-3 py-3 text-lg text-center font-bold uppercase tracking-wide text-navy-900 dark:bg-gold-500/10 dark:text-gold-300">
+                            {monthDivider}
+                          </td>
+                        </tr>
+                      )}
                       {filters.groupBy !== 'none' && (
-                        <tr className="bg-slate-50/60 border-b border-slate-100 group/gh dark:bg-navy-950/60 dark:border-navy-800">
-                          <td className="px-2 py-2.5">
+                        <tr className="bg-slate-100 group/gh dark:bg-navy-900">
+                          <td className={`${cellBorder} px-2 py-3`}>
                             <input
                               type="checkbox" aria-label="Select this group" checked={allIn} onChange={e => setMany(group.rows, e.target.checked)}
                               className={`block transition-opacity ${allIn ? '' : 'opacity-0 group-hover/gh:opacity-100 focus:opacity-100'}`}
                             />
                           </td>
-                          <td colSpan={columns.length} className="px-2 py-2.5">
+                          {/* Split across real column boundaries (not one wide flex cell)
+                             so the group sum lines up under Total/Price instead of
+                             floating to the row's far right, where it used to sit
+                             right under the Order column and read as an order figure. */}
+                          <td colSpan={sumColIndex} className={`${cellBorder} px-2 py-3`}>
                             <div className="flex items-center gap-2.5 text-sm min-w-0">
                               <button onClick={() => setCollapsed(c => { const n = new Set(c); if (n.has(group.key)) n.delete(group.key); else n.add(group.key); return n })} className="text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200" aria-label={isCollapsed ? 'Expand' : 'Collapse'}>
                                 <ChevronRight size={14} className={`transition-transform ${isCollapsed ? '' : 'rotate-90'}`} />
@@ -647,25 +784,44 @@ export function Ledger({ kind, initial, title, icon }: {
                               {groupHeader(group.key, group.rows)}
                             </div>
                           </td>
-                          <td className="px-1 text-center">
+                          {/* Quiet and small on purpose: a summary aside, not a second
+                             figure competing with the bold Total every data row already
+                             carries — that's the one number this table trains the eye to
+                             look for. A solo line's own Total cell, right below, already
+                             shows this number, so it's left out of its header entirely. */}
+                          <td className={`${cellBorder} px-2 py-3 text-right font-mono tabular-nums whitespace-nowrap text-xs text-slate-400 dark:text-slate-500`}>
+                            {!solo && formatRp(groupSum(group.rows))}
+                          </td>
+                          {sumColIndex < columns.length - 1 && (
+                            <td colSpan={columns.length - sumColIndex - 1} className={cellBorder} />
+                          )}
+                          <td className={`${cellBorder} px-1 text-center`}>
                             {byKasBon && (
-                              <button className="opacity-0 group-hover/gh:opacity-100 text-slate-500 hover:text-navy-700 dark:text-slate-400" title={`Add lines to ${group.key}`} onClick={() => setForm({ headerId: group.key })}>
-                                <Plus size={14} />
-                              </button>
+                              <span className="inline-flex items-center gap-1.5">
+                                <button className="opacity-0 group-hover/gh:opacity-100 text-slate-500 hover:text-navy-700 dark:text-slate-400" title={`Add lines to ${group.key}`} onClick={() => setForm({ headerId: group.key })}>
+                                  <Plus size={14} />
+                                </button>
+                                <button className="opacity-0 group-hover/gh:opacity-100 text-slate-500 hover:text-navy-700 dark:text-slate-400" title={`Print ${group.key}`} onClick={() => navigate(`/finance/kasbon/print?id=${encodeURIComponent(group.key)}`)}>
+                                  <Printer size={14} />
+                                </button>
+                              </span>
                             )}
                           </td>
                         </tr>
                       )}
-                      {rows.map((r, ri) => (
-                        <tr key={r.id} className={`border-b border-slate-50 group dark:border-navy-800 ${selected.has(r.id) ? 'bg-navy-50/70' : ri % 2 ? 'bg-slate-50/40 hover:bg-slate-100/70 dark:bg-white/5 dark:hover:bg-white/10' : 'hover:bg-slate-50/60 dark:hover:bg-white/5'}`}>
-                          <td className="px-2 py-2">
+                      {/* Plain white + gridlines, no zebra striping — a spreadsheet's
+                         own default look; the grid lines alone carry row/column
+                         separation, the way they do in an actual sheet. */}
+                      {rows.map(r => (
+                        <tr key={r.id} className={`group ${selected.has(r.id) ? 'bg-navy-50' : 'bg-white hover:bg-slate-50 dark:bg-transparent dark:hover:bg-white/5'}`}>
+                          <td className="border border-slate-200 px-2 py-2 dark:border-navy-800">
                             <input
                               type="checkbox" aria-label="Select line" checked={selected.has(r.id)} onChange={() => undefined} onClick={e => toggle(r.id, e.shiftKey)}
                               className={`block transition-opacity ${selected.has(r.id) ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
                             />
                           </td>
                           {columns.map((c, ci) => (
-                            <td key={c.key} className={`px-1 py-0.5 truncate ${c.align === 'right' ? 'text-right' : ''}`}>
+                            <td key={c.key} className={`border border-slate-200 px-1 py-0.5 truncate dark:border-navy-800 ${c.align === 'right' ? 'text-right' : ''}`}>
                               {c.field ? (
                                 <EditableCell
                                   value={c.value(r)}
@@ -691,7 +847,7 @@ export function Ledger({ kind, initial, title, icon }: {
                               )}
                             </td>
                           ))}
-                          <td className="px-1 text-center">
+                          <td className="border border-slate-200 px-1 text-center dark:border-navy-800">
                             <button onClick={() => setConfirmDeleteRow(r)} className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-slate-300 hover:text-red-500 dark:text-navy-700" title="Delete line">
                               <Trash2 size={14} />
                             </button>
@@ -704,12 +860,12 @@ export function Ledger({ kind, initial, title, icon }: {
               </tbody>
             </table>
             {flatShown.length < visible.length && (
-              <div className="p-3 text-center border-t border-slate-100 dark:border-navy-800">
+              <div className="p-3 text-center border-t border-slate-200 dark:border-navy-700">
                 <button className="btn-secondary btn-sm" onClick={() => setLimit(l => l + PAGE)}>Show more ({visible.length - flatShown.length} left)</button>
               </div>
             )}
           </div>
-          <div className="flex items-center gap-4 px-4 py-2 border-t border-slate-100 bg-slate-50/60 text-xs text-slate-500 dark:border-navy-800 dark:bg-navy-950/60 dark:text-slate-400">
+          <div className="flex items-center gap-4 px-4 py-2 border-t-2 border-slate-300 bg-slate-100 text-xs text-slate-500 dark:border-navy-600 dark:bg-navy-900 dark:text-slate-400">
             <span>Click a cell to edit · arrows move · shift-click selects a range · Ctrl+V pastes rows from Excel · Ctrl+Z undoes</span>
             <span className="ml-auto font-mono text-sm text-navy-900 font-semibold tabular-nums dark:text-slate-50">{formatRp(total)}</span>
           </div>
@@ -718,7 +874,7 @@ export function Ledger({ kind, initial, title, icon }: {
 
       {/* Bulk actions */}
       {selected.size > 0 && (
-        <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-3 pointer-events-none md:left-[240px]" data-bulk-bar>
+        <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-3 pointer-events-none dock:left-[240px]" data-bulk-bar>
           <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 rounded-2xl bg-navy-900 text-white shadow-2xl px-3 py-2 max-w-full">
             <span className="px-2 text-sm"><span className="font-semibold">{selected.size}</span> selected · <span className="font-mono">{formatRp(selectedTotal)}</span></span>
             <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" onClick={() => setDialog('move')}><ArrowRightLeft size={13} /> Move</button>

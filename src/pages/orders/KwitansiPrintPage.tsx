@@ -8,6 +8,7 @@ import { format } from 'date-fns'
 import { invoicesApi, ordersApi } from '@/api'
 import { invoiceHooks } from '@/hooks'
 import { useScaleToFit } from '@/hooks/useScaleToFit'
+import { usePrintLightBody } from '@/hooks/usePrintLightBody'
 import { useRekening } from '@/utils/RekeningStore'
 import { numberToWordsID } from '@/utils/NumberToWordsID'
 
@@ -144,6 +145,7 @@ function EditableHeaderField({ label, value, onChange, placeholder }: {
 
 // The receipt for an invoice, made from the invoice and order; only printed.
 export function KwitansiPrintPage() {
+  usePrintLightBody()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const invoiceId = decodeURIComponent(id ?? '')
@@ -181,6 +183,10 @@ export function KwitansiPrintPage() {
   // actually renders in, same reasoning as EditableHeaderField's bold
   // measurement above.
   const signerWidth = useAutoWidthInput(signerName || 'NAMA PENERIMA', '600 13px Arial')
+  // The signer's job title, under their name — same idea as the invoice
+  // print's signatoryTitle, missing here until now.
+  const [signerTitle, setSignerTitle] = useState('')
+  const signerTitleWidth = useAutoWidthInput(signerTitle || 'JABATAN', '13px Arial')
   const [purposeText, setPurposeText] = useState('')
   const [purposeTouched, setPurposeTouched] = useState(false)
   useEffect(() => {
@@ -189,6 +195,45 @@ export function KwitansiPrintPage() {
     }
   }, [order, invoice, purposeTouched])
   const purposeWidth = useAutoWidthInput(purposeText || 'PEMESANAN SERAGAM …', '13px Arial')
+
+  // "Sudah terima dari" defaults to the invoice's client, editable for this
+  // printed copy only — e.g. when the actual payer named on the receipt
+  // differs slightly from the invoice's own client name.
+  const [receivedFrom, setReceivedFrom] = useState('')
+  const [receivedFromTouched, setReceivedFromTouched] = useState(false)
+  useEffect(() => {
+    if (!receivedFromTouched && invoice) setReceivedFrom(invoice.kepada_yth)
+  }, [invoice, receivedFromTouched])
+  const receivedFromWidth = useAutoWidthInput(receivedFrom, '13px Arial', 120)
+
+  // The auto-generated terbilang (amount in words) is editable too, for the
+  // rare case it needs a human correction — same "trust it until touched"
+  // pattern as the fields above.
+  const [amountWords, setAmountWords] = useState('')
+  const [amountWordsTouched, setAmountWordsTouched] = useState(false)
+  useEffect(() => {
+    if (amountWordsTouched || !invoice) return
+    const amt = invoice.total || invoiceAmount(invoice, allInvoices)
+    setAmountWords(numberToWordsID(amt).toUpperCase())
+  }, [invoice, allInvoices, amountWordsTouched])
+  // A plain CSS width:100% doesn't resolve sensibly on a child of the
+  // InfoRow's inline <span> (no block-level containing block to measure
+  // against), so — same as every other field on this page — this is sized
+  // by measuring the actual text instead.
+  const amountWordsWidth = useAutoWidthInput(amountWords, '13px Arial', 300)
+
+  // Extra TERLAMPIR (attachment) lines, on top of the fixed ones below —
+  // for anything attached to this particular receipt that isn't already
+  // covered (e.g. a packing list, a signed PO copy). Print-only for this
+  // copy, nothing saved.
+  const [extraTerlampir, setExtraTerlampir] = useState<string[]>([])
+  const updateTerlampir = (idx: number, value: string) => {
+    setExtraTerlampir(prev => prev.map((t, i) => (i === idx ? value : t)))
+  }
+  const removeTerlampir = (idx: number) => {
+    setExtraTerlampir(prev => prev.filter((_, i) => i !== idx))
+  }
+  const addTerlampir = () => setExtraTerlampir(prev => [...prev, ''])
 
   if (isLoading) return <div className="p-8 text-slate-400">Loading…</div>
   // A failed fetch shows Retry rather than "not found" or a wrong payment status.
@@ -291,8 +336,22 @@ export function KwitansiPrintPage() {
           {/* Bordered body */}
           <div className="border-2 border-black">
             <div className="px-4 py-3.5 border-b border-black">
-              <InfoRow label="Sudah terima dari">{invoice.kepada_yth}</InfoRow>
-              <InfoRow label="Banyaknya Uang">{numberToWordsID(printAmount).toUpperCase()}</InfoRow>
+              <InfoRow label="Sudah terima dari">
+                <input
+                  value={receivedFrom}
+                  onChange={e => { setReceivedFromTouched(true); setReceivedFrom(e.target.value.toUpperCase()) }}
+                  style={{ font: 'inherit', width: receivedFromWidth }}
+                  className="border-none bg-transparent p-0"
+                />
+              </InfoRow>
+              <InfoRow label="Banyaknya Uang">
+                <input
+                  value={amountWords}
+                  onChange={e => { setAmountWordsTouched(true); setAmountWords(e.target.value.toUpperCase()) }}
+                  style={{ font: 'inherit', width: amountWordsWidth }}
+                  className="border-none bg-transparent p-0"
+                />
+              </InfoRow>
             </div>
 
             <div className="px-4 py-3.5 border-b border-black min-h-[70px]">
@@ -327,7 +386,36 @@ export function KwitansiPrintPage() {
                   SISA YANG HARUS DI LUNASI : Rp {Math.round(sisaAmount).toLocaleString('id-ID')}
                   {sisaDueLabel ? ` (${sisaDueLabel})` : ''}
                 </li>
+                {extraTerlampir.map((line, idx) => (
+                  // Empty stays editable on screen but doesn't print as a bare bullet.
+                  <li key={idx} className={`flex items-center gap-1.5 ${line.trim() === '' ? 'print:hidden' : ''}`}>
+                    <input
+                      value={line}
+                      onChange={e => updateTerlampir(idx, e.target.value.toUpperCase())}
+                      placeholder="Attachment…"
+                      style={{ border: 'none', background: 'transparent', font: 'inherit', width: '100%', padding: 0 }}
+                      className="placeholder:font-normal placeholder:text-slate-300"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeTerlampir(idx)}
+                      className="print:hidden"
+                      title="Remove this line"
+                      style={{ flexShrink: 0, width: '16px', height: '16px', lineHeight: '16px', textAlign: 'center', borderRadius: '999px', border: 'none', background: '#e2e8f0', color: '#64748b', fontSize: '11px', cursor: 'pointer' }}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
               </ul>
+              <button
+                type="button"
+                onClick={addTerlampir}
+                className="print:hidden btn-secondary flex items-center gap-1.5"
+                style={{ marginTop: '6px', fontSize: '11px', padding: '3px 8px' }}
+              >
+                + Add attachment line
+              </button>
             </div>
 
             <div className="p-4">
@@ -347,14 +435,21 @@ export function KwitansiPrintPage() {
                 <RekeningField label="NO REK" value={rekening.accountNumber} onChange={v => setRekening({ accountNumber: v })} />
               </div>
 
-              {/* The signer's name, right-aligned below the bank block with room to sign. */}
-              <div className="flex justify-end mt-8">
+              {/* The signer's name and title, right-aligned below the bank block with room to sign. */}
+              <div className="flex flex-col items-end mt-8">
                 <input
                   value={signerName}
                   onChange={e => setSignerName(e.target.value.toUpperCase())}
                   placeholder="NAMA PENERIMA"
                   style={{ font: 'inherit', width: signerWidth }}
                   className="border-none bg-transparent p-0 text-center font-semibold placeholder:font-normal placeholder:text-slate-300"
+                />
+                <input
+                  value={signerTitle}
+                  onChange={e => setSignerTitle(e.target.value.toUpperCase())}
+                  placeholder="JABATAN"
+                  style={{ font: 'inherit', width: signerTitleWidth }}
+                  className="border-none bg-transparent p-0 text-center text-xs text-slate-500 mt-0.5 placeholder:text-slate-300"
                 />
               </div>
             </div>

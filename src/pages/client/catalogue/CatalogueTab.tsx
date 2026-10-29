@@ -320,7 +320,12 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
                             ) : <span className="text-slate-300 dark:text-navy-700">not ordered yet</span>}
                           </td>
                           <td className="pr-3">
-                            <button className="btn-ghost !p-1.5 opacity-0 group-hover:opacity-100 focus:opacity-100" title="Delete"
+                            {/* opacity-60 not opacity-0: a hover-only reveal has no
+                               touch equivalent, so this would be invisible (and so
+                               undiscoverable) on a phone, where deleting a single row
+                               has no other path — the bulk bar below only appears
+                               once something is already selected. */}
+                            <button className="btn-ghost !p-2 opacity-60 group-hover:opacity-100 focus:opacity-100" title="Delete"
                               onClick={() => setDialog({ kind: 'delete', items: [item] })}>
                               <Trash2 size={13} />
                             </button>
@@ -362,7 +367,7 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
       )}
 
       {selected.size > 0 && (
-        <div className="fixed bottom-4 left-4 right-4 md:left-[256px] z-40 flex justify-center pointer-events-none">
+        <div className="fixed bottom-4 left-4 right-4 dock:left-[256px] z-40 flex justify-center pointer-events-none">
           <div className="pointer-events-auto flex flex-wrap items-center gap-2 bg-navy-900 text-white rounded-2xl shadow-xl px-4 py-2.5 text-sm">
             <span className="font-medium">{selected.size} selected</span>
             <button className="btn-gold btn-sm" onClick={() => setDialog({ kind: 'raise', items: pickedItems })}>Raise prices</button>

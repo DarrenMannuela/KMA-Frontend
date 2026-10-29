@@ -8,6 +8,7 @@
     "saving": "Saving…",
     "retry": "Retry",
     "showMore": "Show more",
+    "inlineEditHint": "Click a cell to edit · arrows move between cells",
     "back": "Back",
     "edit": "Edit",
     "actions": "Actions",
@@ -145,6 +146,8 @@
     "createOrder": "Create Order",
     "idTakenRetry": "That order number was just taken by someone else — grabbing you a new one.",
     "createFailed": "Could not create the order — please try again.",
+    "companyRequired": "Company is required",
+    "dateRequired": "Date is required",
     "columns": {
       "orderId": "Order ID",
       "company": "Company",

@@ -1,10 +1,10 @@
 import { PageHeader, ErrorState } from './Page'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Plus, Pencil, Trash2, Search, ChevronDown } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Modal } from '@/components/ui/Modal'
-import { ConfirmDialog, Spinner, EmptyState } from '@/components/ui'
+import { ConfirmDialog, EditableCell, Spinner, EmptyState } from '@/components/ui'
 import { useIsMobile } from '@/hooks/useIsMobile'
 
 interface Column<T> {
@@ -21,6 +21,19 @@ interface Column<T> {
    *  aren't needed for an at-a-glance read of the row; leave the rest
    *  (including columns with neither flag) visible as before. */
   secondary?: boolean
+  /** Desktop table only: click the cell (or arrow onto it and type) to edit
+   *  in place, like the finance Ledger, instead of needing the Add/Edit
+   *  modal for this field. Needs `onCellEdit` on CrudPage itself — a column
+   *  with `edit` set but no `onCellEdit` passed just renders normally. */
+  edit?: {
+    type?: 'text' | 'number' | 'select' | 'date'
+    options?: { value: string | number; label: string }[]
+    uppercase?: boolean
+    suggestions?: string[]
+    /** The value shown/edited, if not simply row[key] (e.g. an ISO date
+     *  string trimmed to the yyyy-mm-dd a date input needs). */
+    value?: (row: T) => string | number | null
+  }
 }
 
 interface CrudPageProps<T extends { id: string | number }> {
@@ -44,12 +57,16 @@ interface CrudPageProps<T extends { id: string | number }> {
   // Extra controls next to the search box (e.g. Invoices' Paid/Unpaid toggle).
   onAddClick?: () => void
   filterBar?: React.ReactNode
+  /** Commits an inline edit from a column's `edit` config (see Column.edit)
+   *  — e.g. `(row, key, value) => update.mutate({ id: row.id, body: { [key]: value } })`.
+   *  Omit to keep every column read-only regardless of their `edit` config. */
+  onCellEdit?: (row: T, key: string, value: unknown) => void
 }
 
 export function CrudPage<T extends { id: string | number }>({
   title, icon: Icon, data = [], isLoading, isError = false, onRetry,
   columns, formTitle, renderForm, onDelete,
-  deleteMessage, searchKeys = [], rowActions, onEditClick, onAddClick, filterBar,
+  deleteMessage, searchKeys = [], rowActions, onEditClick, onAddClick, filterBar, onCellEdit,
 }: CrudPageProps<T>) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<T | null>(null)
@@ -83,6 +100,25 @@ export function CrudPage<T extends { id: string | number }>({
   const isMobile = useIsMobile()
   const titleKey = columns.find(c => c.primary)?.key ?? columns[0]?.key
   const { t } = useTranslation()
+
+  // ── Inline-edit cell navigation (arrow keys between cells, like Excel) ───
+  // Only wired up when a page opts in via onCellEdit — otherwise the table
+  // renders exactly as it always has.
+  const cellRefs = useRef(new Map<string, HTMLElement>())
+  const setCellRef = (key: string) => (el: HTMLElement | null) => {
+    if (el) cellRefs.current.set(key, el)
+    else cellRefs.current.delete(key)
+  }
+  const moveFocus = (rowId: string | number, col: number, dRow: number, dCol: number) => {
+    const i = filtered.findIndex(r => r.id === rowId)
+    if (i < 0) return
+    const row = filtered[Math.min(Math.max(i + dRow, 0), filtered.length - 1)]
+    const c = Math.min(Math.max(col + dCol, 0), columns.length - 1)
+    if (row) cellRefs.current.get(`${row.id}:${c}`)?.focus()
+  }
+  const arrowDeltas: Record<string, [number, number]> = {
+    ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1],
+  }
 
   return (
     <div className="p-4 md:p-6">
@@ -199,9 +235,35 @@ export function CrudPage<T extends { id: string | number }>({
           <tbody>
             {filtered.map(row => (
               <tr key={row.id}>
-                {columns.map(c => (
-                  <td key={String(c.key)}>
-                    {c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—')}
+                {columns.map((c, ci) => (
+                  <td key={String(c.key)} className={onCellEdit ? 'px-1 py-0.5' : undefined}>
+                    {!onCellEdit ? (
+                      c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—')
+                    ) : c.edit ? (
+                      <EditableCell
+                        value={c.edit.value ? c.edit.value(row) : (row as Record<string, unknown>)[c.key as string]}
+                        type={c.edit.type}
+                        options={c.edit.options}
+                        uppercase={c.edit.uppercase}
+                        suggestions={c.edit.suggestions}
+                        format={() => (c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—'))}
+                        onSave={v => onCellEdit(row, c.key as string, v)}
+                        cellRef={setCellRef(`${row.id}:${ci}`)}
+                        onNavigate={(dr, dc) => moveFocus(row.id, ci, dr, dc)}
+                      />
+                    ) : (
+                      <div
+                        ref={setCellRef(`${row.id}:${ci}`)}
+                        tabIndex={0}
+                        className="px-2.5 py-1.5 min-h-[2rem] flex items-center focus:outline-none focus:bg-navy-50/50 dark:focus:bg-navy-800/50 rounded-sm"
+                        onKeyDown={e => {
+                          const d = arrowDeltas[e.key]
+                          if (d) { e.preventDefault(); moveFocus(row.id, ci, d[0], d[1]) }
+                        }}
+                      >
+                        {c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—')}
+                      </div>
+                    )}
                   </td>
                 ))}
                 <td className="text-right">
@@ -223,6 +285,11 @@ export function CrudPage<T extends { id: string | number }>({
             ))}
           </tbody>
         </table>
+          </div>
+        )}
+        {onCellEdit && !isMobile && filtered.length > 0 && (
+          <div className="px-4 py-2 border-t border-slate-100 bg-slate-50/60 text-xs text-slate-500 dark:border-navy-800 dark:bg-navy-950/60 dark:text-slate-400">
+            {t('common.inlineEditHint')}
           </div>
         )}
       </div>

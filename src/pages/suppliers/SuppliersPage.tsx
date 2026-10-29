@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import toast from 'react-hot-toast'
 import { Users } from 'lucide-react'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField, UppercaseField } from '@/components/ui'
@@ -66,6 +67,7 @@ function SupplierForm({ editing, onClose }: { editing: Supplier | null; onClose:
 export function SuppliersPage() {
   const { data, isLoading, isError, refetch } = supplierHooks.useList()
   const del = supplierHooks.useDelete()
+  const update = supplierHooks.useUpdate()
 
   return (
     <CrudPage<Supplier>
@@ -78,8 +80,10 @@ export function SuppliersPage() {
       searchKeys={['supplier_name', 'supplier_category']}
       columns={[
         { header: 'ID',       key: 'id' },
-        { header: 'Name',     key: 'supplier_name',     primary: true, render: r => <span className="font-medium text-navy-900 dark:text-slate-100">{r.supplier_name}</span> },
-        { header: 'Category', key: 'supplier_category', render: r => (
+        { header: 'Name',     key: 'supplier_name',     primary: true, edit: { type: 'text', uppercase: true },
+          render: r => <span className="font-medium text-navy-900 dark:text-slate-100">{r.supplier_name}</span> },
+        { header: 'Category', key: 'supplier_category', edit: { type: 'select', options: SUPPLIER_CATEGORIES.map(c => ({ value: c, label: CATEGORY_LABELS[c] })) },
+          render: r => (
           <span className={`badge ${CATEGORY_BADGE[r.supplier_category] ?? 'badge-slate'}`}>
             {CATEGORY_LABELS[r.supplier_category] ?? r.supplier_category}
           </span>
@@ -89,6 +93,10 @@ export function SuppliersPage() {
       renderForm={(editing, onClose) => <SupplierForm editing={editing} onClose={onClose} />}
       onDelete={id => del.mutate(id)}
       deleteMessage={r => `Delete supplier "${r.supplier_name}"?`}
+      onCellEdit={(row, key, value) => {
+        if (key === 'supplier_name' && !String(value ?? '').trim()) { toast.error('Supplier name is required'); return }
+        update.mutate({ id: row.id, body: { [key]: value } as Partial<CreateSupplierRequest> })
+      }}
     />
   )
 }

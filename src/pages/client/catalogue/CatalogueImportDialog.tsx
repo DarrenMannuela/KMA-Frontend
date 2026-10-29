@@ -133,7 +133,7 @@ export function CatalogueImportDialog({ clientId, clientName, catalogue, pricesB
             {plan.length} rows. {newItems} new item{newItems === 1 ? '' : 's'}, {priceCount} price{priceCount === 1 ? '' : 's'} new or changed,
             {' '}{plan.length - todo.length} unchanged.
           </p>
-          <div className="border border-slate-100 rounded-xl max-h-[45vh] overflow-y-auto dark:border-navy-800">
+          <div className="border border-slate-100 rounded-xl max-h-[45vh] overflow-auto dark:border-navy-800">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500 dark:bg-navy-950 dark:text-slate-400">
                 <tr>

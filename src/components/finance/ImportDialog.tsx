@@ -304,7 +304,7 @@ export function ImportDialog({ kind, headers, suppliers, orders, initialGrid, on
 
           <section>
             <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2 dark:text-slate-400">Preview</h4>
-            <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-100 dark:border-navy-800">
+            <div className="max-h-56 overflow-auto rounded-lg border border-slate-100 dark:border-navy-800">
               <table className="w-full text-xs">
                 <thead className="bg-slate-50 text-slate-500 sticky top-0 dark:bg-navy-950 dark:text-slate-400">
                   <tr>

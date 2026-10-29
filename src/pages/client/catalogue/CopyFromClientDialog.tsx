@@ -65,7 +65,10 @@ export function CopyFromClientDialog({ clientId, catalogue, allPrices, year, onC
 
         {fromId && (
           <>
-            <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            {/* flex-wrap: this sentence plus its trailing year input doesn't
+               fit one line at phone width, and without it the whole row
+               would force the modal wider instead of wrapping. */}
+            <label className="flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
               <input type="checkbox" checked={withPrices} onChange={e => setWithPrices(e.target.checked)} />
               Copy their latest prices too, as this client's prices for
               <input className="field !w-24 !py-1" type="number" value={priceYear} disabled={!withPrices}
@@ -73,7 +76,7 @@ export function CopyFromClientDialog({ clientId, catalogue, allPrices, year, onC
             </label>
             {withPrices && <ChangeFields change={change} onChange={setChange} />}
 
-            <div className="border border-slate-100 rounded-xl max-h-[40vh] overflow-y-auto dark:border-navy-800">
+            <div className="border border-slate-100 rounded-xl max-h-[40vh] overflow-auto dark:border-navy-800">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500 dark:bg-navy-950 dark:text-slate-400">
                   <tr>
@@ -110,11 +113,11 @@ export function CopyFromClientDialog({ clientId, catalogue, allPrices, year, onC
           </>
         )}
 
-        <div className="flex gap-2">
-          <button className="btn-primary" disabled={!chosen.length || save.isPending} onClick={apply}>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button className="btn-primary justify-center" disabled={!chosen.length || save.isPending} onClick={apply}>
             {save.isPending ? 'Copying…' : `Copy ${chosen.length} item${chosen.length === 1 ? '' : 's'}`}
           </button>
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-secondary justify-center" onClick={onClose}>Cancel</button>
         </div>
       </div>
     </Modal>

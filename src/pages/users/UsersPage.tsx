@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Plus, UserX, UserCheck, Circle, Loader2, ShieldCheck } from 'lucide-react'
+import { Plus, UserX, UserCheck, Circle, Loader2, ShieldCheck, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { usersApi, UsersApiError } from '@/api/usersApi'
 import type { AdminUser } from '@/api/usersApi'
@@ -21,6 +21,7 @@ export function UsersPage() {
   // twice, without blocking the rest of the table.
   const [pendingId, setPendingId] = useState<number | string | null>(null)
   const [confirmDeactivate, setConfirmDeactivate] = useState<AdminUser | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<AdminUser | null>(null)
 
   async function loadUsers() {
     setLoading(true)
@@ -61,6 +62,19 @@ export function UsersPage() {
       setUsers(prev => prev.map(x => (x.id === u.id ? { ...x, active: true } : x)))
     } catch (err) {
       toast.error(err instanceof UsersApiError ? err.message : 'Could not reactivate user')
+    } finally {
+      setPendingId(null)
+    }
+  }
+
+  async function handleDelete(u: AdminUser) {
+    setPendingId(u.id)
+    try {
+      await usersApi.delete(u.id)
+      toast.success(`${u.name} deleted`)
+      setUsers(prev => prev.filter(x => x.id !== u.id))
+    } catch (err) {
+      toast.error(err instanceof UsersApiError ? err.message : 'Could not delete user')
     } finally {
       setPendingId(null)
     }
@@ -117,25 +131,35 @@ export function UsersPage() {
                     {u.active ? 'Active' : 'Deactivated'}
                   </span>
                 </div>
-                {u.active ? (
+                <div className="flex items-center gap-4 mt-3">
+                  {u.active ? (
+                    <button
+                      onClick={() => setConfirmDeactivate(u)}
+                      disabled={pendingId === u.id}
+                      className="flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
+                    >
+                      <UserX className="w-3.5 h-3.5" />
+                      Deactivate
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleReactivate(u)}
+                      disabled={pendingId === u.id}
+                      className="flex items-center gap-1.5 text-xs font-medium text-green-700 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 disabled:opacity-50"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      Reactivate
+                    </button>
+                  )}
                   <button
-                    onClick={() => setConfirmDeactivate(u)}
+                    onClick={() => setConfirmDelete(u)}
                     disabled={pendingId === u.id}
-                    className="flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 mt-3"
+                    className="flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-red-700 dark:text-slate-500 dark:hover:text-red-400 disabled:opacity-50"
                   >
-                    <UserX className="w-3.5 h-3.5" />
-                    Deactivate
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
                   </button>
-                ) : (
-                  <button
-                    onClick={() => handleReactivate(u)}
-                    disabled={pendingId === u.id}
-                    className="flex items-center gap-1.5 text-xs font-medium text-green-700 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 disabled:opacity-50 mt-3"
-                  >
-                    <UserCheck className="w-3.5 h-3.5" />
-                    Reactivate
-                  </button>
-                )}
+                </div>
               </div>
             ))}
           </div>
@@ -169,25 +193,36 @@ export function UsersPage() {
                     </span>
                   </td>
                   <td className="px-5 py-3 text-right">
-                    {u.active ? (
+                    <div className="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                      {u.active ? (
+                        <button
+                          onClick={() => setConfirmDeactivate(u)}
+                          disabled={pendingId === u.id}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
+                        >
+                          <UserX className="w-3.5 h-3.5" />
+                          Deactivate
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleReactivate(u)}
+                          disabled={pendingId === u.id}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 disabled:opacity-50"
+                        >
+                          <UserCheck className="w-3.5 h-3.5" />
+                          Reactivate
+                        </button>
+                      )}
                       <button
-                        onClick={() => setConfirmDeactivate(u)}
+                        onClick={() => setConfirmDelete(u)}
                         disabled={pendingId === u.id}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 ml-auto disabled:opacity-50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                        title={`Permanently delete ${u.name}`}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-red-700 dark:text-slate-500 dark:hover:text-red-400 disabled:opacity-50"
                       >
-                        <UserX className="w-3.5 h-3.5" />
-                        Deactivate
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
                       </button>
-                    ) : (
-                      <button
-                        onClick={() => handleReactivate(u)}
-                        disabled={pendingId === u.id}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 ml-auto disabled:opacity-50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-                      >
-                        <UserCheck className="w-3.5 h-3.5" />
-                        Reactivate
-                      </button>
-                    )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -202,6 +237,15 @@ export function UsersPage() {
           confirmLabel="Deactivate"
           onConfirm={() => { handleDeactivate(confirmDeactivate); setConfirmDeactivate(null) }}
           onCancel={() => setConfirmDeactivate(null)}
+        />
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          message={`Permanently delete ${confirmDelete.name}? This removes their account entirely — unlike deactivating, this can't be undone.`}
+          confirmLabel="Delete permanently"
+          onConfirm={() => { handleDelete(confirmDelete); setConfirmDelete(null) }}
+          onCancel={() => setConfirmDelete(null)}
         />
       )}
     </div>

@@ -200,6 +200,7 @@ export function OrdersPage() {
   const { data: items = [] } = itemHooks.useList()
   const { data: invoices = [] } = invoiceHooks.useList()
   const del = orderHooks.useDelete()
+  const update = orderHooks.useUpdate()
   const navigate = useNavigate()
   // Newest first, with each order's value and where its payment stands.
   const rows = useMemo(() => [...(data ?? [])].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? '') || b.id.localeCompare(a.id)), [data])
@@ -220,7 +221,7 @@ export function OrdersPage() {
       searchKeys={['company', 'po_number']}
       columns={[
         { header: t('orders.columns.orderId'),  key: 'id',         render: r => <span className="id-chip">{r.id}</span> },
-        { header: t('orders.columns.company'),   key: 'company',     render: r => <span className="font-medium text-navy-900 dark:text-slate-50">{r.company ?? '—'}</span> },
+        { header: t('orders.columns.company'),   key: 'company',     edit: { type: 'text', uppercase: true }, render: r => <span className="font-medium text-navy-900 dark:text-slate-50">{r.company ?? '—'}</span> },
         { header: t('orders.columns.client'),    key: 'client_id',   secondary: true, render: r => r.client_id ? (
             <button
               onClick={(e) => { e.stopPropagation(); navigate(`/clients/${r.client_id}`) }}
@@ -230,8 +231,8 @@ export function OrdersPage() {
               <Building2 size={12} /> {t('common.view')} <ArrowRight size={12} />
             </button>
           ) : <span className="text-slate-500 text-xs dark:text-navy-300">{t('orders.notLinked')}</span> },
-        { header: t('orders.columns.poNumber'), key: 'po_number',   secondary: true, render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
-        { header: t('orders.columns.date'),      key: 'date',        render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
+        { header: t('orders.columns.poNumber'), key: 'po_number',   secondary: true, edit: { type: 'text', uppercase: true, value: r => r.po_number ?? '' }, render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
+        { header: t('orders.columns.date'),      key: 'date',        edit: { type: 'date', value: r => r.date ? r.date.slice(0, 10) : '' }, render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
         { header: t('orders.columns.value'),     key: 'value', render: r => value.get(r.id) ? <span className="font-mono tabular-nums whitespace-nowrap">{formatRp(value.get(r.id)!)}</span> : <span className="text-slate-500 text-xs dark:text-navy-300">{t('orders.noItems')}</span> },
         { header: t('orders.columns.payment'),   key: 'payment', render: r => {
             const st = orderPaymentStatus(r.id, invoices)
@@ -251,6 +252,16 @@ export function OrdersPage() {
           <Eye className="w-3.5 h-3.5" />
         </button>
       )}
+      onCellEdit={(row, key, value) => {
+        if (key === 'company' && !String(value ?? '').trim()) { toast.error(t('orders.companyRequired')); return }
+        if (key === 'date') {
+          const d = String(value ?? '').trim()
+          if (!d || Number.isNaN(new Date(d).getTime())) { toast.error(t('orders.dateRequired')); return }
+          update.mutate({ id: row.id, body: { date: new Date(d).toISOString() } })
+          return
+        }
+        update.mutate({ id: row.id, body: { [key]: value || null } as Partial<CreateOrderRequest> })
+      }}
     />
   )
 }

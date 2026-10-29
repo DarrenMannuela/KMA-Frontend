@@ -75,3 +75,15 @@ export function colorCodeFromText(material: CatalogueMaterial, text: string): st
   const upper = text.trim().toUpperCase()
   return upper.startsWith(prefix) ? upper.slice(prefix.length) : undefined
 }
+
+/** The swatch already picked for this line, if its name carries a
+ *  recognized "LABEL - COLOURCODE" suffix for the given supplier — one
+ *  call replacing the catalogue → material → code → swatch chase, for
+ *  anywhere that just wants "is there a known colour here" (the Ledger's
+ *  own rows, not just the Kas Bon entry form that originally picked it). */
+export function colorFromText(supplierName: string | undefined | null, text: string): CatalogueColor | undefined {
+  const catalogue = catalogueForSupplier(supplierName)
+  const material = catalogue && materialFromText(catalogue, text)
+  const code = material && colorCodeFromText(material, text)
+  return code ? catalogue!.colorsFor(material!).find(c => c.code === code) : undefined
+}

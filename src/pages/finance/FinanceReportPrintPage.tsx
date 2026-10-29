@@ -11,6 +11,7 @@ import { monthly, totals, receivables, orderStats, clientStats, dueOn, AGING } f
 import { shortMonthLabel } from '@/utils/MonthUtils'
 import { CATEGORY_COLORS } from '@/constants/supplierCategories'
 import type { Invoice } from '@/types'
+import { usePrintLightBody } from '@/hooks/usePrintLightBody'
 
 // A printable monthly or yearly summary — same underlying numbers as the
 // Finance Overview page (same financeStats functions, so the two can never
@@ -30,6 +31,11 @@ function periodFromParams(params: URLSearchParams): Period {
 }
 
 const money = (v: number) => formatRp(v)
+// Profit is the only figure here that can genuinely go negative (a loss) —
+// Invoiced/Spent/Cash in/Owed are all non-negative sums, so coloring those
+// red/green wouldn't mean anything. Darker shades than the UI's own
+// red/green-500 for better contrast printed on plain white paper.
+const profitColor = (v: number) => (v > 0 ? '#15803d' : v < 0 ? '#b91c1c' : undefined)
 /** Same convention as the Finance Overview page's own delta(), generalized
  *  to either period mode instead of a hardcoded "vs last year". */
 function delta(now: number, before: number, vsLabel: string): string | null {
@@ -39,6 +45,7 @@ function delta(now: number, before: number, vsLabel: string): string | null {
 }
 
 export function FinanceReportPrintPage() {
+  usePrintLightBody()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const period = periodFromParams(searchParams)
@@ -151,7 +158,7 @@ export function FinanceReportPrintPage() {
             ].map(({ label, value, subs }) => (
               <div key={label} style={{ border: '1px solid #ddd', borderRadius: '6px', padding: '8px 10px' }}>
                 <div style={{ fontSize: '9px', color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
-                <div style={{ fontWeight: 'bold', fontSize: '14px', fontFamily: 'monospace' }}>
+                <div style={{ fontWeight: 'bold', fontSize: '14px', fontFamily: 'monospace', color: label === 'Profit' ? profitColor(value) : undefined }}>
                   {label === 'Orders in period' ? value : money(value)}
                 </div>
                 {subs.filter((s): s is string => s != null).map((s, i) => (
@@ -179,7 +186,7 @@ export function FinanceReportPrintPage() {
                     <td style={tdStyle}>{shortMonthLabel(m.month)} {period.year}{!isYear && m.month === period.month ? ' ←' : ''}</td>
                     <td style={tdStyleRight}>{money(m.invoiced)}</td>
                     <td style={tdStyleRight}>{money(m.cost)}</td>
-                    <td style={tdStyleRight}>{money(m.profit)}</td>
+                    <td style={{ ...tdStyleRight, color: profitColor(m.profit) }}>{money(m.profit)}</td>
                     <td style={tdStyleRight}>{money(m.cashIn)}</td>
                   </tr>
                 ))}
@@ -189,7 +196,7 @@ export function FinanceReportPrintPage() {
                   <td style={tdStyle}>Total {period.year}</td>
                   <td style={tdStyleRight}>{money(months.reduce((n, m) => n + m.invoiced, 0))}</td>
                   <td style={tdStyleRight}>{money(months.reduce((n, m) => n + m.cost, 0))}</td>
-                  <td style={tdStyleRight}>{money(months.reduce((n, m) => n + m.profit, 0))}</td>
+                  <td style={{ ...tdStyleRight, color: profitColor(months.reduce((n, m) => n + m.profit, 0)) }}>{money(months.reduce((n, m) => n + m.profit, 0))}</td>
                   <td style={tdStyleRight}>{money(months.reduce((n, m) => n + m.cashIn, 0))}</td>
                 </tr>
               </tfoot>
@@ -254,7 +261,7 @@ export function FinanceReportPrintPage() {
                       <td style={tdStyleRight}>{c.orders}</td>
                       <td style={tdStyleRight}>{money(c.value)}</td>
                       <td style={tdStyleRight}>{money(c.costs)}</td>
-                      <td style={tdStyleRight}>{money(c.profit)}</td>
+                      <td style={{ ...tdStyleRight, color: profitColor(c.profit) }}>{money(c.profit)}</td>
                       <td style={tdStyleRight}>{money(c.outstanding)}</td>
                     </tr>
                   ))}
@@ -280,7 +287,7 @@ export function FinanceReportPrintPage() {
                       <td style={tdStyle}>{s.client}</td>
                       <td style={tdStyleRight}>{money(s.value)}</td>
                       <td style={tdStyleRight}>{money(s.costs)}</td>
-                      <td style={tdStyleRight}>{money(s.profit)}</td>
+                      <td style={{ ...tdStyleRight, color: profitColor(s.profit) }}>{money(s.profit)}</td>
                     </tr>
                   ))}
                 </tbody>

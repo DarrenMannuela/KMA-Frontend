@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { useIsMobile } from '@/hooks/useIsMobile'
+import { useVisualViewportHeight } from '@/hooks/useVisualViewportHeight'
 
 interface ModalProps {
   title: string
@@ -14,6 +15,7 @@ const sizes = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-5xl'
 // A bottom sheet on phones, a centered dialog on desktop.
 export function Modal({ title, onClose, children, size = 'md' }: ModalProps) {
   const isMobile = useIsMobile()
+  const viewportHeight = useVisualViewportHeight()
   const contentRef = useRef<HTMLDivElement>(null)
   // Any real edit inside the modal (typing, picking a date/select, checking a
   // box) marks it touched. Tracked at the DOM level, not per-field React
@@ -57,7 +59,12 @@ export function Modal({ title, onClose, children, size = 'md' }: ModalProps) {
         className="fixed inset-0 z-50 flex items-end bg-navy-950/30 backdrop-blur-sm fade-in"
         onClick={e => e.target === e.currentTarget && guardedClose()}
       >
-        <div className="bg-white w-full rounded-t-3xl shadow-2xl slide-up flex flex-col max-h-[88vh] dark:bg-navy-900">
+        {/* Inline max-height, not a `vh` class: `vh` stays sized to the
+           pre-keyboard viewport on many mobile browsers, so opening the
+           keyboard on a field inside the sheet just overlaid it over
+           whatever was at the bottom instead of the sheet shrinking to
+           make room — this tracks the real visible height live instead. */}
+        <div className="bg-white w-full rounded-t-3xl shadow-2xl slide-up flex flex-col dark:bg-navy-900" style={{ maxHeight: viewportHeight * 0.88 }}>
           {/* The grab handle is only a visual cue; the backdrop and X close it. */}
           <div className="shrink-0 pt-2.5 pb-1 flex justify-center">
             <div className="w-9 h-1 rounded-full bg-slate-200 dark:bg-navy-700" />

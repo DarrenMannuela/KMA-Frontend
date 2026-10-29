@@ -4,6 +4,18 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
+      screens: {
+        // The permanent-sidebar-vs-mobile-drawer split used to be plain
+        // `md:` (768px width only) — but plenty of phones exceed 768px of
+        // CSS width in landscape (commonly ~740-930px) while still only
+        // having ~400px of height, so they got the "desktop" chrome: a
+        // permanent 240px sidebar with no hamburger, squeezed into a short
+        // screen. `dock` requires real height too, so only a genuine
+        // tablet/laptop gets the docked sidebar; a landscape phone still
+        // gets the mobile drawer. Used wherever the sidebar's docked state
+        // is decided — keep every one of those spots on `dock:`, not `md:`.
+        dock: { raw: '(min-width: 768px) and (min-height: 500px)' },
+      },
       fontFamily: {
         display: ['"Sora"', 'sans-serif'],
         body:    ['"Sora"', 'sans-serif'],

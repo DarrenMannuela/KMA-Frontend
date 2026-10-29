@@ -103,7 +103,7 @@ export function RaisePricesDialog({ clientId, items, pricesByItem, defaultYear, 
           {skipped > 0 && <> {skipped} with no earlier price {skipped === 1 ? 'is' : 'are'} left out.</>}
         </p>
 
-        <div className="border border-slate-100 rounded-xl max-h-[45vh] overflow-y-auto dark:border-navy-800">
+        <div className="border border-slate-100 rounded-xl max-h-[45vh] overflow-auto dark:border-navy-800">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500 dark:bg-navy-950 dark:text-slate-400">
               <tr>
@@ -140,11 +140,14 @@ export function RaisePricesDialog({ clientId, items, pricesByItem, defaultYear, 
           </table>
         </div>
 
-        <div className="flex gap-2">
-          <button className="btn-primary" disabled={!priced.length || save.isPending} onClick={apply}>
+        {/* Stacked full-width on mobile, not a side-by-side row: the primary
+           button's label is dynamic ("Save 12 prices for 2027") and can run
+           long enough to cramp against Cancel on a phone-width modal. */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button className="btn-primary justify-center" disabled={!priced.length || save.isPending} onClick={apply}>
             {save.isPending ? 'Saving…' : `Save ${priced.length} price${priced.length === 1 ? '' : 's'} for ${year}`}
           </button>
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-secondary justify-center" onClick={onClose}>Cancel</button>
         </div>
       </div>
     </Modal>

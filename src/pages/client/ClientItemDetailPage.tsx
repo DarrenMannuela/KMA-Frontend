@@ -166,6 +166,12 @@ function ItemPrices({ item, prices }: { item: ClientItem; prices: ClientItemPric
 
   return (
     <Card title="Prices by year" icon={Tag} bodyClassName="p-0 pt-2">
+      {/* overflow-x-auto: the fixed-width columns alone (Year/vs year
+         before/From/delete) already add up to more than a phone's width,
+         with nothing here to hide below a breakpoint the way the main
+         catalogue table does — scroll it within the card instead of
+         letting it force the whole page wider. */}
+      <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="text-xs text-slate-400 border-b border-slate-100 dark:text-slate-500 dark:border-navy-800">
@@ -197,7 +203,10 @@ function ItemPrices({ item, prices }: { item: ClientItem; prices: ClientItemPric
                     onSave={v => set(p.year, p.price, v ? new Date(String(v)).toISOString() : null, `${p.year} price date changed`)} />
                 </td>
                 <td className="pr-3">
-                  <button className="btn-ghost !p-1.5 opacity-0 group-hover:opacity-100 focus:opacity-100" title={`Remove the ${p.year} price`} onClick={() => remove(p.year)}>
+                  {/* opacity-60, not opacity-0: see the matching comment in
+                     CatalogueTab.tsx — a hover-only reveal has no touch
+                     equivalent, and removing a year's price has no other path. */}
+                  <button className="btn-ghost !p-2 opacity-60 group-hover:opacity-100 focus:opacity-100" title={`Remove the ${p.year} price`} onClick={() => remove(p.year)}>
                     <Trash2 size={13} />
                   </button>
                 </td>
@@ -230,6 +239,7 @@ function ItemPrices({ item, prices }: { item: ClientItem; prices: ClientItemPric
           </tr>
         </tbody>
       </table>
+      </div>
       {!rows.length && <p className="px-5 pb-3 text-xs text-slate-400 dark:text-slate-500">No prices yet: add this item's price for a year above.</p>}
     </Card>
   )
@@ -253,7 +263,7 @@ function ItemSales({ item, prices, client }: { item: ClientItem; prices: ClientI
       {isLoading ? <LoadingState /> : !lines.length ? (
         <p className="px-5 pb-4 text-sm text-slate-400 dark:text-slate-500">{client ? `${client.client_name} hasn't ordered this yet.` : 'Not ordered yet.'}</p>
       ) : (
-        <div className="max-h-80 overflow-y-auto">
+        <div className="max-h-80 overflow-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs text-slate-400 border-b border-slate-100 dark:text-slate-500 dark:border-navy-800">

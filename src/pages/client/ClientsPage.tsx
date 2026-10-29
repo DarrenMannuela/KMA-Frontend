@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import { Building2, ArrowRight } from 'lucide-react'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField, UppercaseField } from '@/components/ui'
@@ -56,6 +57,7 @@ function ClientForm({ editing, onClose }: { editing: Client | null; onClose: () 
 export function ClientsPage() {
   const { data, isLoading, isError, refetch } = clientHooks.useList()
   const del = clientHooks.useDelete()
+  const update = clientHooks.useUpdate()
   const navigate = useNavigate()
 
   return (
@@ -69,8 +71,10 @@ export function ClientsPage() {
       searchKeys={['client_name', 'address']}
       columns={[
         { header: 'ID', key: 'id' },
-        { header: 'Client Name', key: 'client_name', primary: true, render: r => <span className="font-medium text-navy-900 dark:text-slate-100">{r.client_name}</span> },
-        { header: 'Address', key: 'address', render: r => <span className="text-slate-500 dark:text-slate-400">{r.address ?? '—'}</span> },
+        { header: 'Client Name', key: 'client_name', primary: true, edit: { type: 'text', uppercase: true },
+          render: r => <span className="font-medium text-navy-900 dark:text-slate-100">{r.client_name}</span> },
+        { header: 'Address', key: 'address', edit: { type: 'text', uppercase: true, value: r => r.address ?? '' },
+          render: r => <span className="text-slate-500 dark:text-slate-400">{r.address ?? '—'}</span> },
         // An actions column; its key must differ from the ID column's.
         { header: '', key: 'catalogue_link', render: r => (
           <button
@@ -85,6 +89,10 @@ export function ClientsPage() {
       renderForm={(editing, onClose) => <ClientForm editing={editing} onClose={onClose} />}
       onDelete={id => del.mutate(id)}
       deleteMessage={r => `Delete client "${r.client_name}"? This also removes their contacts and catalogue.`}
+      onCellEdit={(row, key, value) => {
+        if (key === 'client_name' && !String(value ?? '').trim()) { toast.error('Client name is required'); return }
+        update.mutate({ id: row.id, body: { [key]: value || null } as Partial<CreateClientRequest> })
+      }}
     />
   )
 }

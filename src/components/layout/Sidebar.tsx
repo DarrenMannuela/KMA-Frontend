@@ -120,8 +120,9 @@ function NavGroupSection({ group, onNavigate }: { group: NavGroup; onNavigate?: 
 }
 
 interface SidebarProps {
-  /** Whether the mobile drawer is open — irrelevant on desktop (md:), where
-   *  the sidebar is always visible via md:translate-x-0 regardless of this. */
+  /** Whether the mobile drawer is open — irrelevant once docked (`dock:`),
+   *  where the sidebar is always visible via dock:translate-x-0 regardless
+   *  of this. */
   open: boolean
   onClose: () => void
 }
@@ -131,17 +132,21 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
   return (
     <>
-      {/* Backdrop for the mobile drawer; a click closes it. */}
+      {/* Backdrop for the mobile drawer; a click closes it. z-40: above
+         every in-page sticky/absolute element (the highest elsewhere in the
+         app is z-40 too, e.g. a bulk-action bar) so the drawer and its
+         backdrop always read as the topmost thing on screen while open,
+         never bled through by page content tied at the same z-index. */}
       {open && (
         <div
-          className="fixed inset-0 z-20 bg-navy-950/50 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-40 bg-navy-950/50 backdrop-blur-sm dock:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
       )}
       <aside
-        className={`fixed top-0 left-0 h-screen w-[240px] bg-navy-950 sidebar-pattern flex flex-col z-30 shadow-sidebar
-                    transition-transform duration-200 md:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed top-0 left-0 h-screen w-[240px] bg-navy-950 sidebar-pattern flex flex-col z-50 shadow-sidebar
+                    transition-transform duration-200 dock:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
       >
         {/* Logo */}
         <div className="px-5 py-5 border-b border-navy-800 flex items-center justify-between">
@@ -152,11 +157,11 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               <p className="text-navy-400 text-[10px] font-mono leading-tight">Kreasi Makmur Abadi</p>
             </div>
           </div>
-          {/* Close button — mobile only; the sidebar isn't a dismissible
-              drawer on desktop, so this has nothing to do there. */}
+          {/* Close button — only while the drawer can open; once docked the
+              sidebar isn't dismissible, so this has nothing to do there. */}
           {/* Same reasoning as Topbar's menu button: a full 44px tap target
               for the control that closes the whole nav drawer. */}
-          <button onClick={onClose} className="md:hidden p-3.5 -m-2 rounded-lg text-navy-400 hover:bg-white/5 hover:text-white transition-colors" title="Close menu">
+          <button onClick={onClose} className="dock:hidden p-3.5 -m-2 rounded-lg text-navy-400 hover:bg-white/5 hover:text-white transition-colors" title="Close menu">
             <X className="w-4 h-4" />
           </button>
         </div>

@@ -5,6 +5,7 @@ import { ArrowLeft, Printer } from 'lucide-react'
 import { format } from 'date-fns'
 import { deliveryApi, deliveryItemApi } from '@/api'
 import { useScaleToFit } from '@/hooks/useScaleToFit'
+import { usePrintLightBody } from '@/hooks/usePrintLightBody'
 import type { Delivery, DeliveryItem } from '@/types'
 
 // The company's paper DO/SJ: letterhead, the field grid, then (DO) one
@@ -13,6 +14,7 @@ import type { Delivery, DeliveryItem } from '@/types'
 // half the sheet. The last page is the Rekap, per box with subtotals and a
 // grand total.
 export function DeliveryPrintPage() {
+  usePrintLightBody()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const deliveryId = decodeURIComponent(id ?? '')

@@ -27,4 +27,9 @@ export const usersApi = {
 
   reactivate: (id: number) =>
     authHttp.post<{ ok: boolean }>(`/users/${id}/reactivate`).then(r => r.data),
+
+  // Permanent — unlike deactivate, there's no undo. The auth service
+  // also refuses this for your own account and for the last active admin.
+  delete: (id: number) =>
+    authHttp.delete<{ ok: boolean }>(`/users/${id}`).then(r => r.data),
 }

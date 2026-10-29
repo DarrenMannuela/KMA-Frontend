@@ -10,6 +10,8 @@ import { SI_UNITS } from '@/utils/Units'
 import { todayISODate } from '@/utils/MonthUtils'
 import { suggestNextKasBonId } from '@/utils/KasBonId'
 import { parseDelimited } from '@/utils/tableText'
+import { useIsMobile } from '@/hooks/useIsMobile'
+import { useVisualViewportHeight } from '@/hooks/useVisualViewportHeight'
 import { ALL_CATALOGUES, catalogueForSupplier, materialFromText, materialLabel, colorCodeFromText } from '@/data/materialCatalogue'
 import type { CatalogueMaterial, CatalogueColor } from '@/data/materialCatalogue'
 import type { FinanceBatch, FinanceHeader, Order, Supplier } from '@/types'
@@ -300,13 +302,20 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
                         {catMatch.composition}
                         {catMatch.widthCm != null && catMatch.rollYards != null && <> · roll {catMatch.widthCm} cm × {catMatch.rollYards} yd</>}
                       </p>
-                      {catColors.length > 0 && (
+                      {catColors.length > 0 ? (
                         <MaterialColorPicker
                           material={catMatch}
                           colors={catColors}
                           selectedCode={catCode}
                           onPick={code => setLine(l.key, { name: `${materialLabel(catMatch)} - ${code}`, unit: 'yard' })}
                         />
+                      ) : (
+                        // Not every catalogue entry has recorded colour
+                        // codes yet (e.g. SAI's "Basic" and "Blue Jeans
+                        // Series") — say so, rather than silently showing
+                        // nothing where the picker usually sits, which
+                        // reads as broken instead of "no data yet".
+                        <p className="mt-1 text-[11px] text-slate-400 italic dark:text-navy-600">No colour list recorded for this fabric yet — type the colour/code after the name if you know it.</p>
                       )}
                     </>
                   )}
@@ -414,6 +423,8 @@ function MaterialColorPickerModal({ material, colors, selectedCode, onPick, onCl
   onClose: () => void
 }) {
   const [query, setQuery] = useState('')
+  const isMobile = useIsMobile()
+  const viewportHeight = useVisualViewportHeight()
   const q = query.trim().toLowerCase()
   const filtered = q ? colors.filter(c => c.code.toLowerCase().includes(q) || (c.category ?? '').toLowerCase().includes(q)) : colors
 
@@ -423,7 +434,11 @@ function MaterialColorPickerModal({ material, colors, selectedCode, onPick, onCl
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400" />
           <input
-            autoFocus
+            // Not on mobile: autofocus pops the keyboard immediately, which
+            // on a phone covers roughly half the screen and, combined with
+            // `vh` not shrinking for it, buried the actual colour grid
+            // behind the keyboard before anyone could see or tap a swatch.
+            autoFocus={!isMobile}
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
@@ -435,7 +450,11 @@ function MaterialColorPickerModal({ material, colors, selectedCode, onPick, onCl
         {filtered.length === 0 ? (
           <p className="text-sm text-slate-500 text-center py-10 dark:text-slate-400">No colour matches "{query}".</p>
         ) : (
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2.5 max-h-[55vh] overflow-y-auto pr-1 -mr-1">
+          // Same real-viewport-height signal as Modal's own sheet sizing
+          // (see useVisualViewportHeight) — so if the keyboard does open
+          // (tapping search on purpose), the grid keeps fitting whatever
+          // area is actually still visible instead of extending behind it.
+          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2.5 overflow-y-auto pr-1 -mr-1" style={{ maxHeight: Math.max(160, viewportHeight * 0.45) }}>
             {filtered.map(c => (
               <button
                 type="button"

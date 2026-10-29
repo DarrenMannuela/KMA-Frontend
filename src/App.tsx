@@ -32,6 +32,7 @@ const ClientItemDetailPage = lazy(() => import('@/pages/client/ClientItemDetailP
 const BudgetsPage = lazy(() => import('@/pages/finance/BudgetsPage').then(m => ({ default: m.BudgetsPage })))
 const FinancePage = lazy(() => import('@/pages/finance/FinancePage').then(m => ({ default: m.FinancePage })))
 const FinanceReportPrintPage = lazy(() => import('@/pages/finance/FinanceReportPrintPage').then(m => ({ default: m.FinanceReportPrintPage })))
+const KasBonPrintPage = lazy(() => import('@/pages/finance/KasBonPrintPage').then(m => ({ default: m.KasBonPrintPage })))
 const BuktiKasPage = lazy(() => import('@/pages/finance/BuktiKasPage').then(m => ({ default: m.BuktiKasPage })))
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage').then(m => ({ default: m.LoginPage })))
 const SetPasswordPage = lazy(() => import('@/pages/auth/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })))
@@ -64,15 +65,16 @@ function ContentSpinner() {
 // Print pages and login render outside the sidebar/topbar shell.
 function AppShell() {
   const location = useLocation()
-  // Only meaningful below md — see Sidebar's own md:translate-x-0, which
-  // keeps it permanently visible above that breakpoint regardless of this.
+  // Only meaningful while the sidebar isn't docked — see Sidebar's own
+  // dock:translate-x-0, which keeps it permanently visible once docked
+  // (tailwind config's `dock` screen) regardless of this.
   const [sidebarOpen, setSidebarOpen] = useState(false)
   return (
     <div className="flex min-h-screen">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       {/* min-w-0 lets this flex item shrink below its content's width, so wide
          tables scroll inside their own containers instead of the whole page. */}
-      <div className="flex-1 flex flex-col md:ml-[240px] min-h-screen min-w-0">
+      <div className="flex-1 flex flex-col dock:ml-[240px] min-h-screen min-w-0">
         <Topbar onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-navy-950">
           {/* Only routed content is behind the boundary; it resets on navigation. */}
@@ -130,6 +132,7 @@ export default function App() {
           <Route path="/invoice/:id/kwitansi" element={<ProtectedRoute><RedirectDirectAccess><KwitansiPrintPage /></RedirectDirectAccess></ProtectedRoute>} />
           <Route path="/delivery/:id/print" element={<ProtectedRoute><RedirectDirectAccess><DeliveryPrintPage /></RedirectDirectAccess></ProtectedRoute>} />
           <Route path="/finance/report" element={<ProtectedRoute><RedirectDirectAccess><FinanceReportPrintPage /></RedirectDirectAccess></ProtectedRoute>} />
+          <Route path="/finance/kasbon/print" element={<ProtectedRoute><RedirectDirectAccess><KasBonPrintPage /></RedirectDirectAccess></ProtectedRoute>} />
 
           {/* Everything else is behind one ProtectedRoute; a temporary password must be
              changed first. */}

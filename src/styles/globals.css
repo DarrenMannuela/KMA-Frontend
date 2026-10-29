@@ -120,6 +120,14 @@
   @media (max-width: 767px) {
     .btn-primary { @apply bg-gold-500 text-navy-950 hover:bg-gold-400; }
     .card { @apply rounded-2xl shadow-none border-slate-200; }
+
+    /* iOS Safari zooms the whole page in on focus when an input's computed
+       font-size is under 16px — every dense filter/toolbar select or
+       input this app deliberately sizes smaller (text-sm/text-xs) for
+       desktop density trips it on a phone. Scoped to this breakpoint only,
+       so desktop keeps its intentional density; !important because it has
+       to win over those more specific text-sm/text-xs utility classes. */
+    input, select, textarea { font-size: 16px !important; }
   }
 }
 

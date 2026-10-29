@@ -191,13 +191,16 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
     <header className="bg-white border-b border-slate-100 shrink-0 dark:bg-navy-900 dark:border-navy-800">
       <div className="h-[60px] flex items-center justify-between px-4 sm:px-6 gap-2 sm:gap-3">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          {/* Opens the Sidebar's mobile drawer — md:hidden because the
-              sidebar is permanently visible from that breakpoint up, where
-              this button would have nothing to do. */}
+          {/* Opens the Sidebar's mobile drawer — dock:hidden because the
+              sidebar is permanently visible once docked (see tailwind
+              config's `dock` screen), where this button would have nothing
+              to do. Plain `md:` isn't enough here: a phone in landscape can
+              exceed 768px of width while still being far too short for a
+              permanent sidebar. */}
           {/* A full 44px tap target, not just the icon's own size — the one
               control that opens the entire nav on mobile is worth the extra
               padding so a slightly-off tap still lands. */}
-          <button onClick={onMenuClick} className="md:hidden btn-ghost !p-3.5 shrink-0" title={t('topbar.openMenu')}>
+          <button onClick={onMenuClick} className="dock:hidden btn-ghost !p-3.5 shrink-0" title={t('topbar.openMenu')}>
             <Menu className="w-4 h-4" />
           </button>
           <div className="min-w-0">

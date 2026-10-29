@@ -8,6 +8,7 @@
     "saving": "Menyimpan…",
     "retry": "Coba Lagi",
     "showMore": "Tampilkan lebih banyak",
+    "inlineEditHint": "Klik sel untuk mengubah · tombol panah berpindah antar sel",
     "back": "Kembali",
     "edit": "Ubah",
     "actions": "Aksi",
@@ -143,6 +144,8 @@
     "createOrder": "Buat Pesanan",
     "idTakenRetry": "Nomor pesanan itu baru saja diambil orang lain — mencarikan nomor baru untuk Anda.",
     "createFailed": "Gagal membuat pesanan — silakan coba lagi.",
+    "companyRequired": "Perusahaan wajib diisi",
+    "dateRequired": "Tanggal wajib diisi",
     "columns": {
       "orderId": "No. Pesanan",
       "company": "Perusahaan",

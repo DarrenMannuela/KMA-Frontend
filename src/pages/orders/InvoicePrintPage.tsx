@@ -2,7 +2,7 @@ import { liveDownPayment as resolveLiveDownPayment, balanceDue } from '@/utils/i
 import { useRef, useLayoutEffect, useEffect, useState, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Printer, Receipt, Plus, PackageSearch, X, Highlighter } from 'lucide-react'
+import { ArrowLeft, Printer, Receipt, Plus, PackageSearch, X, Highlighter, Rows3 } from 'lucide-react'
 import { format } from 'date-fns'
 import { invoicesApi, ordersApi, itemsApi } from '@/api'
 import { formatRp, FormField } from '@/components/ui'
@@ -11,6 +11,7 @@ import { useRekening } from '@/utils/RekeningStore'
 import { itemHooks, clientItemHooks, clientItemPriceHooks, invoiceHooks } from '@/hooks'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useScaleToFit } from '@/hooks/useScaleToFit'
+import { usePrintLightBody } from '@/hooks/usePrintLightBody'
 import { usePaperFormat, PAPER_FORMATS, type PaperFormat } from '@/utils/PaperFormatStore'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
 
@@ -60,8 +61,6 @@ function measureTextWidth(text: string, font: string): number {
   ctx.font = font
   return ctx.measureText(text).width
 }
-// Measured in bold, the heaviest weight any of these cells uses.
-const AUTOFIT_FONT = `bold ${BASE_FONT_PX}px Arial`
 // The cells' own padding plus slack: the QTY column also holds an input,
 // which clips its text rather than overflowing.
 const AUTOFIT_PADDING = 8 + 8 + 6
@@ -203,6 +202,7 @@ function PageBreakGap({
 }
 
 export function InvoicePrintPage() {
+  usePrintLightBody()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const invoiceId = decodeURIComponent(id ?? '')
@@ -253,6 +253,30 @@ export function InvoicePrintPage() {
     onClick: () => { if (highlightToolActive) toggleRowHighlight(key) },
     className: highlightToolActive ? 'cursor-pointer print:cursor-default' : undefined,
   })
+
+  // Compact: tightens row height, font size, and the gaps between blocks, so
+  // an invoice sitting just over one page — mostly whitespace, not real
+  // overflow — often fits on it. A manual, user-toggled choice rather than
+  // an auto-computed "scale to exactly fit": the multi-page policy note
+  // above already covers why that broke (the JS guess and the print
+  // engine's own layout disagreeing); tightening a few fixed values is far
+  // more predictable than solving for an exact scale factor, and the user
+  // can see right away whether it was enough.
+  const [compact, setCompact] = useState(false)
+  const fontPx = compact ? 11 : BASE_FONT_PX
+  const rowPx = compact ? 18 : ROW_HEIGHT_PX
+  // Every table cell's own padding (6px 8px normally) sits on top of its
+  // row's height in content-box sizing, so it's a real, separate lever —
+  // left alone, it alone would cap how much a row could ever shrink.
+  const cellPad = compact ? '3px 6px' : '6px 8px'
+  // Scales a block-spacing value (margins between sections — the biggest
+  // source of "whitespace" on a near-miss page) to 40% when compact.
+  const tightMargin = (px: number) => (compact ? Math.round(px * 0.4) : px)
+  // A blank gap row's +/- controls must fit inside the same height budget
+  // as every other cell in that row (rowPx minus the cell's own vertical
+  // padding) — a fixed 18px button no longer fit once compact mode shrank
+  // the row, which was forcing that one row taller than its neighbors.
+  const gapCtrlSize = Math.max(10, rowPx - 6)
 
   // Manual page breaks, by item group: "start a new page before this group".
   // Groups are never split, so a break can't land inside one.
@@ -418,8 +442,8 @@ export function InvoicePrintPage() {
   const groupCount = new Set(items.map(i => i.item_name)).size
   const extraGapRowCount = Object.values(extraGapRows).reduce((s, n) => s + n, 0)
   const rowCount = items.length + groupCount /* gap row per group */ + extraGapRowCount /* user-added extra blank rows */ + 4 /* company + total + dp + pelunasan rows */
-  const approxRowPx = ROW_HEIGHT_PX
-  const approxOverheadPx = 620 /* masthead + customer detail + notes + signature/footer, roughly */
+  const approxRowPx = rowPx
+  const approxOverheadPx = compact ? 430 : 620 /* masthead + customer detail + notes + signature/footer, roughly */
   const likelyMultiPage = approxOverheadPx + rowCount * approxRowPx > pageHeightPx * 1.05
 
   // Measures the heights the break prediction needs. Nothing measured feeds
@@ -450,11 +474,15 @@ export function InvoicePrintPage() {
       Object.keys(next.groups).length !== Object.keys(measured.groups).length ||
       Object.entries(next.groups).some(([name, h]) => Math.abs(h - (measured.groups[name] ?? 0)) > 0.5)
     if (changed) setMeasured(next)
-    // Re-measure when the items or sheet change, not on every render — measured.*
-    // is deliberately left out: it's compared against here to decide whether to
-    // update itself, so including it would make every update retrigger the effect.
+    // Re-measure when the items, sheet, or compact mode change, not on every
+    // render — measured.* is deliberately left out: it's compared against
+    // here to decide whether to update itself, so including it would make
+    // every update retrigger the effect. compact must stay in: it changes
+    // the actual rendered row height/font/margins, so without it the
+    // prediction would keep using pre-compact heights and never reflect
+    // the smaller size.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, pageWidthMm, pageHeightMm, invoice?.id])
+  }, [items, pageWidthMm, pageHeightMm, invoice?.id, compact])
 
   // One grouping for both the table and the page prediction.
   const groups: { name: string; rows: typeof items }[] = []
@@ -477,7 +505,7 @@ export function InvoicePrintPage() {
   const hasMeasurements = measured.top > 0 || Object.keys(measured.groups).length > 0
   const predictedBreaks = new Set<string>()
   let predictedTailNewPage = false
-  let tailSpillsAt: 'totals' | 'notes' | null = null
+  let tailSpillsAt: 'totals' | 'notes' | 'closing' | null = null
   // Screen and print layout differ by a few px per row, and the error grows with
   // the content placed so far. The safety margin is a share of the page already
   // used (18%, deliberately high: a break predicted a little early is harmless;
@@ -502,17 +530,18 @@ export function InvoicePrintPage() {
       remaining -= h
       consumed += h
     })
-    // Totals and the notes+closing tail each avoid breaking on their own, so
-    // each is checked in turn against what's left, and the first one to spill is
-    // where the seam (and the continuation note) goes. Notes and closing are
-    // measured separately but checked as one combined block: otherwise notes
-    // alone could fit a page while the signature block that must follow it
-    // doesn't, leaving the signature stranded alone on the next page. The drift
-    // margin carries over from the items but doesn't keep growing across these
-    // two big, directly measured blocks.
+    // Totals, notes, and the closing block (signature/footer) each avoid
+    // breaking on their own, so each is checked in turn against what's
+    // left, and the first one to spill is where the seam (and the
+    // continuation note) goes. Each is its own independently-breakable
+    // unit — notes fitting in whatever's left of page 1 doesn't force
+    // closing to also move, so a near-miss invoice doesn't lose a whole
+    // page of blank space just because the very last block didn't fit.
+    // The drift margin carries over from the items but doesn't keep
+    // growing across these three big, directly measured blocks.
     let tailRemaining = remaining
     let tailDriftBasis = consumed
-    ;([['totals', measured.totals], ['notes', measured.notes + measured.closing]] as const)
+    ;([['totals', measured.totals], ['notes', measured.notes], ['closing', measured.closing]] as const)
       .forEach(([name, h]) => {
         const driftBuffer = BASE_SLACK_PX + tailDriftBasis * DRIFT_FRACTION
         if (h > 0 && h + driftBuffer > tailRemaining) {
@@ -612,8 +641,11 @@ export function InvoicePrintPage() {
       liveBalanceDue.toLocaleString('id-ID'),
     ],
   }
+  // Measured in bold, the heaviest weight any of these cells uses, at
+  // whatever size the table is actually printing at right now.
+  const autofitFont = `bold ${fontPx}px Arial`
   const fitWidthFor = (column: ColumnKey) =>
-    columnTexts[column].reduce((max, t) => Math.max(max, measureTextWidth(t, AUTOFIT_FONT)), 0) + AUTOFIT_PADDING
+    columnTexts[column].reduce((max, t) => Math.max(max, measureTextWidth(t, autofitFont)), 0) + AUTOFIT_PADDING
   const columnWidths: Record<ColumnKey, number> = {
     no: fitWidthFor('no'),
     size: fitWidthFor('size'),
@@ -649,6 +681,21 @@ export function InvoicePrintPage() {
           )}
         </span>
         <div className="flex items-center gap-1.5">
+          {/* Tightens row height, font size, and block gaps — a manual option
+             for a near-miss invoice (a little whitespace, not real overflow),
+             not an auto-computed exact-fit scale. See the `compact` comment. */}
+          <button
+            type="button"
+            onClick={() => setCompact(c => !c)}
+            title={compact ? 'Back to normal spacing' : 'Tighten spacing — may bring a near-miss invoice down to fewer pages'}
+            className={`px-2 py-1 rounded text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+              compact
+                ? 'bg-navy-900 text-white border-navy-900'
+                : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+            }`}
+          >
+            <Rows3 size={13} /> Compact
+          </button>
           {/* On/off like the page-break pills. */}
           <button
             type="button"
@@ -957,14 +1004,14 @@ export function InvoicePrintPage() {
               minHeight: `${pageHeightMm}mm`,
               padding: '20mm 20mm 15mm 20mm',
               fontFamily: 'Arial, sans-serif',
-              fontSize: `${BASE_FONT_PX}px`,
+              fontSize: `${fontPx}px`,
               color: '#000',
             }}
           >
           {/* Everything above the item table, measured as one block for the prediction. */}
           <div ref={topBlockRef}>
           {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: tightMargin(16) }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <img src="/Logo.png" alt="KMA Logo" style={{ width: '80px', height: 'auto', marginBottom: '6px' }} />
               <div style={{ fontWeight: 'bold', fontSize: '13px', letterSpacing: '2px' }}>KREASI  MAKMUR  ABADI</div>
@@ -979,14 +1026,14 @@ export function InvoicePrintPage() {
           </div>
 
           {/* Title */}
-          <div style={{ textAlign: 'center', fontSize: '22px', fontWeight: 'bold', margin: '20px 0 24px' }}>
+          <div style={{ textAlign: 'center', fontSize: compact ? '16px' : '22px', fontWeight: 'bold', margin: `${tightMargin(20)}px 0 ${tightMargin(24)}px` }}>
             INVOICE
           </div>
 
           {/* Client + Invoice Info grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px', marginBottom: '24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px', marginBottom: tightMargin(24) }}>
             {/* Left — client info */}
-            <table style={{ borderCollapse: 'collapse', fontSize: `${BASE_FONT_PX}px` }}>
+            <table style={{ borderCollapse: 'collapse', fontSize: `${fontPx}px` }}>
               <tbody>
                 <tr>
                   <td style={{ fontWeight: 'bold', paddingRight: '12px', paddingBottom: '4px', whiteSpace: 'nowrap' }}>KEPADA YTH</td>
@@ -1016,7 +1063,7 @@ export function InvoicePrintPage() {
             </table>
 
             {/* Right — invoice meta */}
-            <table style={{ borderCollapse: 'collapse', fontSize: `${BASE_FONT_PX}px` }}>
+            <table style={{ borderCollapse: 'collapse', fontSize: `${fontPx}px` }}>
               <tbody>
                 <tr>
                   <td style={{ fontWeight: 'bold', paddingRight: '12px', paddingBottom: '4px' }}>TANGGAL</td>
@@ -1050,26 +1097,26 @@ export function InvoicePrintPage() {
 
           {/* Items table */}
           {/* table-layout fixed makes the auto-fit <th> widths authoritative. */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0', fontSize: `${BASE_FONT_PX}px`, tableLayout: 'fixed' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0', fontSize: `${fontPx}px`, tableLayout: 'fixed' }}>
             <thead ref={theadRef}>
               {/* Darker column dividers, visible on the highlight fill. */}
               <tr style={highlightCellStyle}>
-                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'center', width: `${columnWidths.no}px`, whiteSpace: 'nowrap' }}>
+                <th style={{ border: '1px solid #94a3b8', padding: cellPad, textAlign: 'center', width: `${columnWidths.no}px`, whiteSpace: 'nowrap' }}>
                   NO.
                 </th>
                 {/* KETERANGAN takes the remaining width and may wrap (long item names). */}
-                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'left' }}>KETERANGAN</th>
-                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'center', width: `${columnWidths.size}px`, whiteSpace: 'nowrap' }}>
+                <th style={{ border: '1px solid #94a3b8', padding: cellPad, textAlign: 'left' }}>KETERANGAN</th>
+                <th style={{ border: '1px solid #94a3b8', padding: cellPad, textAlign: 'center', width: `${columnWidths.size}px`, whiteSpace: 'nowrap' }}>
                   SIZE
                 </th>
-                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'center', width: `${columnWidths.qty}px`, whiteSpace: 'nowrap' }}>
+                <th style={{ border: '1px solid #94a3b8', padding: cellPad, textAlign: 'center', width: `${columnWidths.qty}px`, whiteSpace: 'nowrap' }}>
                   QTY
                 </th>
                 {/* Fitted to the longest amount; no ellipsis, so a sizing bug would show. */}
-                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'right', width: `${columnWidths.hargaNet}px`, whiteSpace: 'nowrap' }}>
+                <th style={{ border: '1px solid #94a3b8', padding: cellPad, textAlign: 'right', width: `${columnWidths.hargaNet}px`, whiteSpace: 'nowrap' }}>
                   HARGA NET
                 </th>
-                <th style={{ border: '1px solid #94a3b8', padding: '6px 8px', textAlign: 'right', width: `${columnWidths.jumlah}px`, whiteSpace: 'nowrap' }}>
+                <th style={{ border: '1px solid #94a3b8', padding: cellPad, textAlign: 'right', width: `${columnWidths.jumlah}px`, whiteSpace: 'nowrap' }}>
                   JUMLAH (Rp)
                 </th>
               </tr>
@@ -1081,14 +1128,14 @@ export function InvoicePrintPage() {
                 style={{ background: rowHighlights['company'] }}
               >
                 {/* A minimum height, so rows of empty cells match rows with text. */}
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px` }} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, fontWeight: 'bold', fontStyle: 'italic' }}>
+                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px` }} />
+                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, fontWeight: 'bold', fontStyle: 'italic' }}>
                   {invoice.kepada_yth.toUpperCase()}
                 </td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px` }} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px` }} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px` }} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px` }} />
+                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px` }} />
+                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px` }} />
+                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px` }} />
+                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px` }} />
               </tr>
 
               {/* Item rows, grouped by name (sizes together), numbered on each group's first row. */}
@@ -1172,14 +1219,14 @@ export function InvoicePrintPage() {
                         style={{ background: rowHighlights[key] }}
                       >
                         {/* A minimum height here too. */}
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'center', whiteSpace: 'nowrap' }}>
                           {rowIdx === 0 ? groupIdx + 1 : ''}
                         </td>
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px` }}>{rowIdx === 0 ? item.item_name.toUpperCase() : ''}</td>
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{item.size ?? '—'}</td>
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'center', whiteSpace: 'nowrap' }}>{item.amount.toLocaleString('id-ID')}</td>
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', whiteSpace: 'nowrap' }}>{item.price.toLocaleString('id-ID')}</td>
-                        <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', whiteSpace: 'nowrap' }}>{item.sub_total.toLocaleString('id-ID')}</td>
+                        <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px` }}>{rowIdx === 0 ? item.item_name.toUpperCase() : ''}</td>
+                        <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{item.size ?? '—'}</td>
+                        <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'center', whiteSpace: 'nowrap' }}>{item.amount.toLocaleString('id-ID')}</td>
+                        <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', whiteSpace: 'nowrap' }}>{item.price.toLocaleString('id-ID')}</td>
+                        <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', whiteSpace: 'nowrap' }}>{item.sub_total.toLocaleString('id-ID')}</td>
                       </tr>
                     )
                   })}
@@ -1190,7 +1237,7 @@ export function InvoicePrintPage() {
                     return Array.from({ length: totalGapRows }, (_, gapIdx) => {
                       const key = `gap-${group.name}-${gapIdx}`
                       const isLastGapRow = gapIdx === totalGapRows - 1
-                      const cellStyle = { border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, background: rowHighlights[key] }
+                      const cellStyle = { border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, background: rowHighlights[key] }
                       return (
                         <tr key={key} {...highlightRowHandlers(key)}>
                           <td style={cellStyle} />
@@ -1211,7 +1258,7 @@ export function InvoicePrintPage() {
                                     type="button"
                                     title="Remove blank row"
                                     onClick={() => removeGapRow(group.name)}
-                                    style={{ border: '1px solid #cbd5e1', borderRadius: '4px', width: '18px', height: '18px', lineHeight: 1, fontSize: '12px', color: '#64748b', background: 'white', cursor: 'pointer' }}
+                                    style={{ border: '1px solid #cbd5e1', borderRadius: '4px', width: `${gapCtrlSize}px`, height: `${gapCtrlSize}px`, lineHeight: 1, fontSize: `${Math.max(9, gapCtrlSize - 3)}px`, color: '#64748b', background: 'white', cursor: 'pointer' }}
                                   >
                                     −
                                   </button>
@@ -1220,7 +1267,7 @@ export function InvoicePrintPage() {
                                   type="button"
                                   title="Add blank row"
                                   onClick={() => addGapRow(group.name)}
-                                  style={{ border: '1px solid #cbd5e1', borderRadius: '4px', width: '18px', height: '18px', lineHeight: 1, fontSize: '12px', color: '#64748b', background: 'white', cursor: 'pointer' }}
+                                  style={{ border: '1px solid #cbd5e1', borderRadius: '4px', width: `${gapCtrlSize}px`, height: `${gapCtrlSize}px`, lineHeight: 1, fontSize: `${Math.max(9, gapCtrlSize - 3)}px`, color: '#64748b', background: 'white', cursor: 'pointer' }}
                                 >
                                   +
                                 </button>
@@ -1275,24 +1322,24 @@ export function InvoicePrintPage() {
                 <tr {...highlightRowHandlers('dp')}>
                   {/* Blank spacer over NO/KETERANGAN/SIZE: first row in the group, so its
                      top border closes the item table above. */}
-                  <td style={{ padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, borderTop: '1px solid #ccc', borderBottomStyle: 'hidden' }} colSpan={3} />
+                  <td style={{ padding: cellPad, height: `${rowPx}px`, borderTop: '1px solid #ccc', borderBottomStyle: 'hidden' }} colSpan={3} />
                   {/* A typable LUNAS label, only on a Pelunasan invoice (the D/P is paid by then).
                      Auto-fit sizes the QTY column to it. */}
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
+                  <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
                     {invoice.type === 'pelunasan' && (
                       <input
                         ref={dpPaidLabel.ref}
                         value={dpPaidLabel.value}
                         onChange={dpPaidLabel.onChange}
                         onClick={e => e.stopPropagation()}
-                        style={{ border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: `${BASE_FONT_PX}px`, fontWeight: 'bold', textAlign: 'right', width: '100%', padding: 0 }}
+                        style={{ border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: `${fontPx}px`, fontWeight: 'bold', textAlign: 'right', width: '100%', padding: 0 }}
                       />
                     )}
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
+                  <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
                     D/P {dpPercent} %
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
+                  <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
                     {liveDownPayment.toLocaleString('id-ID')}
                   </td>
                 </tr>
@@ -1301,7 +1348,7 @@ export function InvoicePrintPage() {
               {/* Pelunasan row — same click-to-override behavior as DP above. First in
                  the group (and so closes the item table) when there's no D/P row. */}
               <tr {...highlightRowHandlers('pelunasan')}>
-                <td style={{ padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', ...(hasDp ? { borderTopStyle: 'hidden' as const } : { borderTop: '1px solid #ccc' }), borderBottomStyle: 'hidden' }} colSpan={3}>
+                <td style={{ padding: cellPad, height: `${rowPx}px`, textAlign: 'right', ...(hasDp ? { borderTopStyle: 'hidden' as const } : { borderTop: '1px solid #ccc' }), borderBottomStyle: 'hidden' }} colSpan={3}>
                   {/* J/T (due date), editable for this printed copy only. */}
                   <input
                     ref={jatuhTempo.ref}
@@ -1309,14 +1356,14 @@ export function InvoicePrintPage() {
                     onChange={jatuhTempo.onChange}
                     onClick={e => e.stopPropagation()}
                     placeholder="J/T : —"
-                    style={{ border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: `${BASE_FONT_PX}px`, textAlign: 'right', width: '100%', padding: 0 }}
+                    style={{ border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: `${fontPx}px`, textAlign: 'right', width: '100%', padding: 0 }}
                   />
                 </td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px` }} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
+                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px` }} />
+                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
                   PELUNASAN
                 </td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
+                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
                   {/* The balance after discount, live — see liveBalanceDue above. */}
                   {liveBalanceDue.toLocaleString('id-ID')}
                 </td>
@@ -1328,12 +1375,12 @@ export function InvoicePrintPage() {
                 {...highlightRowHandlers('total')}
                 style={{ background: rowHighlights['total'] }}
               >
-                <td style={{ padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, borderTopStyle: 'hidden', borderBottomStyle: 'hidden' }} colSpan={3} />
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                <td style={{ padding: cellPad, height: `${rowPx}px`, borderTopStyle: 'hidden', borderBottomStyle: 'hidden' }} colSpan={3} />
+                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
                   {items.reduce((s, i) => s + i.amount, 0).toLocaleString('id-ID')}
                 </td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>TOTAL</td>
-                <td style={{ border: '1px solid #ccc', padding: '6px 8px', height: `${ROW_HEIGHT_PX}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>TOTAL</td>
+                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
                   {invoice.total.toLocaleString('id-ID')}
                 </td>
               </tr>
@@ -1360,14 +1407,14 @@ export function InvoicePrintPage() {
             />
           )}
 
-          {/* Notes and the closing block (signature/footer) are wrapped together as one
-             unbreakable unit: SYARAT & KETENTUAN should never print alone with the
-             signature stranded on the next page. Spaced a little tighter to help them
-             fit on page 1. A fixed amount on purpose: nothing measured feeds back into it. */}
-          <div style={{ pageBreakInside: 'avoid' }}>
-          <div ref={notesRef} style={{ marginTop: '18px', fontSize: `${BASE_FONT_PX}px` }}>
+          {/* Notes and the closing block (signature/footer) are each their own
+             unbreakable unit, independently placed: if notes fit in whatever's
+             left of the page, they stay there even when the signature that
+             follows doesn't — only the signature moves, rather than forcing
+             both to a fresh page and leaving the rest of this one blank. */}
+          <div ref={notesRef} style={{ marginTop: tightMargin(18), fontSize: `${fontPx}px`, pageBreakInside: 'avoid' }}>
             <div style={{ fontWeight: 'bold', textDecoration: 'underline', marginBottom: '4px' }}>SYARAT & KETENTUAN :</div>
-            <ol style={{ margin: 0, paddingLeft: '16px', lineHeight: '1.5' }}>
+            <ol style={{ margin: 0, paddingLeft: '16px', lineHeight: compact ? '1.25' : '1.5' }}>
               {notes.map((note, idx) => (
                 // An empty line stays editable on screen but doesn't print as a bare number.
                 <li key={idx} className={note.trim() === '' ? 'print:hidden' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1400,7 +1447,7 @@ export function InvoicePrintPage() {
             </button>
 
             {/* Bank details in their own box (shared with the kwitansi via useRekening). */}
-            <div style={{ marginTop: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '10px 14px' }}>
+            <div style={{ marginTop: tightMargin(10), background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: compact ? '6px 10px' : '10px 14px' }}>
               <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>INFORMASI PEMBAYARAN</div>
               <div>Pembayaran via transfer ke rekening a/n :</div>
               <div style={{ marginTop: '2px' }}>
@@ -1427,19 +1474,39 @@ export function InvoicePrintPage() {
             </div>
           </div>
 
-          {/* Signature and footer, part of the same unbreakable unit as the notes above. */}
-          <div ref={closingRef}>
+          {/* Print-only: tells the reader notes are complete even though the
+             signature that normally follows isn't here yet. */}
+          {tailSpillsAt === 'closing' && (
+            <div className="hidden print:block" style={{ textAlign: 'right', fontSize: '10px', fontStyle: 'italic', color: '#64748b', marginTop: '4px' }}>
+              (continued on next page)
+            </div>
+          )}
+          {/* The screen marker for that same seam. */}
+          {tailSpillsAt === 'closing' && (
+            <PageBreakGap
+              endPage={pageSegments.length}
+              startPage={pageSegments.length + 1}
+              total={previewTotalPages}
+              invoiceId={invoice.id}
+              client={invoice.kepada_yth}
+              strong={false}
+            />
+          )}
+
+          {/* Signature and footer — its own independently-breakable unit; see
+             the notes comment above for why it's no longer joined to notes. */}
+          <div ref={closingRef} style={{ pageBreakInside: 'avoid' }}>
             {/* Signature block */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginTop: '24px', fontSize: `${BASE_FONT_PX}px` }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginTop: tightMargin(24), fontSize: `${fontPx}px` }}>
               <div>
-                <div style={{ fontWeight: 'bold', marginBottom: '36px' }}>ASLI INVOICE DI TERIMA OLEH</div>
+                <div style={{ fontWeight: 'bold', marginBottom: tightMargin(36) }}>ASLI INVOICE DI TERIMA OLEH</div>
                 <div style={{ borderTop: '1px solid #000', paddingTop: '4px', width: '200px' }} />
                 <div>TANDA TANGAN</div>
                 <div style={{ marginTop: '4px' }}>NAMA JELAS</div>
                 <div>JABATAN</div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: '36px' }}>DI BUAT OLEH</div>
+                <div style={{ fontWeight: 'bold', marginBottom: tightMargin(36) }}>DI BUAT OLEH</div>
                 <div style={{ borderTop: '1px solid #000', paddingTop: '4px', display: 'inline-block', width: '200px' }} />
                 <div>
                   <input
@@ -1462,12 +1529,11 @@ export function InvoicePrintPage() {
             </div>
 
             {/* Footer */}
-            <div style={{ textAlign: 'center', marginTop: '20px', paddingTop: '8px', borderTop: '1px solid #ccc', fontSize: `${BASE_FONT_PX}px` }}>
+            <div style={{ textAlign: 'center', marginTop: tightMargin(20), paddingTop: '8px', borderTop: '1px solid #ccc', fontSize: `${fontPx}px` }}>
               <div>MUARA KARANG BLOK 9 SELATAN NO. 52 - 55 , JAKARTA UTARA 14450</div>
               <div>TELP. 021.300.253.99 / Hp. 0811.857.372</div>
               <div>Email : fifi67@yahoo.com</div>
             </div>
-          </div>
           </div>
 
           {/* Preview of the last page's footer (earlier pages show theirs in their gap). */}
