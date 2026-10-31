@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Trash2, Factory, Wrench } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { formatRp } from '@/components/ui'
-import { useFinanceBatch } from '@/hooks'
+import { useFinanceBatch, useSupplierCatalogues } from '@/hooks'
 import { useIsDirty, useUnsavedChanges, useAutosaveDraft, loadDraft, clearDraft } from '@/hooks/useUnsavedChanges'
 import { useAuth } from '@/contexts/AuthContext'
 import { ApiError } from '@/api'
@@ -10,7 +10,7 @@ import { SI_UNITS } from '@/utils/Units'
 import { todayISODate } from '@/utils/MonthUtils'
 import { suggestNextKasBonId } from '@/utils/KasBonId'
 import { parseDelimited } from '@/utils/tableText'
-import { ALL_CATALOGUES, catalogueForSupplier, materialFromText, materialLabel, colorCodeFromText } from '@/data/materialCatalogue'
+import { catalogueForSupplier, materialFromText, materialLabel, colorCodeFromText } from '@/data/materialCatalogue'
 import type { FinanceBatch, FinanceHeader, Order, Supplier } from '@/types'
 import { draftProblem, draftsToBatch, draftTotal, newDraft, supplierWithCategory, type DraftLine, type Kind } from './ledgerModel'
 import { guessColumns, readRows } from './columnGuess'
@@ -43,6 +43,8 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
     initialLines?.length ? initialLines.map(l => ({ ...defaults(l.kind), ...l })) : [newDraft(kind, defaults(kind))])
   const [showErrors, setShowErrors] = useState(false)
   const save = useFinanceBatch()
+  // SAI's static catalogue plus every database-backed supplier's own.
+  const catalogues = useSupplierCatalogues()
   const formRef = useRef<HTMLDivElement>(null)
 
   // Autosaved locally so a crashed tab or closed browser doesn't take a half-
@@ -212,7 +214,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
               const keys = { onKeyDown: (e: React.KeyboardEvent) => onLineKey(e, i), onPaste: (e: React.ClipboardEvent) => onLinePaste(e, i) }
               const prod = l.kind === 'production'
               const supplierName = prod ? suppliers.find(s => s.id === l.supplier_id)?.supplier_name : undefined
-              const catalogue = prod ? catalogueForSupplier(supplierName) : undefined
+              const catalogue = prod ? catalogueForSupplier(supplierName, catalogues) : undefined
               const catMatch = catalogue ? materialFromText(catalogue, l.name) : undefined
               const catCode = catalogue && catMatch ? colorCodeFromText(catMatch, l.name) : undefined
               const catColors = catalogue && catMatch ? catalogue.colorsFor(catMatch) : []
@@ -231,7 +233,13 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
                       onChange={e => {
                         const name = e.target.value.toUpperCase()
                         const picked = catalogue ? materialFromText(catalogue, name) : undefined
-                        setLine(l.key, picked ? { name, unit: 'yard' } : { name })
+                        // A database-backed material carries the supplier's
+                        // current price; fill it in like the name/unit, but
+                        // only onto a still-empty price so picking a
+                        // catalogue match never overwrites a price someone
+                        // already typed for this line.
+                        const price = picked?.price != null && !l.price ? String(picked.price) : undefined
+                        setLine(l.key, picked ? { name, unit: 'yard', ...(price ? { price } : {}) } : { name })
                       }}
                       {...keys}
                     />
@@ -305,7 +313,10 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
                           material={catMatch}
                           colors={catColors}
                           selectedCode={catCode}
-                          onPick={code => setLine(l.key, { name: `${materialLabel(catMatch)} - ${code}`, unit: 'yard' })}
+                          onPick={code => setLine(l.key, {
+                            name: `${materialLabel(catMatch)} - ${code}`, unit: 'yard',
+                            ...(catMatch.price != null && !l.price ? { price: String(catMatch.price) } : {}),
+                          })}
                         />
                       ) : (
                         // Not every catalogue entry has recorded colour
@@ -340,7 +351,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
         {/* One per registered supplier catalogue — only lines whose supplier
             matches that catalogue actually attach to it (see `catalogue`
             above), so an unmatched one is simply inert. */}
-        {ALL_CATALOGUES.map(c => (
+        {catalogues.map(c => (
           <datalist key={c.id} id={`material-catalogue-${c.id}`}>
             {c.materials.map(m => <option key={materialLabel(m)} value={materialLabel(m)} />)}
           </datalist>

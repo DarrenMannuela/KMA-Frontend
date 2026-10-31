@@ -367,7 +367,7 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
       )}
 
       {selected.size > 0 && (
-        <div className="fixed bottom-4 left-4 right-4 dock:left-[256px] z-40 flex justify-center pointer-events-none">
+        <div className="fixed bottom-4 left-4 right-4 dock:left-[var(--sidebar-w)] z-40 flex justify-center pointer-events-none">
           <div className="pointer-events-auto flex flex-wrap items-center gap-2 bg-navy-900 text-white rounded-2xl shadow-xl px-4 py-2.5 text-sm">
             <span className="font-medium">{selected.size} selected</span>
             <button className="btn-gold btn-sm" onClick={() => setDialog({ kind: 'raise', items: pickedItems })}>Raise prices</button>

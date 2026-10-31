@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {
   ArrowDown, ArrowUp, ChevronRight, Download, FileUp, Link2, Plus, Printer, Search, Trash2, X,
-  ArrowRightLeft, Tag, Copy, CheckSquare, Pencil, Palette,
+  ArrowRightLeft, Tag, Copy, CheckSquare, Palette,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { EditableCell, formatRp } from '@/components/ui'
@@ -12,6 +12,7 @@ import { PageHeader, LoadingState, ErrorState } from '@/components/ui/Page'
 import { ConfirmDialog } from '@/components/ui'
 import {
   productionHooks, operationHooks, supplierHooks, orderHooks, useFinanceHeaders, useFinanceBatch, undoLast, useBudgets,
+  useSupplierCatalogues,
 } from '@/hooks'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { SI_UNITS } from '@/utils/Units'
@@ -85,6 +86,10 @@ export function Ledger({ kind, initial, title, icon }: {
   const source = kind === 'production' ? production : operations
   const { data: suppliers = [] } = supplierHooks.useList()
   const { data: orders = [] } = orderHooks.useList()
+  // SAI's static catalogue plus every database-backed supplier's own —
+  // see useSupplierCatalogues — so the swatch/picker below works the same
+  // way regardless of which supplier a line is on.
+  const catalogues = useSupplierCatalogues()
   const { data: headers = [] } = useFinanceHeaders()
   const { data: budgets = [] } = useBudgets()
   const batch = useFinanceBatch()
@@ -439,7 +444,7 @@ export function Ledger({ kind, initial, title, icon }: {
           // nothing. A muted palette icon stands in before any colour has
           // been picked yet, so a first-time pick doesn't need the Edit-
           // line dialog either.
-          const catalogue = catalogueForSupplier(supplierLabel(suppliers, r.supplier_id))
+          const catalogue = catalogueForSupplier(supplierLabel(suppliers, r.supplier_id), catalogues)
           const catMatch = catalogue ? materialFromText(catalogue, r.name) : undefined
           const catColors = catalogue && catMatch ? catalogue.colorsFor(catMatch) : []
           const catCode = catMatch ? colorCodeFromText(catMatch, r.name) : undefined
@@ -450,12 +455,12 @@ export function Ledger({ kind, initial, title, icon }: {
                 <button
                   type="button"
                   onClick={e => { e.stopPropagation(); setColorPickFor({ row: r, material: catMatch, colors: catColors, selectedCode: catCode }) }}
-                  className="shrink-0 rounded-full"
+                  className="shrink-0 rounded-full p-0.5 -m-0.5"
                   title={c ? `${c.code}${c.category ? ` · ${c.category}` : ''} — click to change` : 'Pick a colour'}
                 >
                   {c
-                    ? <span className="block w-2.5 h-2.5 rounded-full ring-1 ring-black/10 hover:ring-2 hover:ring-navy-400" style={{ background: c.hex }} />
-                    : <Palette size={12} className="text-slate-300 hover:text-navy-600 dark:text-navy-700 dark:hover:text-slate-300" />}
+                    ? <span className="block w-3.5 h-3.5 rounded-full ring-1 ring-black/10 hover:ring-2 hover:ring-navy-400" style={{ background: c.hex }} />
+                    : <Palette size={14} className="text-slate-300 hover:text-navy-600 dark:text-navy-700 dark:hover:text-slate-300" />}
                 </button>
               )}
               <span className="font-medium text-slate-800 truncate dark:text-slate-200">{r.name}</span>
@@ -498,7 +503,29 @@ export function Ledger({ kind, initial, title, icon }: {
   // floating it to the row's far right — which used to land it right under
   // the Order column header and read as if it were an order-related figure.
   const groupSum = (rows: LedgerRow[]) => rows.reduce((n, r) => n + r.total, 0)
-  const groupHeader = (key: string, rows: LedgerRow[]) => {
+  // Grouped by Kas Bon, a line's own row never shows the Kas Bon's date or
+  // description (they're not per-line fields) — only this header row does.
+  // That used to make them the one thing on this whole sheet you couldn't
+  // click to edit, so fixing either meant detouring through the Pencil
+  // dialog even though every other field was already a click away. `editable`
+  // (desktop only — the mobile card list taps this row to collapse/expand
+  // instead, so it can't also host an edit control) swaps the two for the
+  // same EditableCell the rest of the table uses.
+  const editHeader = (key: string, first: LedgerRow, patch: { date?: string; description?: string }) =>
+    apply(
+      // production_update/operation_update as explicit empty arrays, not
+      // omitted — matching the exact shape LineEditor's own header-only save
+      // already sent successfully (it always builds both keys, even when
+      // only date/description changed), rather than a header_update-only
+      // batch the backend may never have been exercised with.
+      {
+        production_update: [],
+        operation_update: [],
+        header_update: [{ id: key, date: patch.date ?? first.date.slice(0, 10), description: (patch.description ?? first.description ?? '').toUpperCase() }],
+      },
+      `Changed the ${patch.date ? 'date' : 'description'} of ${key}`,
+    )
+  const groupHeader = (key: string, rows: LedgerRow[], editable = false) => {
     if (filters.groupBy === 'kasbon') {
       const first = rows[0]
       const others = otherCount.get(key) ?? 0
@@ -513,8 +540,27 @@ export function Ledger({ kind, initial, title, icon }: {
       return (
         <>
           <span className="font-mono text-base font-bold text-navy-900 dark:text-slate-50">{key}</span>
-          <span className="text-sm text-slate-500 truncate dark:text-slate-400">{first.description || 'No description'}</span>
-          <span className="text-slate-500 text-xs whitespace-nowrap dark:text-slate-400">{formatDateShort(first.date)}</span>
+          {editable ? (
+            <EditableCell
+              value={first.description}
+              placeholder="No description"
+              uppercase
+              format={v => <span className="text-sm text-slate-500 truncate dark:text-slate-400">{v || 'No description'}</span>}
+              onSave={v => editHeader(key, first, { description: String(v) })}
+            />
+          ) : (
+            <span className="text-sm text-slate-500 truncate dark:text-slate-400">{first.description || 'No description'}</span>
+          )}
+          {editable ? (
+            <EditableCell
+              type="date"
+              value={first.date.slice(0, 10)}
+              format={v => <span className="text-slate-500 text-xs whitespace-nowrap dark:text-slate-400">{formatDateShort(v)}</span>}
+              onSave={v => editHeader(key, first, { date: String(v) })}
+            />
+          ) : (
+            <span className="text-slate-500 text-xs whitespace-nowrap dark:text-slate-400">{formatDateShort(first.date)}</span>
+          )}
           {others > 0 && <span className="badge-slate !text-[10px]" title={`This Kas Bon also has ${others} ${kind === 'production' ? 'operation' : 'production'} line(s)`}>+{others} {kind === 'production' ? 'ops' : 'bahan'}</span>}
         </>
       )
@@ -706,8 +752,8 @@ export function Ledger({ kind, initial, title, icon }: {
                       <span className="flex-1 min-w-0">
                         <span className="flex items-center gap-1.5 min-w-0">
                           {kind === 'production' && (() => {
-                            const c = colorFromText(supplierLabel(suppliers, r.supplier_id), r.name)
-                            return c && <span className="w-2.5 h-2.5 rounded-full ring-1 ring-black/10 shrink-0" style={{ background: c.hex }} />
+                            const c = colorFromText(supplierLabel(suppliers, r.supplier_id), r.name, catalogues)
+                            return c && <span className="w-3.5 h-3.5 rounded-full ring-1 ring-black/10 shrink-0" style={{ background: c.hex }} />
                           })()}
                           <span className="block font-medium text-slate-800 truncate dark:text-slate-200">{r.name || r.category}</span>
                         </span>
@@ -809,7 +855,7 @@ export function Ledger({ kind, initial, title, icon }: {
                               <button onClick={() => setCollapsed(c => { const n = new Set(c); if (n.has(group.key)) n.delete(group.key); else n.add(group.key); return n })} className="text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200" aria-label={isCollapsed ? 'Expand' : 'Collapse'}>
                                 <ChevronRight size={14} className={`transition-transform ${isCollapsed ? '' : 'rotate-90'}`} />
                               </button>
-                              {groupHeader(group.key, group.rows)}
+                              {groupHeader(group.key, group.rows, true)}
                             </div>
                           </td>
                           {/* Quiet and small on purpose: a summary aside, not a second
@@ -876,18 +922,16 @@ export function Ledger({ kind, initial, title, icon }: {
                             </td>
                           ))}
                           <td className="border border-slate-200 px-1 text-center dark:border-navy-800">
-                            <span className="inline-flex items-center gap-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
-                              {/* The desktop table's only route to the full
-                                 line editor — per-cell edits cover most
-                                 changes, but re-picking a catalogue colour
-                                 needs the picker LineEditor carries. */}
-                              <button onClick={() => setEditing(r)} className="text-slate-300 hover:text-navy-700 dark:text-navy-700 dark:hover:text-slate-200" title="Edit line">
-                                <Pencil size={13} />
-                              </button>
-                              <button onClick={() => setConfirmDeleteRow(r)} className="text-slate-300 hover:text-red-500 dark:text-navy-700" title="Delete line">
-                                <Trash2 size={14} />
-                              </button>
-                            </span>
+                            {/* Every field in this row, including the Kas
+                               Bon's own date/description above, is already
+                               a direct click away (its own cell, or the
+                               Bahan swatch for colour) — a separate Edit-line
+                               button only duplicated whichever one of those
+                               was fastest, so delete is the one action left
+                               that has no cell of its own to live in. */}
+                            <button onClick={() => setConfirmDeleteRow(r)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 focus-within:opacity-100 dark:text-navy-700" title="Delete line">
+                              <Trash2 size={14} />
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -911,7 +955,7 @@ export function Ledger({ kind, initial, title, icon }: {
 
       {/* Bulk actions */}
       {selected.size > 0 && (
-        <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-3 pointer-events-none dock:left-[240px]" data-bulk-bar>
+        <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-3 pointer-events-none dock:left-[var(--sidebar-w)]" data-bulk-bar>
           <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 rounded-2xl bg-navy-900 text-white shadow-2xl px-3 py-2 max-w-full">
             <span className="px-2 text-sm"><span className="font-semibold">{selected.size}</span> selected · <span className="font-mono">{formatRp(selectedTotal)}</span></span>
             <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" onClick={() => setDialog('move')}><ArrowRightLeft size={13} /> Move</button>

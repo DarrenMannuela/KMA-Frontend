@@ -89,7 +89,7 @@ Start the three stacks in order: KMA (it creates `kma_network`), KMA-Auth, then 
   - copy rows in Excel and press Ctrl+V on the sheet (or into a line of the form) to bring them in;
   - **Import** reads .xlsx or .csv (Indonesian or English headings, "30.000", "2,5", 05/10/2026), lets you check the column mapping, adds unknown suppliers, and skips lines already saved; **Export** writes a real .xlsx of what's shown or selected.
 - **Finance overview** — what needs attention first (overdue invoices, budgets near their limit, recurring costs not added, bahan not linked to an order), then the year month by month against last year, where the money goes (suppliers, bahan, operation categories; click through to the lines), cash in vs out with a running balance, who owes what by age, profit per client and per order (costs are linked to orders in the sheet's Order column), monthly budgets with progress, and recurring costs added each month with one click. Downloads as one Excel workbook.
-- **Suppliers** — supplier records by category (Sablon, Embroidery, Merchandise, Uniform, General).
+- **Suppliers** — supplier records by category (Sablon, Embroidery, Merchandise, Uniform, General), each with its own catalogue: materials, their colours, and a current price per material, edited in place from a "Catalogue" button on the supplier's row. Every supplier's catalogue — not just SAI's hard-coded one — feeds the Kas Bon colour picker and swatch in Production automatically, and picking a catalogued material auto-fills its price on a new line.
 - **Users (admin only)** — staff account provisioning, deactivation, and password resets. No self-signup — accounts are created by an admin and invited by email.
 
 ## Supplier Category Enum (from kma.yaml)

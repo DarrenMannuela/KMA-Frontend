@@ -9,6 +9,9 @@ import type {
   CreateItemRequest, UpdateItemRequest,
   CreateInvoiceRequest, UpdateInvoiceRequest,
   CreateSupplierRequest, UpdateSupplierRequest,
+  SupplierMaterial, SupplierMaterialColor, SupplierDocument,
+  CreateSupplierMaterialRequest, UpdateSupplierMaterialRequest,
+  CreateSupplierMaterialColorRequest, UpdateSupplierMaterialColorRequest,
   CreateFinanceHeaderRequest, UpdateFinanceHeaderRequest,
   CreateProductionItemRequest, UpdateProductionItemRequest,
   CreateOperationItemRequest, UpdateOperationItemRequest,
@@ -72,6 +75,39 @@ export const ordersApi        = crud<Order,         CreateOrderRequest,        U
 export const itemsApi         = {...crud<Item,           CreateItemRequest,          UpdateItemRequest>('/item'), getByOrder: (orderId: string) => http.get<Item[]>(`/item/by-order?order_id=${encodeURIComponent(orderId)}`).then(r => r.data)}
 export const invoicesApi    = crud<Invoice,     CreateInvoiceRequest,    UpdateInvoiceRequest>('/invoice')
 export const suppliersApi     = crud<Supplier,       CreateSupplierRequest,      UpdateSupplierRequest>('/supplier')
+
+// A supplier's own catalogue — materials, and each material's colours,
+// editable from the Suppliers page. getBySupplier/grouped mirror the
+// clientItemApi/clientItemPriceApi shape above.
+export const supplierMaterialApi = {
+  ...crud<SupplierMaterial, CreateSupplierMaterialRequest, UpdateSupplierMaterialRequest>('/supplier-material'),
+  getBySupplier: (supplierId: number | string) =>
+    http.get<SupplierMaterial[]>(`/supplier-material/by-supplier?supplier_id=${encodeURIComponent(supplierId)}`).then(r => r.data),
+}
+
+export const supplierMaterialColorApi = {
+  ...crud<SupplierMaterialColor, CreateSupplierMaterialColorRequest, UpdateSupplierMaterialColorRequest>('/supplier-material-color'),
+  getByMaterial: (materialId: number | string) =>
+    http.get<SupplierMaterialColor[]>(`/supplier-material-color/by-material?supplier_material_id=${encodeURIComponent(materialId)}`).then(r => r.data),
+  grouped: () => http.get<Record<string, SupplierMaterialColor[]>>('/supplier-material-color/grouped').then(r => r.data),
+}
+
+// A supplier's catalogue/price-list PDFs — separate from the structured
+// materials above. upload posts multipart (field name "file"); a supplier
+// can have several, so upload always adds rather than replacing one.
+export const supplierDocumentApi = {
+  getBySupplier: (supplierId: number | string) =>
+    http.get<SupplierDocument[]>(`/supplier-document/by-supplier?supplier_id=${encodeURIComponent(supplierId)}`).then(r => r.data),
+  upload: (supplierId: number | string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return http.post<SupplierDocument>(`/supplier/${encodeURIComponent(supplierId)}/document`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
+  delete: (id: number | string) =>
+    http.delete<void>(`/supplier-document/${encodeURIComponent(id)}`).then(r => r.data),
+}
 
 // The Kas Bon headers. One header can hold production and operation lines.
 export const financeHeaderApi = crud<FinanceHeader, CreateFinanceHeaderRequest, UpdateFinanceHeaderRequest>('/finance-header')

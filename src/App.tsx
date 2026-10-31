@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react'
+import { Suspense, lazy, useLayoutEffect, useState } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { Sidebar } from '@/components/layout/Sidebar'
@@ -69,12 +69,25 @@ function AppShell() {
   // dock:translate-x-0, which keeps it permanently visible once docked
   // (tailwind config's `dock` screen) regardless of this.
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('kma.sidebar.collapsed') === '1' } catch { return false }
+  })
+  // A CSS var, not just this component's own margin below, because a couple
+  // of pages (Ledger's and the catalogue's bulk-action bars) are fixed-
+  // position and need to clear the docked sidebar's actual width too, with
+  // no prop path from here to them. useLayoutEffect so it's set before the
+  // first paint, not after — a plain useEffect would let that first frame
+  // render against whatever `--sidebar-w` last was (or nothing at all).
+  useLayoutEffect(() => {
+    document.documentElement.style.setProperty('--sidebar-w', sidebarCollapsed ? '72px' : '240px')
+    try { localStorage.setItem('kma.sidebar.collapsed', sidebarCollapsed ? '1' : '0') } catch { /* private mode */ }
+  }, [sidebarCollapsed])
   return (
     <div className="flex min-h-screen">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} collapsed={sidebarCollapsed} onToggleCollapsed={() => setSidebarCollapsed(c => !c)} />
       {/* min-w-0 lets this flex item shrink below its content's width, so wide
          tables scroll inside their own containers instead of the whole page. */}
-      <div className="flex-1 flex flex-col dock:ml-[240px] min-h-screen min-w-0">
+      <div className={`flex-1 flex flex-col min-h-screen min-w-0 transition-[margin] duration-200 ${sidebarCollapsed ? 'dock:ml-[72px]' : 'dock:ml-[240px]'}`}>
         <Topbar onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-navy-950">
           {/* Only routed content is behind the boundary; it resets on navigation. */}

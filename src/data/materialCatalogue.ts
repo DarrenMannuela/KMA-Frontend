@@ -1,11 +1,13 @@
-import { SAI_FABRICS, saiFabricColors, isSaiSupplier } from './saiCatalogue'
+import type { Supplier, SupplierMaterial, SupplierMaterialColor } from '@/types'
 
-// "Pick from a supplier's catalogue" as a generic feature: a supplier can
-// have a reference material list (and, per material, colour swatches)
-// attached by registering it below — the Kas Bon form reads only this
-// registry, never a specific supplier's data file directly, so adding the
-// next supplier's catalogue (once real data for one exists) is "write its
-// data file, add one entry here," not a change to the form itself.
+// "Pick from a supplier's catalogue" as a generic feature: every supplier's
+// catalogue lives in the database (SupplierMaterial/SupplierMaterialColor,
+// managed from the Suppliers page) and is turned into the SupplierCatalogue
+// shape below by supplierCatalogueFromDb, so nothing downstream of
+// catalogueForSupplier needs to know or care which supplier it's looking at.
+// SAI used to be the one exception — a hand-written fallback list checked
+// into this repo — until its real catalogue was migrated into the database
+// too (2026-11-01), at which point that file was deleted.
 export interface CatalogueColor {
   code: string
   category: string | null
@@ -21,9 +23,11 @@ export interface CatalogueMaterial {
    *  sold by the roll (e.g. a future trims/notions supplier). */
   widthCm?: number
   rollYards?: number
-  /** This catalogue's own stable id for the material — a colour-data key
-   *  for SAI's (see saiCatalogue.ts); any unique string for a future one. */
+  /** This catalogue's own stable id for the material — the database row's
+   *  own id (stringified), from supplierCatalogueFromDb. */
   slug: string
+  /** The supplier's current price for this material. */
+  price?: number
 }
 
 export interface SupplierCatalogue {
@@ -35,22 +39,49 @@ export interface SupplierCatalogue {
   colorsFor: (material: CatalogueMaterial) => CatalogueColor[]
 }
 
-// Every registered supplier catalogue. SAI is the only one with real data
-// right now (see saiCatalogue.ts) — a second supplier's catalogue is added
-// the same way: its own data file, one more entry here.
-const CATALOGUES: SupplierCatalogue[] = [
-  { id: 'sai', matchesSupplier: isSaiSupplier, materials: SAI_FABRICS, colorsFor: saiFabricColors },
-]
+/** Every supplier's catalogue is database-backed (see supplierCatalogueFromDb
+ *  below) and merged in by useSupplierCatalogues() — there's no static
+ *  registry left to fall back to, so every call site needs live data from
+ *  that hook to get a catalogue match at all. */
+export const ALL_CATALOGUES: SupplierCatalogue[] = []
 
-/** The catalogue registered for this supplier name, if any. */
-export function catalogueForSupplier(supplierName: string | undefined | null): SupplierCatalogue | undefined {
+/** The catalogue registered for this supplier name, if any. Pass the merged
+ *  list from useSupplierCatalogues() — without it, no supplier matches. */
+export function catalogueForSupplier(
+  supplierName: string | undefined | null,
+  catalogues: SupplierCatalogue[] = ALL_CATALOGUES,
+): SupplierCatalogue | undefined {
   if (!supplierName) return undefined
-  return CATALOGUES.find(c => c.matchesSupplier(supplierName))
+  return catalogues.find(c => c.matchesSupplier(supplierName))
 }
 
-/** For rendering every registered catalogue's <datalist> up front, since a
- *  Kas Bon form can have several lines, each possibly a different supplier. */
-export const ALL_CATALOGUES = CATALOGUES
+/** Turns one supplier's database catalogue (SupplierMaterial rows, plus
+ *  their colours grouped by material id — see supplierMaterialColorHooks.
+ *  useGrouped) into the SupplierCatalogue shape the Kas Bon picker, the
+ *  Ledger's swatch and everything else that reads one actually consumes. */
+export function supplierCatalogueFromDb(
+  supplier: Supplier,
+  materials: SupplierMaterial[],
+  colorsByMaterial: Record<string, SupplierMaterialColor[]>,
+): SupplierCatalogue {
+  const toMaterial = (m: SupplierMaterial): CatalogueMaterial => ({
+    name: m.name,
+    brand: m.brand ?? '',
+    composition: m.composition ?? '',
+    usedFor: m.used_for ?? '',
+    widthCm: m.width_cm ?? undefined,
+    rollYards: m.roll_yards ?? undefined,
+    slug: String(m.id),
+    price: m.price,
+  })
+  const toColor = (c: SupplierMaterialColor): CatalogueColor => ({ code: c.code, category: c.category, hex: c.hex })
+  return {
+    id: `supplier-${supplier.id}`,
+    matchesSupplier: name => name === supplier.supplier_name,
+    materials: materials.map(toMaterial),
+    colorsFor: material => (colorsByMaterial[material.slug] ?? []).map(toColor),
+  }
+}
 
 /** "VERLANDO - JAPAN DRILL" — the form used as both the datalist option and
  *  the stored material_name, matching the all-caps convention Kas Bon lines
@@ -81,8 +112,12 @@ export function colorCodeFromText(material: CatalogueMaterial, text: string): st
  *  call replacing the catalogue → material → code → swatch chase, for
  *  anywhere that just wants "is there a known colour here" (the Ledger's
  *  own rows, not just the Kas Bon entry form that originally picked it). */
-export function colorFromText(supplierName: string | undefined | null, text: string): CatalogueColor | undefined {
-  const catalogue = catalogueForSupplier(supplierName)
+export function colorFromText(
+  supplierName: string | undefined | null,
+  text: string,
+  catalogues: SupplierCatalogue[] = ALL_CATALOGUES,
+): CatalogueColor | undefined {
+  const catalogue = catalogueForSupplier(supplierName, catalogues)
   const material = catalogue && materialFromText(catalogue, text)
   const code = material && colorCodeFromText(material, text)
   return code ? catalogue!.colorsFor(material!).find(c => c.code === code) : undefined

@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Users } from 'lucide-react'
+import { Users, BookOpen } from 'lucide-react'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField, UppercaseField } from '@/components/ui'
 import { supplierHooks } from '@/hooks'
 import { CATEGORY_LABELS } from '@/constants/supplierCategories'
+import { SupplierCatalogueModal } from './SupplierCatalogueModal'
 import type { Supplier, CreateSupplierRequest, SupplierCategory } from '@/types'
 
 // The category values in display order; labels from CATEGORY_LABELS.
@@ -68,8 +69,13 @@ export function SuppliersPage() {
   const { data, isLoading, isError, refetch } = supplierHooks.useList()
   const del = supplierHooks.useDelete()
   const update = supplierHooks.useUpdate()
+  // The supplier whose catalogue (materials, colours, prices) is open —
+  // see SupplierCatalogueModal. Feeds the Kas Bon colour picker and the
+  // Ledger's own swatch the same way SAI's hard-coded catalogue already does.
+  const [catalogueFor, setCatalogueFor] = useState<Supplier | null>(null)
 
   return (
+    <>
     <CrudPage<Supplier>
       title="Suppliers"
       icon={Users}
@@ -78,6 +84,11 @@ export function SuppliersPage() {
       isError={isError}
       onRetry={refetch}
       searchKeys={['supplier_name', 'supplier_category']}
+      rowActions={r => (
+        <button onClick={() => setCatalogueFor(r)} className="text-slate-300 hover:text-navy-700 dark:text-navy-700 dark:hover:text-slate-200" title="Materials, colours & prices">
+          <BookOpen size={15} />
+        </button>
+      )}
       columns={[
         { header: 'ID',       key: 'id' },
         { header: 'Name',     key: 'supplier_name',     primary: true, edit: { type: 'text', uppercase: true },
@@ -98,5 +109,7 @@ export function SuppliersPage() {
         update.mutate({ id: row.id, body: { [key]: value } as Partial<CreateSupplierRequest> })
       }}
     />
+    {catalogueFor && <SupplierCatalogueModal supplier={catalogueFor} onClose={() => setCatalogueFor(null)} />}
+    </>
   )
 }

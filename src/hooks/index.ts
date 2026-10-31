@@ -2,7 +2,7 @@ export { orderHooks, itemHooks, useOrderRemainingItems } from './order'
 export type { OrderRemainingItem } from './order'
 
 export { invoiceHooks } from './invoice'
-export { supplierHooks } from './supplier'
+export { supplierHooks, supplierMaterialHooks, supplierMaterialColorHooks, supplierDocumentHooks, useSupplierCatalogues } from './supplier'
 export { deliveryHooks, deliveryItemHooks } from './delivery'
 
 export {

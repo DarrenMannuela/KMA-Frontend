@@ -6,6 +6,7 @@ import { SI_UNITS } from '@/utils/Units'
 import { todayISODate } from '@/utils/MonthUtils'
 import { suggestNextKasBonId } from '@/utils/KasBonId'
 import { catalogueForSupplier, materialFromText, materialLabel, colorCodeFromText } from '@/data/materialCatalogue'
+import { useSupplierCatalogues } from '@/hooks'
 import type { FinanceBatch, FinanceHeader, Order, Supplier } from '@/types'
 import { editBatch, supplierLabel, supplierWithCategory, type EditField, type LedgerRow } from './ledgerModel'
 import { MaterialColorPicker } from './MaterialColorPicker'
@@ -133,10 +134,14 @@ export function LineEditor({ row, suppliers, orders, categories, saving, onApply
   const prod = row.kind === 'production'
   const set = (patch: Partial<typeof v>) => { setV(x => ({ ...x, ...patch })); setError('') }
 
-  // Same catalogue/colour lookup the Kas Bon entry form does per line —
-  // so fixing an existing line's colour (not just picking one for a new
-  // one) has the same picker, not just a plain text field.
-  const catalogue = prod ? catalogueForSupplier(supplierLabel(suppliers, v.supplier_id)) : undefined
+  // Same catalogue/colour lookup the Kas Bon entry form does per line — so
+  // fixing an existing line's colour (not just picking one for a new one)
+  // has the same picker, not just a plain text field. This dialog is only
+  // ever opened from the mobile card list (desktop edits every field,
+  // colour included, straight from its own cell in the table), so it stays
+  // fully interactive unconditionally.
+  const catalogues = useSupplierCatalogues()
+  const catalogue = prod ? catalogueForSupplier(supplierLabel(suppliers, v.supplier_id), catalogues) : undefined
   const catMatch = catalogue ? materialFromText(catalogue, v.name) : undefined
   const catCode = catalogue && catMatch ? colorCodeFromText(catMatch, v.name) : undefined
   const catColors = catalogue && catMatch ? catalogue.colorsFor(catMatch) : []
@@ -188,15 +193,15 @@ export function LineEditor({ row, suppliers, orders, categories, saving, onApply
                   {catMatch.composition}
                   {catMatch.widthCm != null && catMatch.rollYards != null && <> · roll {catMatch.widthCm} cm × {catMatch.rollYards} yd</>}
                 </p>
-                {catColors.length > 0 ? (
+                {catColors.length === 0 ? (
+                  <p className="mt-1 text-[11px] text-slate-400 italic dark:text-navy-600">No colour list recorded for this fabric yet — type the colour/code after the name if you know it.</p>
+                ) : (
                   <MaterialColorPicker
                     material={catMatch}
                     colors={catColors}
                     selectedCode={catCode}
                     onPick={code => set({ name: `${materialLabel(catMatch)} - ${code}` })}
                   />
-                ) : (
-                  <p className="mt-1 text-[11px] text-slate-400 italic dark:text-navy-600">No colour list recorded for this fabric yet — type the colour/code after the name if you know it.</p>
                 )}
               </div>
             )}
