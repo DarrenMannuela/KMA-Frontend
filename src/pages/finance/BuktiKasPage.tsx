@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Banknote, Plus, Pencil, Trash2 } from 'lucide-react'
 import { ConfirmDialog, FormField, formatRp } from '@/components/ui'
 import { Modal } from '@/components/ui/Modal'
@@ -18,6 +19,7 @@ import type { BuktiKasRow } from '@/types'
 // expected to be far shorter than a year of production/operation lines, so
 // the extra machinery wasn't worth building before it's clear it's needed.
 export function BuktiKasPage() {
+  const { t } = useTranslation()
   const isMobile = useIsMobile()
   const { data: rows = [], isLoading, isError, refetch } = buktiKasHooks.useList()
   const { data: orders = [] } = orderHooks.useList()
@@ -39,7 +41,7 @@ export function BuktiKasPage() {
 
   const grandTotal = rows.reduce((n, r) => n + r.price, 0)
 
-  if (isLoading) return <LoadingState label="Loading Bukti Kas…" />
+  if (isLoading) return <LoadingState label={t('buktiKas.loading')} />
   if (isError) return <div className="p-4 md:p-6"><div className="card"><ErrorState what="Bukti Kas" onRetry={refetch} /></div></div>
 
   return (
@@ -47,17 +49,17 @@ export function BuktiKasPage() {
       <PageHeader
         icon={Banknote}
         title="Bukti Kas"
-        subtitle={`Cash received · ${formatRp(grandTotal)} total`}
+        subtitle={t('buktiKas.subtitle', { total: formatRp(grandTotal) })}
         actions={
           <button className="btn-primary btn-sm" onClick={() => setFormFor({})}>
-            <Plus size={14} /> Add New
+            <Plus size={14} /> {t('common.addNew')}
           </button>
         }
       />
 
       {headers.length === 0 ? (
         <div className="card p-10 text-center text-slate-500 text-sm dark:text-slate-400">
-          No Bukti Kas yet — click Add New to record cash received.
+          {t('buktiKas.empty')}
         </div>
       ) : (
         <div className="space-y-4">
@@ -73,7 +75,7 @@ export function BuktiKasPage() {
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <span className="font-mono font-semibold text-navy-900 dark:text-slate-50">{formatRp(total)}</span>
-                    <button className="btn-ghost btn-sm !px-2" onClick={() => setFormFor({ headerId: h.header_id })} title="Add another line to this Bukti Kas">
+                    <button className="btn-ghost btn-sm !px-2" onClick={() => setFormFor({ headerId: h.header_id })} title={t('buktiKas.addLineTitle')} aria-label={t('buktiKas.addLineTitle')}>
                       <Plus size={14} />
                     </button>
                   </div>
@@ -87,13 +89,13 @@ export function BuktiKasPage() {
                           <span className="font-medium">{r.item_description}</span>
                           <span className="font-mono font-semibold shrink-0">{formatRp(r.price)}</span>
                         </div>
-                        {r.order_id && <div className="text-xs text-slate-500 mt-1 dark:text-slate-400">Order: {orderLabel(orders, r.order_id)}</div>}
+                        {r.order_id && <div className="text-xs text-slate-500 mt-1 dark:text-slate-400">{t('buktiKas.orderColon', { order: orderLabel(orders, r.order_id) })}</div>}
                         <div className="flex items-center gap-4 mt-3">
                           <button className="text-slate-500 hover:text-blue-500 text-xs flex items-center gap-1.5 dark:text-slate-400" onClick={() => setEditingRow(r)}>
-                            <Pencil size={14} /> Edit
+                            <Pencil size={14} /> {t('common.edit')}
                           </button>
                           <button className="text-slate-500 hover:text-red-500 text-xs flex items-center gap-1.5 dark:text-slate-400" onClick={() => setConfirmDeleteRow(r)}>
-                            <Trash2 size={14} /> Delete
+                            <Trash2 size={14} /> {t('common.delete')}
                           </button>
                         </div>
                       </div>
@@ -103,7 +105,7 @@ export function BuktiKasPage() {
                   <div className="overflow-x-auto">
                     <table className="kma-table">
                       <thead>
-                        <tr><th>Description</th><th>Order</th><th className="!text-right">Amount</th><th /></tr>
+                        <tr><th>{t('buktiKas.description')}</th><th>{t('buktiKas.order')}</th><th className="!text-right">{t('buktiKas.amount')}</th><th /></tr>
                       </thead>
                       <tbody>
                         {h.rows.map(r => (
@@ -144,7 +146,7 @@ export function BuktiKasPage() {
 
       {confirmDeleteRow && (
         <ConfirmDialog
-          message={`Delete "${confirmDeleteRow.item_description}" (${formatRp(confirmDeleteRow.price)}) from ${confirmDeleteRow.header_id}?`}
+          message={t('buktiKas.deleteConfirm', { name: confirmDeleteRow.item_description, amount: formatRp(confirmDeleteRow.price), id: confirmDeleteRow.header_id })}
           onConfirm={() => { del.mutate(confirmDeleteRow.id); setConfirmDeleteRow(null) }}
           onCancel={() => setConfirmDeleteRow(null)}
         />
@@ -162,6 +164,7 @@ function BuktiKasLineForm({ headers, orders, headerId: existingId, onClose }: {
   headerId?: string
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const existing = existingId ? headers.find(h => h.id === existingId) : undefined
   const create = buktiKasHooks.useCreate()
   const [date, setDate] = useState(existing?.date ?? todayISODate())
@@ -193,44 +196,44 @@ function BuktiKasLineForm({ headers, orders, headerId: existingId, onClose }: {
   }
 
   return (
-    <Modal title={existing ? `Add a line to ${existing.id}` : 'Add Bukti Kas'} onClose={onClose}>
+    <Modal title={existing ? t('buktiKas.addLineTo', { id: existing.id }) : t('buktiKas.addBuktiKas')} onClose={onClose}>
       <div className="space-y-4">
         {!existing && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <FormField label="Bukti Kas No." required>
+            <FormField label={t('buktiKas.number')} required>
               <input className={`field font-mono ${missing && !id.trim() ? '!border-red-400' : ''}`}
                 value={id} onChange={e => { setId(e.target.value.toUpperCase()); setIdTouched(true) }} />
             </FormField>
-            <FormField label="Date" required>
+            <FormField label={t('common.date')} required>
               <input className={`field ${missing && !date ? '!border-red-400' : ''}`} type="date" value={date} onChange={e => changeDate(e.target.value)} />
             </FormField>
             <div className="col-span-1 sm:col-span-2">
-              <FormField label="Description (optional)">
-                <input className="field" placeholder="What this Bukti Kas is for overall" value={description}
+              <FormField label={t('buktiKas.descriptionOptional')}>
+                <input className="field" placeholder={t('buktiKas.descriptionPlaceholder')} value={description}
                   onChange={e => setDescription(e.target.value.toUpperCase())} />
               </FormField>
             </div>
           </div>
         )}
-        <FormField label="Received for" required>
+        <FormField label={t('buktiKas.receivedFor')} required>
           <input className={`field ${missing && !itemDescription.trim() ? '!border-red-400' : ''}`}
-            placeholder="e.g. Pelunasan from Zenbu" value={itemDescription}
+            placeholder={t('buktiKas.receivedForPlaceholder')} value={itemDescription}
             onChange={e => setItemDescription(e.target.value.toUpperCase())} />
         </FormField>
-        <FormField label="Amount (Rp)" required>
+        <FormField label={t('buktiKas.amountRp')} required>
           <input className={`field font-mono ${missing && !(Number(price) > 0) ? '!border-red-400' : ''}`}
             inputMode="numeric" value={price ? Number(price).toLocaleString('id-ID') : ''}
             onChange={e => setPrice(e.target.value.replace(/\D/g, ''))} />
         </FormField>
-        <FormField label="Order (optional)">
-          <input className="field font-mono text-sm" placeholder="Order ID this cash was for" list="bukti-kas-order-list"
+        <FormField label={t('buktiKas.orderOptional')}>
+          <input className="field font-mono text-sm" placeholder={t('buktiKas.orderPlaceholder')} list="bukti-kas-order-list"
             value={orderId} onChange={e => setOrderId(e.target.value.toUpperCase())} />
           <datalist id="bukti-kas-order-list">
             {orders.slice(-300).reverse().map(o => <option key={o.id} value={o.id}>{o.company ?? ''}</option>)}
           </datalist>
         </FormField>
         <button className="btn-primary w-full" disabled={create.isPending} onClick={submit}>
-          {create.isPending ? 'Saving…' : 'Add'}
+          {create.isPending ? t('common.saving') : t('finance.budgets.add')}
         </button>
       </div>
     </Modal>
@@ -245,6 +248,7 @@ function BuktiKasEditForm({ row, orders, onClose }: {
   orders: { id: string; company?: string | null }[]
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const update = buktiKasHooks.useUpdate()
   const [itemDescription, setItemDescription] = useState(row.item_description)
   const [price, setPrice] = useState(String(row.price))
@@ -267,26 +271,26 @@ function BuktiKasEditForm({ row, orders, onClose }: {
   }
 
   return (
-    <Modal title={`Edit line on ${row.header_id}`} onClose={onClose}>
+    <Modal title={t('buktiKas.editLineOn', { id: row.header_id })} onClose={onClose}>
       <div className="space-y-4">
-        <FormField label="Received for" required>
+        <FormField label={t('buktiKas.receivedFor')} required>
           <input className={`field ${missing && !itemDescription.trim() ? '!border-red-400' : ''}`}
             value={itemDescription} onChange={e => setItemDescription(e.target.value.toUpperCase())} />
         </FormField>
-        <FormField label="Amount (Rp)" required>
+        <FormField label={t('buktiKas.amountRp')} required>
           <input className={`field font-mono ${missing && !(Number(price) > 0) ? '!border-red-400' : ''}`}
             inputMode="numeric" value={price ? Number(price).toLocaleString('id-ID') : ''}
             onChange={e => setPrice(e.target.value.replace(/\D/g, ''))} />
         </FormField>
-        <FormField label="Order (optional)">
-          <input className="field font-mono text-sm" placeholder="Order ID this cash was for" list="bukti-kas-order-list-edit"
+        <FormField label={t('buktiKas.orderOptional')}>
+          <input className="field font-mono text-sm" placeholder={t('buktiKas.orderPlaceholder')} list="bukti-kas-order-list-edit"
             value={orderId} onChange={e => setOrderId(e.target.value.toUpperCase())} />
           <datalist id="bukti-kas-order-list-edit">
             {orders.slice(-300).reverse().map(o => <option key={o.id} value={o.id}>{o.company ?? ''}</option>)}
           </datalist>
         </FormField>
         <button className="btn-primary w-full" disabled={update.isPending} onClick={submit}>
-          {update.isPending ? 'Saving…' : 'Save'}
+          {update.isPending ? t('common.saving') : t('common.save')}
         </button>
       </div>
     </Modal>

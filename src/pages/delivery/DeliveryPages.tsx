@@ -302,7 +302,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
             <button
               type="button"
               className="btn-ghost btn-sm !px-2 shrink-0"
-              title={t('delivery.form.resetIdTitle')}
+              title={t('delivery.form.resetIdTitle')} aria-label={t('delivery.form.resetIdTitle')}
               onClick={resetIdSuggestion}
             >
               <RotateCcw size={14} />
@@ -440,28 +440,30 @@ export function DeliveryPage() {
         { header: t('delivery.columns.contact'),         key: 'contact_person', secondary: true, render: r => r.contact_person || r.phone_number ? (
             <div className="leading-tight">
               {r.contact_person && <div>{r.contact_person}</div>}
-              {r.phone_number && <div className="font-mono text-xs text-slate-400 dark:text-slate-500">{r.phone_number}</div>}
+              {r.phone_number && <div className="font-mono text-xs whitespace-nowrap text-slate-500 dark:text-slate-400">{r.phone_number}</div>}
             </div>
           ) : '—' },
-        { header: t('delivery.columns.po'),              key: 'po_number',      secondary: true, render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
+        { header: t('delivery.columns.po'),              key: 'po_number',      secondary: true, render: r => <span className="font-mono text-xs whitespace-nowrap">{r.po_number ?? '—'}</span> },
         { header: t('delivery.columns.date'),            key: 'date',           render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
       ]}
       formTitle={e => e ? t('delivery.formTitleEdit') : t('delivery.formTitleNew')}
       renderForm={(editing, onClose) => <DeliveryForm editing={editing} onClose={onClose} />}
       onDelete={id => del.mutate(id)}
       deleteMessage={r => t('delivery.deleteConfirm', { id: r.id })}
+      undoDeletes
+      rowHref={row => `/delivery/${encodeURIComponent(row.id)}`}
       rowActions={row => (
         <>
           <button
             className="btn-ghost btn-sm !px-2 hover:!text-gold-500"
             onClick={() => navigate(`/delivery/${encodeURIComponent(row.id)}`)}
-            title={t('delivery.viewContents')}>
+            title={t('delivery.viewContents')} aria-label={t('delivery.viewContents')}>
             <Eye className="w-3.5 h-3.5" />
           </button>
           <button
             className="btn-ghost btn-sm !px-2 hover:!text-gold-500"
             onClick={() => navigate(`/delivery/${encodeURIComponent(row.id)}/print`)}
-            title={t('delivery.printDeliveryOrder')}>
+            title={t('delivery.printDeliveryOrder')} aria-label={t('delivery.printDeliveryOrder')}>
             <Printer className="w-3.5 h-3.5" />
           </button>
         </>

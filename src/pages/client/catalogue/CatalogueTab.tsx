@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import {
   Copy, Download, FileUp, Image as ImageIcon, Package, Plus, Search, Trash2, TrendingUp, X,
 } from 'lucide-react'
@@ -10,6 +11,7 @@ import { useCatalogueBatch, undoCatalogue, useClientSales, type Sale } from '@/h
 import { buildXlsx, downloadBlob, type SheetSpec } from '@/utils/xlsx'
 import { formatDateShort } from '@/utils/MonthUtils'
 import { isTyping } from '@/utils/isTyping'
+import i18n from '@/i18n/config'
 import type { Client, ClientItem, ClientItemPrice } from '@/types'
 import {
   catalogueSheet, groupCatalogue, itemKey, itemLabel, pctChange, priceBefore, priceIn, priceYears, yearStart,
@@ -29,9 +31,10 @@ type Dialog =
 const thisYear = new Date().getFullYear()
 
 function Thumb({ item, onOpen }: { item: ClientItem | undefined; onOpen: () => void }) {
+  const { t } = useTranslation()
   const [failed, setFailed] = useState(false)
   return (
-    <button onClick={onOpen} title="Open item page" className="shrink-0">
+    <button onClick={onOpen} title={t('catalogue.openItemPage')} className="shrink-0">
       {item?.photo_path && !failed ? (
         <img src={item.photo_path} alt="" onError={() => setFailed(true)}
           className="w-9 h-9 rounded-lg object-cover border border-slate-200 hover:opacity-80 dark:border-navy-700" />
@@ -47,7 +50,7 @@ function Thumb({ item, onOpen }: { item: ClientItem | undefined; onOpen: () => v
 const soldText = (sales: Sale[] | undefined) => {
   if (!sales?.length) return null
   const qty = sales.reduce((n, s) => n + s.qty, 0)
-  return `${qty.toLocaleString('id-ID')} pcs · ${sales.length} order${sales.length === 1 ? '' : 's'}`
+  return i18n.t('catalogue.sold', { qty: qty.toLocaleString('id-ID'), count: sales.length })
 }
 
 /** A client's catalogue: each item with its sizes, their price for a year
@@ -63,6 +66,7 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
   pricesByItem: Record<number, ClientItemPrice[]>
   onPrint: (year: number) => void
 }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const save = useCatalogueBatch()
@@ -130,7 +134,7 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
   const setPrice = (item: ClientItem, value: number) => {
     const current = priceIn(pricesByItem[item.id], year)
     if (!value) {
-      if (current) save.mutate({ label: `Removed the ${year} price of ${itemLabel(item)}`, batch: { client_id: client.id, delete_prices: [{ client_item_id: item.id, year }] } })
+      if (current) save.mutate({ label: t('catalogue.removedPriceOf', { year, name: itemLabel(item) }), batch: { client_id: client.id, delete_prices: [{ client_item_id: item.id, year }] } })
       return
     }
     save.mutate({
@@ -140,13 +144,13 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
   }
 
   const remove = (gone: ClientItem[]) => save.mutate({
-    label: `Deleted ${gone.length === 1 ? itemLabel(gone[0]) : `${gone.length} items`}`,
+    label: gone.length === 1 ? t('catalogue.deletedOne', { name: itemLabel(gone[0]) }) : t('catalogue.deletedMany', { count: gone.length }),
     batch: { client_id: client.id, delete_items: gone.map(i => i.id) },
   }, { onSuccess: () => setSelected(new Set()) })
 
   const toAdd = notListed.filter(s => !skipped.has(itemKey(s[0].item, s[0].size)))
   const addFromOrders = () => save.mutate({
-    label: `Added ${toAdd.length} ordered item${toAdd.length === 1 ? '' : 's'}`,
+    label: t('catalogue.addedFromOrders', { count: toAdd.length }),
     batch: {
       client_id: client.id,
       upsert_items: toAdd.map(s => {
@@ -179,27 +183,27 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 dark:text-slate-500" />
-            <input ref={searchRef} className="field pl-9" placeholder="Search items  ( / )" value={query} onChange={e => setQuery(e.target.value)} />
+            <input ref={searchRef} className="field pl-9" placeholder={t('catalogue.searchPlaceholder')} value={query} onChange={e => setQuery(e.target.value)} />
           </div>
           <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-            Prices for
+            {t('catalogue.pricesFor')}
             <select className="field !w-auto !py-1.5" value={year} onChange={e => setYear(Number(e.target.value))}>
               {years.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </label>
           <div className="ml-auto flex flex-wrap gap-2">
             <button className="btn-primary btn-sm inline-flex items-center gap-1.5" onClick={() => setDialog({ kind: 'add' })}>
-              <Plus size={14} /> Add item
+              <Plus size={14} /> {t('catalogue.addItem')}
             </button>
             <button className="btn-secondary btn-sm inline-flex items-center gap-1.5" disabled={!items.length}
               onClick={() => setDialog({ kind: 'raise', items: pickedItems.length ? pickedItems : items })}>
-              <TrendingUp size={14} /> Raise prices{pickedItems.length ? ` (${pickedItems.length})` : ''}
+              <TrendingUp size={14} /> {pickedItems.length ? t('catalogue.raisePricesCount', { count: pickedItems.length }) : t('catalogue.raisePrices')}
             </button>
             <button className="btn-secondary btn-sm inline-flex items-center gap-1.5" onClick={() => setDialog({ kind: 'copy' })}>
-              <Copy size={14} /> Copy from client
+              <Copy size={14} /> {t('catalogue.copyFromClient')}
             </button>
             <button className="btn-secondary btn-sm inline-flex items-center gap-1.5" onClick={() => setDialog({ kind: 'import' })}>
-              <FileUp size={14} /> Import
+              <FileUp size={14} /> {t('catalogue.importButton')}
             </button>
             <button className="btn-secondary btn-sm inline-flex items-center gap-1.5" disabled={!items.length} onClick={exportExcel}>
               <Download size={14} /> Excel
@@ -208,49 +212,49 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
         </div>
         {items.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-            <span>{items.length} items in {groupCatalogue(items).length} names</span>
+            <span>{t('catalogue.itemsInNames', { items: items.length, names: groupCatalogue(items).length })}</span>
             <span className="text-slate-300 dark:text-navy-700">·</span>
             {missing ? (
               <button onClick={() => setOnlyMissing(v => !v)}
                 className={`badge ${onlyMissing ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/20'}`}>
-                {missing} without a {year} price{onlyMissing ? ': showing only these' : ''}
+                {t(onlyMissing ? 'catalogue.missingPriceFiltered' : 'catalogue.missingPrice', { missing, year })}
               </button>
-            ) : <span className="badge-green">every item priced for {year}</span>}
-            <button className="ml-auto text-navy-600 hover:underline" onClick={() => onPrint(year)}>Print the {year} price list</button>
+            ) : <span className="badge-green">{t('catalogue.allPriced', { year })}</span>}
+            <button className="ml-auto text-navy-600 hover:underline" onClick={() => onPrint(year)}>{t('catalogue.printYearList', { year })}</button>
           </div>
         )}
       </Card>
 
       <Card bodyClassName="p-0">
-        {isLoading ? <LoadingState /> : isError ? <ErrorState what="the catalogue" onRetry={onRetry} /> : !items.length ? (
+        {isLoading ? <LoadingState /> : isError ? <ErrorState what={t('catalogue.errorWhat')} onRetry={onRetry} /> : !items.length ? (
           <div className="py-14 text-center">
             <Package className="w-9 h-9 text-slate-200 mx-auto mb-3 dark:text-navy-800" />
-            <p className="font-medium text-slate-600 text-sm dark:text-slate-300">No items yet</p>
+            <p className="font-medium text-slate-600 text-sm dark:text-slate-300">{t('catalogue.noItemsYet')}</p>
             <p className="text-xs text-slate-400 mt-1 mb-4 dark:text-slate-500">
-              Add an item with its sizes, copy another client's catalogue, or import a sheet.
+              {t('catalogue.emptyHint')}
             </p>
             <div className="flex flex-wrap justify-center gap-2">
-              <button className="btn-primary btn-sm" onClick={() => setDialog({ kind: 'add' })}>Add item</button>
-              <button className="btn-secondary btn-sm" onClick={() => setDialog({ kind: 'copy' })}>Copy from client</button>
-              <button className="btn-secondary btn-sm" onClick={() => setDialog({ kind: 'import' })}>Import</button>
+              <button className="btn-primary btn-sm" onClick={() => setDialog({ kind: 'add' })}>{t('catalogue.addItem')}</button>
+              <button className="btn-secondary btn-sm" onClick={() => setDialog({ kind: 'copy' })}>{t('catalogue.copyFromClient')}</button>
+              <button className="btn-secondary btn-sm" onClick={() => setDialog({ kind: 'import' })}>{t('catalogue.importButton')}</button>
             </div>
           </div>
         ) : !shown.length ? (
-          <p className="py-10 text-center text-sm text-slate-400 dark:text-slate-500">Nothing matches.</p>
+          <p className="py-10 text-center text-sm text-slate-400 dark:text-slate-500">{t('catalogue.nothingMatches')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm md:min-w-[720px]">
               <thead>
                 <tr className="text-xs text-slate-400 border-b border-slate-100 dark:text-slate-500 dark:border-navy-800">
                   <th className="w-10 px-3 py-2.5">
-                    <input type="checkbox" aria-label="Select all shown" checked={shown.every(i => selected.has(i.id))}
+                    <input type="checkbox" aria-label={t('catalogue.selectAllShown')} checked={shown.every(i => selected.has(i.id))}
                       onChange={() => toggle(shown.map(i => i.id))} />
                   </th>
-                  <th className="text-left font-medium px-2 py-2.5">Item / size</th>
+                  <th className="text-left font-medium px-2 py-2.5">{t('catalogue.itemSize')}</th>
                   <th className="hidden md:table-cell text-right font-medium px-2 py-2.5 w-32">{prevYear}</th>
                   <th className="text-right font-medium px-2 py-2.5 w-36 text-navy-900 dark:text-slate-100">{year}</th>
-                  <th className="hidden sm:table-cell text-right font-medium px-2 py-2.5 w-20">Change</th>
-                  <th className="hidden md:table-cell text-left font-medium px-4 py-2.5">Ordered</th>
+                  <th className="hidden sm:table-cell text-right font-medium px-2 py-2.5 w-20">{t('catalogue.change')}</th>
+                  <th className="hidden md:table-cell text-left font-medium px-4 py-2.5">{t('catalogue.ordered')}</th>
                   <th className="w-10" />
                 </tr>
               </thead>
@@ -262,7 +266,7 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
                   return [
                     <tr key={`g-${g.name}`} className="bg-slate-50/70 border-t border-slate-100 dark:bg-navy-950/70 dark:border-navy-800">
                       <td className="px-3 py-2">
-                        <input type="checkbox" aria-label={`Select all sizes of ${g.name}`} checked={ids.every(id => selected.has(id))} onChange={() => toggle(ids)} />
+                        <input type="checkbox" aria-label={t('catalogue.selectAllSizesOf', { name: g.name })} checked={ids.every(id => selected.has(id))} onChange={() => toggle(ids)} />
                       </td>
                       <td className="px-2 py-2" colSpan={4}>
                         <div className="flex items-center gap-3">
@@ -275,7 +279,7 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
                       </td>
                       <td className="hidden md:table-cell px-4 py-2 text-xs text-slate-500 dark:text-slate-400">{soldText(groupSales)}</td>
                       <td className="pr-3">
-                        <button className="btn-ghost !p-1.5" title="Add sizes" onClick={() => setDialog({ kind: 'add', name: g.name, notes: g.items[0].notes })}>
+                        <button className="btn-ghost !p-1.5" title={t('catalogue.addSizes')} aria-label={t('catalogue.addSizes')} onClick={() => setDialog({ kind: 'add', name: g.name, notes: g.items[0].notes })}>
                           <Plus size={14} />
                         </button>
                       </td>
@@ -289,35 +293,35 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
                       return (
                         <tr key={item.id} className={`group border-t border-slate-50 dark:border-navy-800/60 ${selected.has(item.id) ? 'bg-navy-50/40' : 'hover:bg-slate-50/50 dark:hover:bg-white/5'}`}>
                           <td className="px-3 py-1">
-                            <input type="checkbox" aria-label={`Select ${itemLabel(item)}`} checked={selected.has(item.id)} onChange={() => toggle([item.id])} />
+                            <input type="checkbox" aria-label={t('catalogue.selectItem', { name: itemLabel(item) })} checked={selected.has(item.id)} onChange={() => toggle([item.id])} />
                           </td>
                           <td className="px-2 py-1 pl-4 md:pl-14">
                             <button onClick={() => open(item)} className="text-slate-700 hover:text-navy-700 hover:underline dark:text-slate-300">
-                              {item.size || <span className="text-slate-400 dark:text-slate-500">one size</span>}
+                              {item.size || <span className="text-slate-400 dark:text-slate-500">{t('catalogue.oneSize')}</span>}
                             </button>
                           </td>
                           <td className="hidden md:table-cell px-2 py-1 text-right font-mono text-slate-400 dark:text-slate-500">
                             {before ? <>{formatRp(before.price)}{before.year !== prevYear && <span className="text-[10px] ml-1">({before.year})</span>}</> : '—'}
                           </td>
                           <td className="px-1 py-0.5 text-right font-mono">
-                            <EditableCell type="number" value={now?.price ?? null} placeholder="set price"
+                            <EditableCell type="number" value={now?.price ?? null} placeholder={t('catalogue.setPrice')}
                               format={v => <span className="font-semibold text-navy-900 dark:text-slate-100">{formatRp(Number(v))}</span>}
                               onSave={v => setPrice(item, Number(v))} />
                           </td>
                           <td className={`hidden sm:table-cell px-2 py-1 text-right text-xs ${pct == null ? 'text-slate-300 dark:text-navy-700' : pct > 0 ? 'text-green-700 dark:text-green-400' : pct < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}>
-                            {pct == null ? '' : pct === 0 ? 'same' : `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`}
+                            {pct == null ? '' : pct === 0 ? t('catalogue.same') : `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`}
                           </td>
                           <td className="hidden md:table-cell px-4 py-1 text-xs text-slate-500 dark:text-slate-400">
                             {last ? (
                               <>
                                 {soldText(itemSales)}
-                                <span className="text-slate-400 dark:text-slate-500"> · last {formatDateShort(last.date)} at </span>
+                                <span className="text-slate-400 dark:text-slate-500">{t('catalogue.lastAt', { date: formatDateShort(last.date) })}</span>
                                 <span className={`font-mono ${now && last.price !== now.price && new Date(last.date).getFullYear() === year ? 'text-amber-700 dark:text-amber-400' : ''}`}
-                                  title={now && last.price !== now.price ? `The ${year} catalogue price is ${formatRp(now.price)}` : undefined}>
+                                  title={now && last.price !== now.price ? t('catalogue.cataloguePriceIs', { year, amount: formatRp(now.price) }) : undefined}>
                                   {formatRp(last.price)}
                                 </span>
                               </>
-                            ) : <span className="text-slate-300 dark:text-navy-700">not ordered yet</span>}
+                            ) : <span className="text-slate-300 dark:text-navy-700">{t('catalogue.notOrderedYet')}</span>}
                           </td>
                           <td className="pr-3">
                             {/* opacity-60 not opacity-0: a hover-only reveal has no
@@ -325,7 +329,7 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
                                undiscoverable) on a phone, where deleting a single row
                                has no other path — the bulk bar below only appears
                                once something is already selected. */}
-                            <button className="btn-ghost !p-2 opacity-60 group-hover:opacity-100 focus:opacity-100" title="Delete"
+                            <button className="btn-ghost !p-2 opacity-60 group-hover:opacity-100 focus:opacity-100" title={t('common.delete')} aria-label={t('common.delete')}
                               onClick={() => setDialog({ kind: 'delete', items: [item] })}>
                               <Trash2 size={13} />
                             </button>
@@ -342,10 +346,10 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
       </Card>
 
       {notListed.length > 0 && (
-        <Card title={`Ordered but not in the catalogue (${notListed.length})`} icon={Package}
+        <Card title={t('catalogue.notListedTitle', { count: notListed.length })} icon={Package}
           actions={
             <button className="btn-secondary btn-sm" disabled={!toAdd.length || save.isPending} onClick={addFromOrders}>
-              Add {toAdd.length === notListed.length ? 'them' : toAdd.length} with the last order price
+              {toAdd.length === notListed.length ? t('catalogue.addThemAll') : t('catalogue.addSome', { count: toAdd.length })}
             </button>
           }>
           <div className="flex flex-wrap gap-1.5">
@@ -353,11 +357,11 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
               const k = itemKey(s[0].item, s[0].size)
               const on = !skipped.has(k)
               return (
-                <button key={k} title={on ? 'Leave this one out' : 'Add this one'}
+                <button key={k} title={on ? t('catalogue.leaveOut') : t('catalogue.addThisOne')}
                   onClick={() => setSkipped(p => { const n = new Set(p); if (on) n.add(k); else n.delete(k); return n })}
                   className={`badge gap-1.5 border ${on ? 'bg-navy-50 text-navy-800 border-navy-100 dark:bg-navy-800 dark:text-navy-200 dark:border-navy-700' : 'bg-white text-slate-400 border-slate-200 line-through dark:bg-navy-900 dark:text-slate-500 dark:border-navy-700'}`}>
                   <span>{s[0].item}</span>
-                  <span className={s[0].size ? '' : 'opacity-60'}>({s[0].size || 'no size'})</span>
+                  <span className={s[0].size ? '' : 'opacity-60'}>({s[0].size || t('orders.itemForm.noSize')})</span>
                   <span className="opacity-70">{formatRp(s[0].price)}</span>
                 </button>
               )
@@ -369,10 +373,10 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
       {selected.size > 0 && (
         <div className="fixed bottom-4 left-4 right-4 dock:left-[var(--sidebar-w)] z-40 flex justify-center pointer-events-none">
           <div className="pointer-events-auto flex flex-wrap items-center gap-2 bg-navy-900 text-white rounded-2xl shadow-xl px-4 py-2.5 text-sm">
-            <span className="font-medium">{selected.size} selected</span>
-            <button className="btn-gold btn-sm" onClick={() => setDialog({ kind: 'raise', items: pickedItems })}>Raise prices</button>
-            <button className="btn-sm btn bg-white/10 hover:bg-white/20" onClick={() => setDialog({ kind: 'delete', items: pickedItems })}>Delete</button>
-            <button className="btn-ghost !p-1.5 text-white/70 hover:text-white hover:bg-white/10" title="Clear (Esc)" onClick={() => setSelected(new Set())}>
+            <span className="font-medium">{t('catalogue.selectedCount', { count: selected.size })}</span>
+            <button className="btn-gold btn-sm" onClick={() => setDialog({ kind: 'raise', items: pickedItems })}>{t('catalogue.raisePrices')}</button>
+            <button className="btn-sm btn bg-white/10 hover:bg-white/20" onClick={() => setDialog({ kind: 'delete', items: pickedItems })}>{t('common.delete')}</button>
+            <button className="btn-ghost !p-1.5 text-white/70 hover:text-white hover:bg-white/10" title={t('catalogue.clearEsc')} aria-label={t('catalogue.clearEsc')} onClick={() => setSelected(new Set())}>
               <X size={14} />
             </button>
           </div>
@@ -396,7 +400,9 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
       )}
       {dialog?.kind === 'delete' && (
         <ConfirmDialog
-          message={`Delete ${dialog.items.length === 1 ? itemLabel(dialog.items[0]) : `${dialog.items.length} items`} and ${dialog.items.length === 1 ? 'its' : 'their'} prices?${dialog.items.some(i => i.photo_path) ? ' Photos are deleted too.' : ''} Undo brings the items and prices back.`}
+          message={dialog.items.some(i => i.photo_path)
+            ? (dialog.items.length === 1 ? t('catalogue.deleteConfirmPhotosOne', { name: itemLabel(dialog.items[0]) }) : t('catalogue.deleteConfirmPhotosMany', { count: dialog.items.length }))
+            : (dialog.items.length === 1 ? t('catalogue.deleteConfirmOne', { name: itemLabel(dialog.items[0]) }) : t('catalogue.deleteConfirmMany', { count: dialog.items.length }))}
           onConfirm={() => { remove(dialog.items); setDialog(null) }}
           onCancel={() => setDialog(null)}
         />

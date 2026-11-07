@@ -1,0 +1,41 @@
+{
+  "financeModel": {
+    "problems": {
+      "bahanMissing": "Bahan is missing",
+      "pickSupplier": "Pick a supplier",
+      "qtyPositive": "Qty must be more than 0",
+      "categoryMissing": "Category is missing",
+      "priceMissing": "Price is missing"
+    },
+    "targets": {
+      "production": {
+        "ignore": "Don't use",
+        "header_id": "Kas Bon ID",
+        "date": "Date",
+        "description": "Kas Bon description",
+        "name": "Bahan",
+        "supplier": "Supplier",
+        "category": "Don't use",
+        "qty": "Qty",
+        "unit": "Unit",
+        "price": "Price (each)",
+        "total": "Total",
+        "order": "Order"
+      },
+      "operation": {
+        "ignore": "Don't use",
+        "header_id": "Kas Bon ID",
+        "date": "Date",
+        "description": "Kas Bon description",
+        "name": "Item",
+        "supplier": "Don't use",
+        "category": "Category",
+        "qty": "Don't use",
+        "unit": "Don't use",
+        "price": "Price",
+        "total": "Total",
+        "order": "Order"
+      }
+    }
+  }
+}

@@ -1,3 +1,4 @@
+import i18n from '@/i18n/config'
 import type { Supplier } from '@/types'
 import { SI_UNITS } from '@/utils/Units'
 import { parseDate, parseNumber, cellText, type Cell, type Grid } from '@/utils/tableText'
@@ -18,6 +19,10 @@ export const TARGET_LABELS: Record<Kind, Record<Target, string>> = {
     supplier: "Don't use", category: 'Category', qty: "Don't use", unit: "Don't use", price: 'Price', total: 'Total', order: 'Order',
   },
 }
+
+/** TARGET_LABELS in the language the app is showing. */
+export const targetLabel = (kind: Kind, target: Target) =>
+  i18n.t(`financeModel.targets.${kind}.${target}`, { defaultValue: TARGET_LABELS[kind][target] })
 
 export const TARGETS: Record<Kind, Target[]> = {
   production: ['ignore', 'header_id', 'date', 'description', 'name', 'supplier', 'qty', 'unit', 'price', 'total', 'order'],

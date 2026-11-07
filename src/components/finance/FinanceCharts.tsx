@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
+import { ScrollX } from '@/components/ui/ScrollX'
 import { formatRp } from '@/components/ui'
 import { useIsMobile } from '@/hooks/useIsMobile'
 
@@ -60,6 +63,7 @@ const MIN_SLOT = 46
  *  a guaranteed minimum width per month rather than shrinking to fit —
  *  narrower than that and bars/labels stop being readable at all. */
 export function TrendChart({ data, selected, onSelect }: { data: TrendPoint[]; selected?: number | null; onSelect?: (i: number) => void }) {
+  const { t } = useTranslation()
   const [ref, width] = useWidth<HTMLDivElement>()
   const scrollRef = useRef<HTMLDivElement>(null)
   const isMobile = useIsMobile()
@@ -93,9 +97,9 @@ export function TrendChart({ data, selected, onSelect }: { data: TrendPoint[]; s
   return (
     <div ref={ref} className="relative w-full select-none" style={{ height }}>
       {width > 0 && (
-        <div ref={scrollRef} className="overflow-x-auto overscroll-x-contain" style={{ height }}>
+        <ScrollX ref={scrollRef} style={{ height }}>
           <div className="relative" style={{ width: cw, height }}>
-            <svg width={cw} height={height} role="img" aria-label="Invoiced, spent and profit by month">
+            <svg width={cw} height={height} role="img" aria-label={t('financeCharts.trendAria')}>
               {ticks.map(t => (
                 <g key={t}>
                   <line x1={pad.l} x2={cw - pad.r} y1={y(t)} y2={y(t)} stroke={t === 0 ? '#cbd5e1' : '#f1f5f9'} />
@@ -120,14 +124,14 @@ export function TrendChart({ data, selected, onSelect }: { data: TrendPoint[]; s
                 style={{ left: Math.min(Math.max(cx(active) - 80, 0), Math.max(0, cw - 180)) }}
               >
                 <div className="font-semibold mb-1">{tip.label}</div>
-                <div className="flex justify-between gap-4"><span className="text-navy-200">Invoiced</span><span className="font-mono">{formatRp(tip.invoiced)}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-navy-200">Spent</span><span className="font-mono">{formatRp(tip.cost)}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-navy-200">Profit</span><span className={`font-mono ${tip.profit < 0 ? 'text-red-300' : 'text-green-300'}`}>{formatRp(tip.profit)}</span></div>
-                {tip.lastYearProfit != null && <div className="flex justify-between gap-4"><span className="text-navy-200">Last year</span><span className="font-mono">{formatRp(tip.lastYearProfit)}</span></div>}
+                <div className="flex justify-between gap-4"><span className="text-navy-200">{t('financeCharts.invoiced')}</span><span className="font-mono">{formatRp(tip.invoiced)}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-navy-200">{t('financeCharts.spent')}</span><span className="font-mono">{formatRp(tip.cost)}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-navy-200">{t('common.profit')}</span><span className={`font-mono ${tip.profit < 0 ? 'text-red-300' : 'text-green-300'}`}>{formatRp(tip.profit)}</span></div>
+                {tip.lastYearProfit != null && <div className="flex justify-between gap-4"><span className="text-navy-200">{t('financeCharts.lastYear')}</span><span className="font-mono">{formatRp(tip.lastYearProfit)}</span></div>}
               </div>
             )}
           </div>
-        </div>
+        </ScrollX>
       )}
     </div>
   )
@@ -148,11 +152,11 @@ export function Legend({ items }: { items: { label: string; color: string; dashe
   )
 }
 
-export const TREND_LEGEND = [
-  { label: 'Invoiced', color: COLORS.invoiced },
-  { label: 'Spent', color: COLORS.cost },
-  { label: 'Profit', color: COLORS.profit, line: true },
-  { label: 'Profit last year', color: COLORS.lastYear, dashed: true },
+export const trendLegend = (t: TFunction) => [
+  { label: t('financeCharts.invoiced'), color: COLORS.invoiced },
+  { label: t('financeCharts.spent'), color: COLORS.cost },
+  { label: t('common.profit'), color: COLORS.profit, line: true },
+  { label: t('financeCharts.profitLastYear'), color: COLORS.lastYear, dashed: true },
 ]
 
 /** Money in (up) and out (down) per bucket, with the running balance. Same
@@ -160,6 +164,7 @@ export const TREND_LEGEND = [
  *  below `dock:`, scrolling horizontally rather than squeezing every
  *  bucket into whatever width the phone has. */
 export function CashFlowChart({ data }: { data: { label: string; cashIn: number; cashOut: number }[] }) {
+  const { t } = useTranslation()
   const [ref, width] = useWidth<HTMLDivElement>()
   const scrollRef = useRef<HTMLDivElement>(null)
   const isMobile = useIsMobile()
@@ -189,9 +194,9 @@ export function CashFlowChart({ data }: { data: { label: string; cashIn: number;
   return (
     <div ref={ref} className="relative w-full select-none" style={{ height }}>
       {width > 0 && (
-        <div ref={scrollRef} className="overflow-x-auto overscroll-x-contain" style={{ height }}>
+        <ScrollX ref={scrollRef} style={{ height }}>
           <div className="relative" style={{ width: cw, height }}>
-            <svg width={cw} height={height} role="img" aria-label="Cash in and out">
+            <svg width={cw} height={height} role="img" aria-label={t('financeCharts.cashAria')}>
               {ticks.map(t => (
                 <g key={t}>
                   <line x1={pad.l} x2={cw - pad.r} y1={y(t)} y2={y(t)} stroke={t === 0 ? '#cbd5e1' : '#f1f5f9'} />
@@ -211,33 +216,34 @@ export function CashFlowChart({ data }: { data: { label: string; cashIn: number;
             {tip && hover != null && (
               <div className="pointer-events-none absolute top-1 z-10 rounded-lg bg-navy-900 text-white text-xs px-3 py-2 shadow-xl whitespace-nowrap" style={{ left: Math.min(Math.max(cx(hover) - 80, 0), Math.max(0, cw - 180)) }}>
                 <div className="font-semibold mb-1">{tip.label}</div>
-                <div className="flex justify-between gap-4"><span className="text-navy-200">In</span><span className="font-mono text-green-300">{formatRp(tip.cashIn)}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-navy-200">Out</span><span className="font-mono text-red-300">{formatRp(tip.cashOut)}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-navy-200">Balance</span><span className="font-mono">{formatRp(balance[hover])}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-navy-200">{t('financeCharts.in')}</span><span className="font-mono text-green-300">{formatRp(tip.cashIn)}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-navy-200">{t('financeCharts.out')}</span><span className="font-mono text-red-300">{formatRp(tip.cashOut)}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-navy-200">{t('financeCharts.balance')}</span><span className="font-mono">{formatRp(balance[hover])}</span></div>
               </div>
             )}
           </div>
-        </div>
+        </ScrollX>
       )}
     </div>
   )
 }
 
-export const CASH_LEGEND = [
-  { label: 'Paid in', color: COLORS.cashIn },
-  { label: 'Spent', color: COLORS.cashOut },
-  { label: 'Running balance', color: COLORS.balance, line: true },
+export const cashLegend = (t: TFunction) => [
+  { label: t('financeCharts.paidIn'), color: COLORS.cashIn },
+  { label: t('financeCharts.spent'), color: COLORS.cashOut },
+  { label: t('financeCharts.runningBalance'), color: COLORS.balance, line: true },
 ]
 
 /** A ranked list with bars: where the money went. */
-export function RankBars({ items, onSelect, empty = 'Nothing in this period' }: {
+export function RankBars({ items, onSelect, empty }: {
   items: { id: string; label: string; value: number; sub?: string; color?: string }[]
   onSelect?: (id: string) => void
   empty?: string
 }) {
+  const { t } = useTranslation()
   const max = Math.max(1, ...items.map(i => i.value))
   const total = items.reduce((n, i) => n + i.value, 0) || 1
-  if (!items.length) return <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">{empty}</p>
+  if (!items.length) return <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">{empty ?? t('financeCharts.nothingInPeriod')}</p>
   return (
     <ul className="space-y-1">
       {items.map(i => (
@@ -247,7 +253,7 @@ export function RankBars({ items, onSelect, empty = 'Nothing in this period' }: 
               {i.color && <span className="w-2 h-2 rounded-full shrink-0 self-center" style={{ background: i.color }} />}
               <span className="truncate text-slate-700 group-hover:text-navy-900 dark:text-slate-300 dark:group-hover:text-slate-50">{i.label}</span>
               {i.sub && <span className="text-xs text-slate-500 truncate dark:text-slate-400">{i.sub}</span>}
-              <span className="ml-auto font-mono tabular-nums text-slate-800 dark:text-slate-200">{formatRp(i.value)}</span>
+              <span className="ml-auto shrink-0 whitespace-nowrap font-mono tabular-nums text-slate-800 dark:text-slate-200">{formatRp(i.value)}</span>
               <span className="w-10 text-right text-xs text-slate-500 tabular-nums dark:text-slate-400">{Math.round((i.value / total) * 100)}%</span>
             </div>
             <div className="mt-1 h-1.5 rounded-full bg-slate-100 overflow-hidden dark:bg-white/10">

@@ -4,7 +4,7 @@ import { Bell, Zap, AlertCircle, ChevronDown, LogOut, User as UserIcon, KeyRound
 import { format } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { useDateLocale } from '@/i18n/dateLocale'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
@@ -25,6 +25,7 @@ const TITLE_KEYS: Record<string, string> = {
   '/suppliers':       'topbar.titles.suppliers',
   '/operations':      'topbar.titles.operations',
   '/finance':         'topbar.titles.finance',
+  '/bukti-kas':       'topbar.titles.buktiKas',
   '/admin/users':     'topbar.titles.users',
 }
 
@@ -96,8 +97,8 @@ function AccountMenu() {
         onClick={() => setOpen(o => !o)}
         className="flex items-center gap-1 pl-1 pr-1.5 py-1 rounded-full hover:bg-slate-100 dark:hover:bg-white/10 transition-colors group"
       >
-        <div className="w-8 h-8 rounded-full bg-navy-900 flex items-center justify-center shrink-0">
-          <span className="text-white text-xs font-semibold">{initial}</span>
+        <div className="w-8 h-8 rounded-full bg-navy-900 flex items-center justify-center shrink-0 dark:bg-gold-500">
+          <span className="text-white text-xs font-semibold dark:text-navy-950">{initial}</span>
         </div>
         <ChevronDown className={`w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -200,7 +201,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           {/* A full 44px tap target, not just the icon's own size — the one
               control that opens the entire nav on mobile is worth the extra
               padding so a slightly-off tap still lands. */}
-          <button onClick={onMenuClick} className="dock:hidden btn-ghost !p-3.5 shrink-0" title={t('topbar.openMenu')}>
+          <button onClick={onMenuClick} className="dock:hidden btn-ghost !p-3.5 shrink-0" title={t('topbar.openMenu')} aria-label={t('topbar.openMenu')}>
             <Menu className="w-4 h-4" />
           </button>
           <div className="min-w-0">
@@ -239,7 +240,10 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         <div className="flex items-center gap-2 px-6 py-1.5 bg-amber-50 border-b border-amber-100 dark:bg-amber-500/10 dark:border-amber-500/20">
           <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 dark:text-amber-400" />
           <p className="text-xs text-amber-700 dark:text-amber-400">
-            <span className="font-semibold">Stub route</span> — this endpoint returns placeholder JSON. Wire the handler in <code className="font-mono bg-amber-100 px-1 rounded dark:bg-amber-500/20">main.go</code> to enable full functionality.
+            <Trans
+              i18nKey="shell.stubBanner"
+              components={{ b: <span className="font-semibold" />, code: <code className="font-mono bg-amber-100 px-1 rounded dark:bg-amber-500/20" /> }}
+            />
           </p>
         </div>
       )}
@@ -247,7 +251,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         <div className="flex items-center gap-2 px-6 py-1.5 bg-green-50 border-b border-green-100 dark:bg-green-500/10 dark:border-green-500/20">
           <Zap className="w-3.5 h-3.5 text-green-600 shrink-0 dark:text-green-400" />
           <p className="text-xs text-green-700 dark:text-green-400">
-            <span className="font-semibold">Live</span> — this route is wired to the database.
+            <Trans i18nKey="shell.liveBanner" components={{ b: <span className="font-semibold" /> }} />
           </p>
         </div>
       )}

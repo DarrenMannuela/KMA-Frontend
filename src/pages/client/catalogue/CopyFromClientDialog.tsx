@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, formatRp } from '@/components/ui'
 import { clientHooks, clientItemHooks } from '@/hooks'
@@ -17,6 +18,7 @@ export function CopyFromClientDialog({ clientId, catalogue, allPrices, year, onC
   year: number
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const save = useCatalogueBatch()
   const { data: clients = [] } = clientHooks.useList()
   const [fromId, setFromId] = useState<number | undefined>()
@@ -43,7 +45,7 @@ export function CopyFromClientDialog({ clientId, catalogue, allPrices, year, onC
 
   const from = clients.find(c => c.id === fromId)
   const apply = () => save.mutate({
-    label: `Copied ${chosen.length} item${chosen.length === 1 ? '' : 's'} from ${from?.client_name}`,
+    label: t('catalogue.copy.copied', { count: chosen.length, name: `${from?.client_name}` }),
     batch: {
       client_id: clientId,
       upsert_items: chosen.map(r => ({
@@ -54,11 +56,11 @@ export function CopyFromClientDialog({ clientId, catalogue, allPrices, year, onC
   }, { onSuccess: onClose })
 
   return (
-    <Modal title="Copy items from another client" onClose={onClose} size="lg">
+    <Modal title={t('catalogue.copy.title')} onClose={onClose} size="lg">
       <div className="space-y-4">
-        <FormField label="From client">
+        <FormField label={t('catalogue.copy.fromClient')}>
           <select className="field" value={fromId ?? ''} onChange={e => setFromId(e.target.value ? Number(e.target.value) : undefined)}>
-            <option value="">Pick a client…</option>
+            <option value="">{t('catalogue.copy.pickClient')}</option>
             {clients.filter(c => c.id !== clientId).map(c => <option key={c.id} value={c.id}>{c.client_name}</option>)}
           </select>
         </FormField>
@@ -70,7 +72,7 @@ export function CopyFromClientDialog({ clientId, catalogue, allPrices, year, onC
                would force the modal wider instead of wrapping. */}
             <label className="flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
               <input type="checkbox" checked={withPrices} onChange={e => setWithPrices(e.target.checked)} />
-              Copy their latest prices too, as this client's prices for
+              {t('catalogue.copy.withPrices')}
               <input className="field !w-24 !py-1" type="number" value={priceYear} disabled={!withPrices}
                 onChange={e => setPriceYear(Number(e.target.value) || priceYear)} />
             </label>
@@ -81,24 +83,24 @@ export function CopyFromClientDialog({ clientId, catalogue, allPrices, year, onC
                 <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500 dark:bg-navy-950 dark:text-slate-400">
                   <tr>
                     <th className="px-3 py-2 w-8">
-                      <input type="checkbox" checked={allPicked} aria-label="All"
+                      <input type="checkbox" checked={allPicked} aria-label={t('catalogue.copy.all')}
                         onChange={() => setPicked(allPicked ? new Set() : new Set(rows.map(r => r.item.id)))} />
                     </th>
-                    <th className="text-left px-3 py-2 font-medium">Item</th>
-                    <th className="text-right px-3 py-2 font-medium">Their latest</th>
-                    {withPrices && <th className="text-right px-3 py-2 font-medium">Here, {priceYear}</th>}
+                    <th className="text-left px-3 py-2 font-medium">{t('orders.detail.item')}</th>
+                    <th className="text-right px-3 py-2 font-medium">{t('catalogue.copy.theirLatest')}</th>
+                    {withPrices && <th className="text-right px-3 py-2 font-medium">{t('catalogue.copy.hereYear', { year: priceYear })}</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50 dark:divide-navy-800/60">
                   {rows.length === 0 && (
-                    <tr><td colSpan={4} className="px-3 py-6 text-center text-slate-400 dark:text-slate-500">This client has no catalogue items.</td></tr>
+                    <tr><td colSpan={4} className="px-3 py-6 text-center text-slate-400 dark:text-slate-500">{t('catalogue.copy.noItems')}</td></tr>
                   )}
                   {rows.map(({ item, latest, next, there }) => (
                     <tr key={item.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5" onClick={() => toggle(item.id)}>
                       <td className="px-3 py-1.5"><input type="checkbox" checked={picked.has(item.id)} readOnly /></td>
                       <td className="px-3 py-1.5">
                         {itemLabel(item)}
-                        {there && <span className="ml-2 badge-amber text-[10px]">already here</span>}
+                        {there && <span className="ml-2 badge-amber text-[10px]">{t('catalogue.copy.alreadyHere')}</span>}
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono text-slate-500 dark:text-slate-400">
                         {latest ? <>{formatRp(latest.price)} <span className="text-[10px] text-slate-400 dark:text-slate-500">{latest.year}</span></> : '—'}
@@ -109,15 +111,15 @@ export function CopyFromClientDialog({ clientId, catalogue, allPrices, year, onC
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-slate-400 dark:text-slate-500">Items already in this catalogue keep their notes; with prices on, their {priceYear} price is set.</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">{t('catalogue.copy.keepNotesHint', { year: priceYear })}</p>
           </>
         )}
 
         <div className="flex flex-col sm:flex-row gap-2">
           <button className="btn-primary justify-center" disabled={!chosen.length || save.isPending} onClick={apply}>
-            {save.isPending ? 'Copying…' : `Copy ${chosen.length} item${chosen.length === 1 ? '' : 's'}`}
+            {save.isPending ? t('catalogue.copy.copying') : t('catalogue.copy.copyItems', { count: chosen.length })}
           </button>
-          <button className="btn-secondary justify-center" onClick={onClose}>Cancel</button>
+          <button className="btn-secondary justify-center" onClick={onClose}>{t('common.cancel')}</button>
         </div>
       </div>
     </Modal>

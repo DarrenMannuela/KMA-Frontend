@@ -77,7 +77,7 @@ function BudgetEditor({ categories, onClose }: { categories: string[]; onClose: 
       try { await setBudget.mutateAsync({ scope: 'operation', category: newCategory.trim().toUpperCase(), amount: Number(values.__new) }) }
       catch { failed.push(newCategory.trim()) }
     }
-    if (failed.length) { toast.error(`Saved the rest, but couldn't save: ${failed.join(', ')}`); return }
+    if (failed.length) { toast.error(t('finance.budgets.saveFailed', { items: failed.join(', ') })); return }
     onClose()
   }
 

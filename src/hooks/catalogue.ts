@@ -1,6 +1,7 @@
-import { createElement, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { undoToast, undoMessages } from '@/utils/undoToast'
 import { friendlyError } from '@/utils/friendlyError'
 import { catalogueApi } from '@/api'
 import type { CatalogueBatch, CatalogueBatchResult, Client, Item, Order } from '@/types'
@@ -47,14 +48,14 @@ function invalidateCatalogue(qc: QueryClient) {
 export async function undoCatalogue(qc: QueryClient) {
   const entry = undoStack.pop()
   if (!entry) {
-    toast('Nothing to undo')
+    undoMessages.nothing()
     return
   }
   try {
     await catalogueApi.apply(entry.batch)
-    toast.success(`Undone: ${entry.label}`)
+    undoMessages.done(entry.label)
   } catch (e) {
-    toast.error(`Couldn't undo: ${(e as Error).message}`)
+    undoMessages.failed(e)
   } finally {
     invalidateCatalogue(qc)
   }
@@ -77,13 +78,7 @@ export function recordCatalogue(qc: QueryClient, clientId: number, label: string
   }
   undoStack.push({ label, batch: inverse })
   if (undoStack.length > UNDO_DEPTH) undoStack.shift()
-  toast.success(t => createElement('span', { className: 'flex items-center gap-3' },
-    label,
-    createElement('button', {
-      className: 'text-navy-600 font-semibold hover:underline',
-      onClick: () => { toast.dismiss(t.id); undoCatalogue(qc) },
-    }, 'Undo'),
-  ), { duration: 6000 })
+  undoToast(label, () => undoCatalogue(qc))
 }
 
 export interface CatalogueRequest {

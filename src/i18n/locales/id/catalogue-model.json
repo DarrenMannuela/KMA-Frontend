@@ -1,0 +1,6 @@
+{
+  "catalogueModel": {
+    "noHeader": "Tidak ada baris judul: baris pertama harus berisi nama kolom (Item, Size, Notes, 2025, 2026…)",
+    "noPriceColumns": "Tidak ada kolom harga: beri nama kolom sesuai tahun (2025, 2026…)"
+  }
+}

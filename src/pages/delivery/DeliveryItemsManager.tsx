@@ -615,10 +615,10 @@ function DeliveryItemRow({
         </td>
         <td className="p-3 text-right">
           <div className="flex items-center justify-end gap-2">
-            <button className="text-green-600 hover:text-green-700 dark:text-green-400" title={t('delivery.items.save')} disabled={update.isPending} onClick={save}>
+            <button className="text-green-600 hover:text-green-700 dark:text-green-400" title={t('delivery.items.save')} aria-label={t('delivery.items.save')} disabled={update.isPending} onClick={save}>
               <Check size={16} />
             </button>
-            <button className="text-slate-400 hover:text-red-500 dark:text-slate-500" title={t('delivery.items.cancel')} onClick={cancelEdit}>
+            <button className="text-slate-400 hover:text-red-500 dark:text-slate-500" title={t('delivery.items.cancel')} aria-label={t('delivery.items.cancel')} onClick={cancelEdit}>
               <X size={16} />
             </button>
           </div>

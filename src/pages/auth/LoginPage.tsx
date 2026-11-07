@@ -3,11 +3,13 @@ import type { FormEvent } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Lock, Mail, Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/contexts/AuthContext'
 import { AuthApiError } from '@/api/authApi'
 
 export function LoginPage() {
   const { login, mfaLogin } = useAuth()
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -39,13 +41,13 @@ export function LoginPage() {
         setAwaitingMfa(true)
         return
       }
-      if (takeOver) toast.success('Signed in here. The other device was signed out.')
+      if (takeOver) toast.success(t('auth.login.takeOverToast'))
       navigate(redirectTo, { replace: true })
     } catch (err) {
       // The backend deliberately returns the same generic message for
       // "no such user", "wrong password", and "account locked" — we
       // just surface it as-is rather than trying to be more specific.
-      const message = err instanceof AuthApiError ? err.message : 'Could not reach the auth server'
+      const message = err instanceof AuthApiError ? err.message : t('auth.couldNotReachServer')
       setError(message)
       const elsewhere = err instanceof AuthApiError && err.status === 409
       setSignedInElsewhere(elsewhere)
@@ -76,14 +78,14 @@ export function LoginPage() {
       if (recoveryCodeUsed) {
         toast.success(
           recoveryCodesRemaining === 0
-            ? 'Signed in with a recovery code. That was your last one — set up two-factor again soon.'
-            : `Signed in with a recovery code. ${recoveryCodesRemaining} left.`,
+            ? t('auth.login.recoveryLastToast')
+            : t('auth.login.recoveryLeftToast', { count: recoveryCodesRemaining }),
           { duration: 6000 },
         )
       }
       navigate(redirectTo, { replace: true })
     } catch (err) {
-      const message = err instanceof AuthApiError ? err.message : 'Could not reach the auth server'
+      const message = err instanceof AuthApiError ? err.message : t('auth.couldNotReachServer')
       setError(message)
       setMfaCode('')
     } finally {
@@ -96,12 +98,12 @@ export function LoginPage() {
       <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 dark:bg-navy-950">
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
-            <div className="w-12 h-12 rounded-xl bg-navy-900 flex items-center justify-center mx-auto mb-4">
+            <div className="w-12 h-12 rounded-xl bg-navy-900 flex items-center justify-center mx-auto mb-4 dark:bg-navy-800 dark:ring-1 dark:ring-white/10">
               <ShieldCheck className="w-5 h-5 text-gold-400" />
             </div>
-            <h1 className="text-xl font-bold text-navy-900 dark:text-slate-50">Two-factor authentication</h1>
-            <p className="text-sm text-slate-400 mt-1 dark:text-slate-500">
-              {useRecoveryCode ? 'Enter one of your recovery codes' : 'Enter the 6-digit code from your authenticator app'}
+            <h1 className="text-xl font-bold text-navy-900 dark:text-slate-50">{t('auth.login.twoFactorTitle')}</h1>
+            <p className="text-sm text-slate-500 mt-1 dark:text-slate-400">
+              {useRecoveryCode ? t('auth.login.enterRecoveryCode') : t('auth.login.enterAppCode')}
             </p>
           </div>
 
@@ -110,8 +112,8 @@ export function LoginPage() {
             className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 flex flex-col gap-4 dark:bg-navy-900 dark:border-navy-800"
           >
             <div>
-              <label htmlFor="mfa-code" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">
-                {useRecoveryCode ? 'Recovery code' : 'Code'}
+              <label htmlFor="mfa-code" className="block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1.5 dark:text-slate-400">
+                {useRecoveryCode ? t('auth.login.recoveryCode') : t('auth.login.code')}
               </label>
               <input
                 id="mfa-code"
@@ -135,28 +137,27 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-navy-900 text-white text-sm font-semibold
-                         hover:bg-navy-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              className="btn-primary mt-2 w-full justify-center !py-2.5 font-semibold"
             >
               {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {submitting ? 'Verifying…' : 'Verify'}
+              {submitting ? t('auth.login.verifying') : t('auth.login.verify')}
             </button>
 
             <button
               type="button"
               onClick={() => { setUseRecoveryCode(v => !v); setMfaCode(''); setError(null) }}
-              className="text-xs text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors"
+              className="text-xs text-slate-500 hover:text-navy-700 dark:text-slate-400 dark:hover:text-slate-300 transition-colors"
             >
-              {useRecoveryCode ? 'Use your authenticator app instead' : "Lost your device? Use a recovery code"}
+              {useRecoveryCode ? t('auth.login.useAppInstead') : t('auth.login.useRecoveryCode')}
             </button>
           </form>
 
           <button
             type="button"
             onClick={() => { setAwaitingMfa(false); setPassword(''); setMfaCode(''); setError(null) }}
-            className="block w-full text-center text-xs text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 mt-6 transition-colors"
+            className="block w-full text-center text-xs text-slate-500 hover:text-navy-700 dark:text-slate-400 dark:hover:text-slate-300 mt-6 transition-colors"
           >
-            ← Back to sign in
+            {t('auth.login.backToSignIn')}
           </button>
         </div>
       </div>
@@ -167,11 +168,9 @@ export function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 dark:bg-navy-950">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-navy-900 flex items-center justify-center mx-auto mb-4">
-            <Lock className="w-5 h-5 text-gold-400" />
-          </div>
-          <h1 className="text-xl font-bold text-navy-900 dark:text-slate-50">Sign in to KMA</h1>
-          <p className="text-sm text-slate-400 mt-1 dark:text-slate-500">Enter your credentials to continue</p>
+          <img src="/Logo.png" alt="" className="w-14 h-14 rounded-2xl object-contain mx-auto mb-4 bg-white shadow-card dark:ring-1 dark:ring-white/10" />
+          <h1 className="text-xl font-bold text-navy-900 dark:text-slate-50">{t('auth.login.title')}</h1>
+          <p className="text-sm text-slate-500 mt-1 dark:text-slate-400">{t('auth.login.subtitle')}</p>
         </div>
 
         <form
@@ -179,11 +178,11 @@ export function LoginPage() {
           className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 flex flex-col gap-4 dark:bg-navy-900 dark:border-navy-800"
         >
           <div>
-            <label htmlFor="email" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">
-              Email
+            <label htmlFor="email" className="block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1.5 dark:text-slate-400">
+              {t('auth.login.email')}
             </label>
             <div className="relative">
-              <Mail className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2 dark:text-navy-700" />
+              <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 dark:text-slate-500" />
               <input
                 id="email"
                 type="email"
@@ -193,17 +192,17 @@ export function LoginPage() {
                 onChange={e => setEmail(e.target.value)}
                 className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-navy-900
                            focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors dark:bg-navy-900 dark:border-navy-700 dark:text-slate-50"
-                placeholder="you@company.com"
+                placeholder={t('auth.login.emailPlaceholder')}
               />
             </div>
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">
-              Password
+            <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1.5 dark:text-slate-400">
+              {t('auth.password')}
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2 dark:text-navy-700" />
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 dark:text-slate-500" />
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
@@ -218,7 +217,7 @@ export function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors dark:text-navy-700 dark:hover:text-slate-400"
+                className="absolute right-1 top-1/2 -translate-y-1/2 p-2 rounded-md text-slate-500 hover:text-navy-700 transition-colors dark:text-slate-400 dark:hover:text-slate-400"
                 tabIndex={-1}
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -238,23 +237,22 @@ export function LoginPage() {
               className="w-full py-2.5 rounded-lg border border-navy-200 text-navy-900 dark:text-slate-50 text-sm font-semibold
                          hover:bg-navy-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Sign out the other device and sign in here
+              {t('auth.login.signOutOther')}
             </button>
           )}
 
           <button
             type="submit"
             disabled={submitting}
-            className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-navy-900 text-white text-sm font-semibold
-                       hover:bg-navy-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className="btn-primary mt-2 w-full justify-center !py-2.5 font-semibold"
           >
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-            {submitting ? 'Signing in…' : 'Sign in'}
+            {submitting ? t('auth.login.signingIn') : t('auth.login.signIn')}
           </button>
         </form>
 
         <p className="text-center text-xs text-slate-400 mt-6 dark:text-slate-500">
-          Access is provisioned by an administrator — contact yours if you don't have an account.
+          {t('auth.login.provisionedHint')}
         </p>
       </div>
     </div>

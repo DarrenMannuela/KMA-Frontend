@@ -65,11 +65,21 @@ function crud<T, C, U>(base: string) {
     create: (body: C)             => http.post<T>(base, body).then(r => r.data),
     // PATCH — matches the Go handlers and OpenAPI spec
     update: (id: string | number, body: U) => http.patch<T>(`${base}/${encodeURIComponent(id)}`, body).then(r => r.data),
-    delete: (id: string | number) => http.delete(`${base}/${encodeURIComponent(id)}`).then(r => r.data),
+    // An undoable delete (order, invoice, delivery, client, supplier) answers
+    // with the id trashApi.restore takes to put it back.
+    delete: (id: string | number) => http.delete(`${base}/${encodeURIComponent(id)}`)
+      .then(r => ({ restoreId: (r.headers['x-restore-id'] as string | undefined) ?? null })),
   }
 }
 
 // ── Endpoints (see main.go for the full route table) ────────────────────────
+
+// Puts back a deleted order, invoice, delivery, client or supplier with
+// everything its delete removed (see TrashHandler.go).
+export const trashApi = {
+  restore: (restoreId: string) =>
+    http.post<{ kind: string; record_id: string }>(`/trash/${encodeURIComponent(restoreId)}/restore`).then(r => r.data),
+}
 
 export const ordersApi        = crud<Order,         CreateOrderRequest,        UpdateOrderRequest>('/order')
 export const itemsApi         = {...crud<Item,           CreateItemRequest,          UpdateItemRequest>('/item'), getByOrder: (orderId: string) => http.get<Item[]>(`/item/by-order?order_id=${encodeURIComponent(orderId)}`).then(r => r.data)}

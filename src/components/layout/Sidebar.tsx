@@ -115,7 +115,7 @@ function NavGroupSection({ group, onNavigate, collapsed }: { group: NavGroup; on
          rest of this file hands off between the mobile drawer and the
          docked sidebar — never both, but never by a JS width check either. */}
       {collapsed && (
-        <div className="hidden dock:block dock:py-1 dock:border-y dock:border-navy-800/60 dock:space-y-0.5">
+        <div role="group" aria-label={t(group.labelKey)} className="hidden dock:block dock:py-1 dock:rounded-xl dock:bg-white/[0.04] dock:space-y-0.5">
           {group.items.map(item => (
             <NavItemLink key={item.path} item={item} onNavigate={onNavigate} collapsed />
           ))}
@@ -161,6 +161,7 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose, collapsed, onToggleCollapsed }: SidebarProps) {
   const { user } = useAuth()
+  const { t } = useTranslation()
 
   return (
     <>
@@ -177,8 +178,8 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapsed }: Sidebar
         />
       )}
       <aside
-        className={`fixed top-0 left-0 h-screen w-[240px] bg-navy-950 sidebar-pattern flex flex-col z-50 shadow-sidebar
-                    transition-[transform,width] duration-200 dock:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'} ${collapsed ? 'dock:w-[72px]' : 'dock:w-[240px]'}`}
+        className={`fixed top-0 left-0 h-screen w-[240px] bg-navy-950 sidebar-pattern flex flex-col z-50 dock:shadow-sidebar
+                    transition-[transform,width] duration-200 dock:translate-x-0 ${open ? 'translate-x-0 shadow-sidebar' : '-translate-x-full'} ${collapsed ? 'dock:w-[72px]' : 'dock:w-[240px]'}`}
       >
         {/* Logo */}
         <div className={`px-5 py-5 border-b border-navy-800 flex items-center justify-between ${collapsed ? 'dock:justify-center' : ''}`}>
@@ -193,7 +194,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapsed }: Sidebar
               sidebar isn't dismissible, so this has nothing to do there. */}
           {/* Same reasoning as Topbar's menu button: a full 44px tap target
               for the control that closes the whole nav drawer. */}
-          <button onClick={onClose} className="dock:hidden p-3.5 -m-2 rounded-lg text-navy-400 hover:bg-white/5 hover:text-white transition-colors" title="Close menu">
+          <button onClick={onClose} className="dock:hidden p-3.5 -m-2 rounded-lg text-navy-400 hover:bg-white/5 hover:text-white transition-colors" title={t('shell.closeMenu')} aria-label={t('shell.closeMenu')}>
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -232,10 +233,10 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapsed }: Sidebar
           <button
             onClick={onToggleCollapsed}
             className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-navy-300 hover:bg-white/5 hover:text-white transition-colors ${collapsed ? 'justify-center' : ''}`}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? t('shell.expandSidebar') : t('shell.collapseSidebar')}
           >
             {collapsed ? <ChevronsRight className="w-4 h-4 shrink-0" /> : <ChevronsLeft className="w-4 h-4 shrink-0" />}
-            <span className={collapsed ? 'hidden' : ''}>Collapse</span>
+            <span className={collapsed ? 'hidden' : ''}>{t('shell.collapse')}</span>
           </button>
         </div>
 
@@ -246,13 +247,13 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapsed }: Sidebar
           <div className={`px-5 py-3 border-t border-navy-800 space-y-1 ${collapsed ? 'dock:hidden' : ''}`}>
             <div className="flex items-center gap-2">
               <Circle className="w-2 h-2 fill-green-400 text-green-400" />
-              <span className="text-navy-500 text-[10px]">Live (DB wired)</span>
+              <span className="text-navy-500 text-[10px]">{t('shell.legendLive')}</span>
             </div>
             <div className="flex items-center gap-2">
               <Circle className="w-2 h-2 fill-amber-400 text-amber-400 opacity-60" />
-              <span className="text-navy-500 text-[10px]">Stub (placeholder)</span>
+              <span className="text-navy-500 text-[10px]">{t('shell.legendStub')}</span>
             </div>
-            <p className="text-navy-600 text-[10px] font-mono pt-1">v0.1.0 · Workshop Admin</p>
+            <p className="text-navy-600 text-[10px] font-mono pt-1">{t('shell.devVersion')}</p>
           </div>
         )}
       </aside>

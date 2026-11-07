@@ -1,0 +1,41 @@
+{
+  "financeModel": {
+    "problems": {
+      "bahanMissing": "Bahan belum diisi",
+      "pickSupplier": "Pilih pemasok",
+      "qtyPositive": "Qty harus lebih dari 0",
+      "categoryMissing": "Kategori belum diisi",
+      "priceMissing": "Harga belum diisi"
+    },
+    "targets": {
+      "production": {
+        "ignore": "Jangan dipakai",
+        "header_id": "ID Kas Bon",
+        "date": "Tanggal",
+        "description": "Keterangan Kas Bon",
+        "name": "Bahan",
+        "supplier": "Pemasok",
+        "category": "Jangan dipakai",
+        "qty": "Qty",
+        "unit": "Satuan",
+        "price": "Harga (satuan)",
+        "total": "Total",
+        "order": "Pesanan"
+      },
+      "operation": {
+        "ignore": "Jangan dipakai",
+        "header_id": "ID Kas Bon",
+        "date": "Tanggal",
+        "description": "Keterangan Kas Bon",
+        "name": "Barang",
+        "supplier": "Jangan dipakai",
+        "category": "Kategori",
+        "qty": "Jangan dipakai",
+        "unit": "Jangan dipakai",
+        "price": "Harga",
+        "total": "Total",
+        "order": "Pesanan"
+      }
+    }
+  }
+}

@@ -2,6 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { Trans, useTranslation } from 'react-i18next'
 import { RotateCcw, Building2 } from 'lucide-react'
 import { FormField, formatRp, UppercaseField } from '@/components/ui'
 import { invoicesApi, ApiError } from '@/api'
@@ -68,6 +69,7 @@ interface Props {
 }
 
 export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType, prefillFrom, clientId, onClose }: Props) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const qc = useQueryClient()
   // If this list failed to load, the duplicate-ID check and the suggested number
@@ -226,14 +228,14 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
     mutationFn: (body: CreateInvoiceRequest) => invoicesApi.create(body),
     onSuccess: (inv) => {
       qc.invalidateQueries({ queryKey: ['invoices'] })
-      toast.success('Invoice created')
+      toast.success(t('invoiceForm.created'))
       onClose()
       navigate(`/invoice/${encodeURIComponent(inv.id)}`)
     },
     onError: (e: Error) => {
       // Someone else took this number first: say so and offer the next free one.
       if (e instanceof ApiError && e.status === 409) {
-        toast.error('That invoice number was just taken by someone else — grabbing you a new one.')
+        toast.error(t('invoiceForm.idTakenRetry'))
         resetIdSuggestion()
         return
       }
@@ -245,7 +247,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
     mutationFn: (body: UpdateInvoiceRequest) => invoicesApi.update(existingInvoice!.id, body),
     onSuccess: (inv) => {
       qc.invalidateQueries({ queryKey: ['invoices'] })
-      toast.success('Invoice updated')
+      toast.success(t('invoiceForm.updated'))
       onClose()
       navigate(`/invoice/${encodeURIComponent(inv.id)}`)
     },
@@ -253,11 +255,11 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
   })
 
   const handleSubmit = () => {
-    if (!form.id) { toast.error('Invoice ID is required'); return }
-    if (idAlreadyExists) { toast.error('An invoice with this ID already exists'); return }
-    if (!form.kepada_yth) { toast.error('Kepada Yth is required'); return }
-    if (!form.untuk) { toast.error('Untuk is required'); return }
-    if (!form.alamat) { toast.error('Alamat is required'); return }
+    if (!form.id) { toast.error(t('invoiceForm.idRequired')); return }
+    if (idAlreadyExists) { toast.error(t('invoiceForm.idExistsToast')); return }
+    if (!form.kepada_yth) { toast.error(t('invoiceForm.kepadaRequired')); return }
+    if (!form.untuk) { toast.error(t('invoiceForm.untukRequired')); return }
+    if (!form.alamat) { toast.error(t('invoiceForm.alamatRequired')); return }
 
     const payload = {
       ...form,
@@ -285,18 +287,18 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
 
       {existingInvoice && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm text-amber-700 dark:bg-amber-500/10 dark:border-amber-500/20 dark:text-amber-400">
-          Updating existing invoice <span className="font-mono font-semibold">{existingInvoice.id}</span> — total will be recalculated from current items.
+          <Trans i18nKey="invoiceForm.updatingExisting" values={{ id: existingInvoice.id }} components={{ mono: <span className="font-mono font-semibold" /> }} />
         </div>
       )}
       {!existingInvoice && prefillFrom && (
         <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-2 text-sm text-blue-700 dark:bg-blue-500/10 dark:border-blue-500/20 dark:text-blue-400">
-          Client and production details copied from DP invoice <span className="font-mono font-semibold">{prefillFrom.id}</span> — modify as needed.
+          <Trans i18nKey="invoiceForm.copiedFromDp" values={{ id: prefillFrom.id }} components={{ mono: <span className="font-mono font-semibold" /> }} />
         </div>
       )}
 
       {/* One column on phones: fixed columns left fields too narrow. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <FormField label="Invoice No." required>
+        <FormField label={t('common.invoiceNo')} required>
           <div className="flex items-center gap-2">
             <UppercaseField className="field font-mono" placeholder="076/KMA/26"
               value={form.id} onChange={setId} />
@@ -304,7 +306,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
               <button
                 type="button"
                 className="btn-ghost btn-sm !px-2 shrink-0"
-                title="Reset to suggested next number"
+                title={t('orders.resetIdTitle')} aria-label={t('orders.resetIdTitle')}
                 onClick={resetIdSuggestion}
               >
                 <RotateCcw size={14} />
@@ -313,24 +315,24 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
           </div>
           {isInvoicesError ? (
             <p className="text-xs text-amber-600 mt-1 dark:text-amber-400">
-              Couldn't check existing invoice numbers — this ID isn't verified as unique yet. The server will still reject a duplicate on submit.
+              {t('invoiceForm.idUnverified')}
             </p>
           ) : idAlreadyExists ? (
             <p className="text-xs text-red-500 mt-1">
-              An invoice with this ID already exists — pick a different number.
+              {t('invoiceForm.idExists')}
             </p>
           ) : idChanged ? (
             <p className="text-xs text-amber-600 mt-1 dark:text-amber-400">
-              Renaming from {existingInvoice!.id}.
+              {t('invoiceForm.renaming', { id: existingInvoice!.id })}
             </p>
           ) : !existingInvoice ? (
             <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
-              Auto-suggested as next invoice number for {new Date().getFullYear()} — edit if needed.
+              {t('invoiceForm.idSuggested', { year: new Date().getFullYear() })}
             </p>
           ) : null}
         </FormField>
         {forcedType === 'dp' ? (
-          <FormField label="Down Payment (%)">
+          <FormField label={t('invoiceForm.dpPercent')}>
             <div className="flex items-center gap-2">
               <input
                 className="field font-mono"
@@ -345,27 +347,27 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
             </div>
             {dpPercentNum === 0 && (
               <p className="text-xs text-amber-600 mt-1 dark:text-amber-400">
-                0% — this covers the full amount in one invoice. No separate Pelunasan invoice will be offered for this order.
+                {t('invoiceForm.zeroPercentHint')}
               </p>
             )}
           </FormField>
         ) : forcedType === 'cod' ? (
           // COD collects the whole amount; nothing to choose.
-          <FormField label="Amount (COD)">
+          <FormField label={t('invoiceForm.amountCod')}>
             <input className="field font-mono bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-navy-950 dark:text-slate-400" readOnly
               value={formatRp(remaining)} />
             <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
-              Full total, collected on delivery — no separate Pelunasan invoice will be offered for this order.
+              {t('invoiceForm.codHint')}
             </p>
           </FormField>
         ) : (
-          <FormField label="Remaining to Collect">
+          <FormField label={t('invoiceForm.remainingToCollect')}>
             <input className="field font-mono bg-slate-50 text-slate-500 cursor-not-allowed dark:bg-navy-950 dark:text-slate-400" readOnly
               value={formatRp(remaining)} />
             <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
               {alreadyPaidAmount > 0
-                ? `Total minus the ${formatRp(alreadyPaidAmount)} already collected on the D/P invoice — filled in automatically.`
-                : 'No D/P was collected on this order — this covers the full total.'}
+                ? t('invoiceForm.alreadyCollectedHint', { amount: formatRp(alreadyPaidAmount) })
+                : t('invoiceForm.noDpHint')}
             </p>
           </FormField>
         )}
@@ -373,38 +375,38 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
 
       <div className="border-t border-slate-100 pt-4 dark:border-navy-800">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide dark:text-slate-500">Client Details</p>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide dark:text-slate-500">{t('invoiceForm.clientDetails')}</p>
           {client && (
             <button
               type="button"
               className="inline-flex items-center gap-1 text-xs font-medium text-navy-600 hover:text-navy-800"
               onClick={() => navigate(`/clients/${client.id}`)}
             >
-              <Building2 size={12} /> {client.client_name} — View record
+              <Building2 size={12} /> {t('invoiceForm.viewRecord', { name: client.client_name })}
             </button>
           )}
         </div>
         <div className="space-y-3">
-          <FormField label="Kepada Yth (Company)" required>
+          <FormField label={t('invoiceForm.kepadaYth')} required>
             <UppercaseField className="field" placeholder="PT. Artisan Kuliner Indonesia"
               value={form.kepada_yth} onChange={v => setForm(p => ({ ...p, kepada_yth: v }))} />
           </FormField>
           {clientId && contacts.length > 0 && (
-            <FormField label="Contact (optional)">
+            <FormField label={t('delivery.form.contactOptional')}>
               <select className="field" value={contactId} onChange={e => handleContactChange(e.target.value)}>
-                <option value="">Select a contact to autofill…</option>
+                <option value="">{t('invoiceForm.selectContact')}</option>
                 {contacts.map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.name}{c.role ? ` — ${c.role}` : ''}{c.is_primary ? ' (Primary)' : ''}
+                    {c.name}{c.role ? ` — ${c.role}` : ''}{c.is_primary ? ` (${t('delivery.form.primary')})` : ''}
                   </option>
                 ))}
               </select>
               <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
-                Fills in Untuk, Telp, Email, and Alamat (if this contact has one saved) below — still editable, or leave unpicked to type them directly.
+                {t('invoiceForm.contactHint')}
               </p>
             </FormField>
           )}
-          <FormField label="Untuk (Contact Person)" required>
+          <FormField label={t('invoiceForm.untuk')} required>
             <UppercaseField className="field" placeholder="Ibu Cory"
               value={form.untuk} onChange={v => setForm(p => ({ ...p, untuk: v }))} />
           </FormField>
@@ -419,7 +421,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
                 className="text-xs text-navy-600 hover:underline mt-1"
                 onClick={() => setForm(p => ({ ...p, alamat: client.address!.toUpperCase() }))}
               >
-                Use client's current address: "{client.address.toUpperCase()}"
+                {t('invoiceForm.useClientAddress', { address: client.address.toUpperCase() })}
               </button>
             )}
           </FormField>
@@ -436,7 +438,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
       </div>
 
       <div className="border-t border-slate-100 pt-4 dark:border-navy-800">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3 dark:text-slate-500">Production Info</p>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3 dark:text-slate-500">{t('invoiceForm.productionInfo')}</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <FormField label="Start Produksi">
             <UppercaseField className="field" value={form.start_produksi ?? ''}
@@ -450,35 +452,35 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
       </div>
 
       <div className="border-t border-slate-100 pt-4 dark:border-navy-800">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3 dark:text-slate-500">Financials</p>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3 dark:text-slate-500">{t('invoiceForm.financials')}</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <FormField label="Total (Rp)">
             <input className="field font-mono" type="text" inputMode="numeric"
               ref={totalField.ref} value={totalField.display} onChange={totalField.onChange} />
           </FormField>
-          <FormField label="Discount (Rp)">
+          <FormField label={t('invoiceForm.discount')}>
             <input className="field font-mono" type="text" inputMode="numeric"
               ref={discountField.ref} value={discountField.display} onChange={discountField.onChange} />
             {discountExceedsRemaining && (
               <p className="text-xs text-red-500 mt-1">
-                Discount is larger than the {formatRp(remaining)} left to collect — Pelunasan (AR) has been floored to Rp 0.
+                {t('invoiceForm.discountExceeds', { amount: formatRp(remaining) })}
               </p>
             )}
           </FormField>
         </div>
         <div className="bg-slate-50 rounded-lg px-4 py-3 mt-3 space-y-1.5 text-sm dark:bg-navy-950">
           <div className="flex justify-between">
-            <span className="text-slate-500 dark:text-slate-400">Total</span>
+            <span className="text-slate-500 dark:text-slate-400">{t('orders.detail.total')}</span>
             <span className="font-mono">{formatRp(form.total)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-slate-500 dark:text-slate-400">
-              {forcedType === 'dp' ? `D/P (${dpPercentNum}%)` : forcedType === 'cod' ? 'Down Payment' : 'Already Paid (D/P)'}
+              {forcedType === 'dp' ? `D/P (${dpPercentNum}%)` : forcedType === 'cod' ? t('common.downPayment') : t('invoiceForm.alreadyPaidDp')}
             </span>
             <span className="font-mono text-green-700 dark:text-green-400">{formatRp(downPayment)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-500 dark:text-slate-400">Remaining</span>
+            <span className="text-slate-500 dark:text-slate-400">{t('invoiceForm.remaining')}</span>
             <span className="font-mono">{formatRp(remaining)}</span>
           </div>
           <div className="flex justify-between font-semibold border-t border-slate-200 pt-1.5 dark:border-navy-700">
@@ -489,15 +491,15 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
       </div>
 
       <div className="border-t border-slate-100 pt-4 dark:border-navy-800">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3 dark:text-slate-500">Dates</p>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3 dark:text-slate-500">{t('invoiceForm.dates')}</p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <FormField label="Tanggal Invoice">
             <input className="field" type="date" value={form.tanggal} onChange={set('tanggal')} />
           </FormField>
-          <FormField label="Due Date (J/T)">
+          <FormField label={t('invoiceForm.dueDate')}>
             <input className="field" type="date" value={form.due_date ?? ''} onChange={set('due_date')} />
           </FormField>
-          <FormField label="Paid Date">
+          <FormField label={t('invoiceForm.paidDate')}>
             <input className="field" type="date" value={form.paid_date ?? ''} onChange={set('paid_date')} />
           </FormField>
         </div>
@@ -505,7 +507,7 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
 
       <div className="border-t border-slate-100 pt-4 dark:border-navy-800">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 dark:text-slate-500">
-          Items on this invoice ({items.length})
+          {t('invoiceForm.itemsOnInvoice', { count: items.length })}
         </p>
         {/* overflow-x-auto, not overflow-hidden: a long item name at phone
            width was pushing Qty/Subtotal past the edge and clipping them
@@ -514,10 +516,10 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
           <table className="w-full">
             <thead className="bg-slate-50 dark:bg-navy-950">
               <tr className="text-xs font-semibold text-slate-400 uppercase tracking-wider dark:text-slate-500">
-                <th className="text-left p-2">Item</th>
-                <th className="text-center p-2">Size</th>
-                <th className="text-right p-2">Qty</th>
-                <th className="text-right p-2">Subtotal</th>
+                <th className="text-left p-2">{t('orders.detail.item')}</th>
+                <th className="text-center p-2">{t('orders.detail.size')}</th>
+                <th className="text-right p-2">{t('orders.detail.qty')}</th>
+                <th className="text-right p-2">{t('orders.detail.subtotal')}</th>
               </tr>
             </thead>
             <tbody>
@@ -536,9 +538,9 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
 
       <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-navy-800">
         <button className="btn-primary" disabled={busy || idAlreadyExists} onClick={handleSubmit}>
-          {busy ? 'Saving…' : existingInvoice ? 'Update Invoice' : 'Generate Invoice'}
+          {busy ? t('common.saving') : existingInvoice ? t('orders.detail.updateInvoice') : t('invoiceForm.generateInvoice')}
         </button>
-        <button className="btn-secondary" onClick={() => guardClose(onClose)}>Cancel</button>
+        <button className="btn-secondary" onClick={() => guardClose(onClose)}>{t('common.cancel')}</button>
       </div>
     </div>
   )

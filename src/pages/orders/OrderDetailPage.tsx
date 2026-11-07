@@ -308,7 +308,7 @@ export function OrderDetailPage() {
   return (
     <div className="p-4 md:p-6 space-y-5">
       <div className="flex items-center gap-3 fade-up">
-        <button onClick={() => navigate('/orders')} className="btn-secondary !px-2.5 shrink-0" title={t('orders.backToOrders')}>
+        <button onClick={() => navigate('/orders')} className="btn-secondary !px-2.5 shrink-0" title={t('orders.backToOrders')} aria-label={t('orders.backToOrders')}>
           <ArrowLeft size={14} />
         </button>
         <div className="min-w-0">

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
 import { Users, BookOpen } from 'lucide-react'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField, UppercaseField } from '@/components/ui'
@@ -23,6 +24,7 @@ const CATEGORY_BADGE: Record<SupplierCategory, string> = {
 }
 
 function SupplierForm({ editing, onClose }: { editing: Supplier | null; onClose: () => void }) {
+  const { t } = useTranslation()
   const create = supplierHooks.useCreate()
   const update = supplierHooks.useUpdate()
 
@@ -43,11 +45,11 @@ function SupplierForm({ editing, onClose }: { editing: Supplier | null; onClose:
 
   return (
     <div className="space-y-4">
-      <FormField label="Supplier Name" required>
-        <UppercaseField className="field" placeholder="e.g. SAI Textile" value={form.supplier_name}
+      <FormField label={t('suppliersArea.supplierName')} required>
+        <UppercaseField className="field" placeholder={t('suppliersArea.supplierNamePlaceholder')} value={form.supplier_name}
           onChange={v => setForm(p => ({ ...p, supplier_name: v }))} />
       </FormField>
-      <FormField label="Category" required>
+      <FormField label={t('suppliersArea.category')} required>
         <select className="field" value={form.supplier_category}
           onChange={e => setForm(p => ({ ...p, supplier_category: e.target.value as SupplierCategory }))}>
           {SUPPLIER_CATEGORIES.map(c => (
@@ -57,15 +59,16 @@ function SupplierForm({ editing, onClose }: { editing: Supplier | null; onClose:
       </FormField>
       <div className="flex gap-2 pt-1">
         <button className="btn-primary" disabled={busy} onClick={handleSubmit}>
-          {busy ? 'Saving…' : editing ? 'Update Supplier' : 'Add Supplier'}
+          {busy ? t('common.saving') : editing ? t('suppliersArea.updateSupplier') : t('suppliersArea.addSupplier')}
         </button>
-        <button className="btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
       </div>
     </div>
   )
 }
 
 export function SuppliersPage() {
+  const { t } = useTranslation()
   const { data, isLoading, isError, refetch } = supplierHooks.useList()
   const del = supplierHooks.useDelete()
   const update = supplierHooks.useUpdate()
@@ -77,35 +80,36 @@ export function SuppliersPage() {
   return (
     <>
     <CrudPage<Supplier>
-      title="Suppliers"
+      title={t('topbar.titles.suppliers')}
       icon={Users}
       data={data}
       isLoading={isLoading}
       isError={isError}
       onRetry={refetch}
       searchKeys={['supplier_name', 'supplier_category']}
+      undoDeletes
       rowActions={r => (
-        <button onClick={() => setCatalogueFor(r)} className="text-slate-300 hover:text-navy-700 dark:text-navy-700 dark:hover:text-slate-200" title="Materials, colours & prices">
-          <BookOpen size={15} />
+        <button onClick={() => setCatalogueFor(r)} className="btn-ghost btn-sm !px-2" title={t('suppliersArea.catalogueButton')} aria-label={t('suppliersArea.catalogueButton')}>
+          <BookOpen className="w-4 h-4" />
         </button>
       )}
       columns={[
-        { header: 'ID',       key: 'id' },
-        { header: 'Name',     key: 'supplier_name',     primary: true, edit: { type: 'text', uppercase: true },
+        { header: t('orders.id'), key: 'id' },
+        { header: t('suppliersArea.name'), key: 'supplier_name',     primary: true, edit: { type: 'text', uppercase: true },
           render: r => <span className="font-medium text-navy-900 dark:text-slate-100">{r.supplier_name}</span> },
-        { header: 'Category', key: 'supplier_category', edit: { type: 'select', options: SUPPLIER_CATEGORIES.map(c => ({ value: c, label: CATEGORY_LABELS[c] })) },
+        { header: t('suppliersArea.category'), key: 'supplier_category', edit: { type: 'select', options: SUPPLIER_CATEGORIES.map(c => ({ value: c, label: CATEGORY_LABELS[c] })) },
           render: r => (
           <span className={`badge ${CATEGORY_BADGE[r.supplier_category] ?? 'badge-slate'}`}>
             {CATEGORY_LABELS[r.supplier_category] ?? r.supplier_category}
           </span>
         )},
       ]}
-      formTitle={e => e ? 'Edit Supplier' : 'Add Supplier'}
+      formTitle={e => e ? t('suppliersArea.editSupplier') : t('suppliersArea.addSupplier')}
       renderForm={(editing, onClose) => <SupplierForm editing={editing} onClose={onClose} />}
       onDelete={id => del.mutate(id)}
-      deleteMessage={r => `Delete supplier "${r.supplier_name}"?`}
+      deleteMessage={r => t('suppliersArea.deleteConfirm', { name: r.supplier_name })}
       onCellEdit={(row, key, value) => {
-        if (key === 'supplier_name' && !String(value ?? '').trim()) { toast.error('Supplier name is required'); return }
+        if (key === 'supplier_name' && !String(value ?? '').trim()) { toast.error(t('suppliersArea.nameRequired')); return }
         update.mutate({ id: row.id, body: { [key]: value } as Partial<CreateSupplierRequest> })
       }}
     />

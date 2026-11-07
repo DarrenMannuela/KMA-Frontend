@@ -4,9 +4,11 @@ import { FileText, Eye, Receipt } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { formatRp } from '@/components/ui'
 import { invoiceHooks } from '@/hooks'
+import { useDateLocale } from '@/i18n/dateLocale'
 import type { Invoice } from '@/types'
 
 const STATUS_BADGE: Record<string, string> = {
@@ -24,6 +26,8 @@ export function InvoiceListPage() {
   const del = invoiceHooks.useDelete()
   const update = invoiceHooks.useUpdate()
   const navigate = useNavigate()
+  const { t } = useTranslation()
+  const dateLocale = useDateLocale()
 
   // Defaults to Unpaid (the receivables). Kept in sessionStorage so it survives
   // opening an invoice and coming back.
@@ -52,17 +56,17 @@ export function InvoiceListPage() {
       // It reverts directly: `row` still holds the old status.
       onSuccess: () => {
         if (nextStatus !== 'paid') return
-        toast((t) => (
+        toast((toastItem) => (
           <span className="flex items-center gap-3">
-            Marked as paid.
+            {t('invoiceList.markedPaid')}
             <button
               className="font-semibold text-navy-300 hover:text-white underline underline-offset-2"
               onClick={() => {
-                toast.dismiss(t.id)
+                toast.dismiss(toastItem.id)
                 update.mutate({ id: row.id, body: { status: 'unpaid' } })
               }}
             >
-              Undo
+              {t('common.undo')}
             </button>
           </span>
         ))
@@ -72,7 +76,7 @@ export function InvoiceListPage() {
 
   return (
     <CrudPage<Invoice>
-      title="Invoices"
+      title={t('invoiceList.title')}
       icon={FileText}
       data={filteredData}
       isLoading={isLoading}
@@ -90,28 +94,28 @@ export function InvoiceListPage() {
                 statusFilter === f ? 'bg-white shadow-sm text-navy-900 dark:bg-navy-900 dark:text-slate-50' : 'text-slate-500 hover:text-navy-700 dark:text-slate-400'
               }`}
             >
-              {f}
+              {t(`invoiceList.filters.${f}`)}
             </button>
           ))}
         </div>
       }
       columns={[
-        { header: 'Invoice No.',  key: 'id',
+        { header: t('common.invoiceNo'), key: 'id',
           render: r => <span className="id-chip font-mono">{r.id}</span> },
-        { header: 'Order ID',     key: 'order_id',          secondary: true,
+        { header: t('common.orderId'), key: 'order_id',          secondary: true,
           render: r => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.order_id}</span> },
-        { header: 'Client',       key: 'kepada_yth',
+        { header: t('common.client'), key: 'kepada_yth',
           render: r => <span className="font-medium">{r.kepada_yth}</span> },
-        { header: 'Type',         key: 'type',              secondary: true,
+        { header: t('common.type'), key: 'type',              secondary: true,
           render: r => {
             const isFullInvoice = isFull(r)
             return (
               <span className={`badge ${TYPE_BADGE[r.type] ?? 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'}`}>
-                {isFullInvoice ? 'Full Invoice' : r.type === 'dp' ? 'Down Payment' : 'Pelunasan'}
+                {isFullInvoice ? t('invoiceList.fullInvoice') : r.type === 'dp' ? t('common.downPayment') : 'Pelunasan'}
               </span>
             )
           }},
-        { header: 'Amount Due',   key: 'total',
+        { header: t('dashboard.amountDue'), key: 'total',
           render: r => {
             // The unfiltered list, not filteredData: a Pelunasan's sibling DP
             // invoice may be 'paid' and hidden under the Unpaid filter, but
@@ -120,48 +124,50 @@ export function InvoiceListPage() {
             return (
               <div>
                 <span className="font-mono">{formatRp(due)}</span>
-                <div className="text-[10px] text-slate-400 dark:text-slate-500">of {formatRp(r.total)} total</div>
+                <div className="text-[10px] text-slate-400 dark:text-slate-500">{t('invoiceList.ofTotal', { amount: formatRp(r.total) })}</div>
               </div>
             )
           }},
-        { header: 'Date',         key: 'tanggal',
-          render: r => r.tanggal ? <span className="whitespace-nowrap">{format(new Date(r.tanggal), 'dd MMM yyyy')}</span> : '—' },
-        { header: 'Status',       key: 'status',
+        { header: t('common.date'), key: 'tanggal',
+          render: r => r.tanggal ? <span className="whitespace-nowrap">{format(new Date(r.tanggal), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
+        { header: t('common.status'), key: 'status',
           render: r => (
             <button
               type="button"
-              className={`badge ${STATUS_BADGE[r.status] ?? 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'} cursor-pointer hover:opacity-75 transition-opacity inline-block w-16 text-center`}
+              className={`badge ${STATUS_BADGE[r.status] ?? 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'} cursor-pointer hover:opacity-75 transition-opacity min-w-16 justify-center`}
               onClick={() => toggleStatus(r)}
               disabled={update.isPending}
-              title={r.status === 'paid' ? 'Mark as unpaid' : 'Mark as paid'}
+              title={r.status === 'paid' ? t('invoiceList.markUnpaid') : t('invoiceList.markPaid')}
             >
-              {r.status === 'paid' ? 'Paid' : 'Unpaid'}
+              {r.status === 'paid' ? t('common.paid') : t('common.unpaid')}
             </button>
           )},
       ]}
       formTitle={() => ''}
       renderForm={() => null}
       onDelete={id => del.mutate(id)}
-      deleteMessage={r => `Delete invoice ${r.id}?`}
+      deleteMessage={r => t('invoiceList.deleteConfirm', { id: r.id })}
       // Invoices are made and edited from their order; the pencil opens it with the
       // right form.
       onEditClick={row => navigate(`/orders/${encodeURIComponent(row.order_id)}`, {
         state: { openInvoiceType: row.type },
       })}
       onAddClick={() => navigate('/orders')}
+      undoDeletes
+      rowHref={row => `/invoice/${encodeURIComponent(row.id)}`}
       rowActions={row => (
         <>
           <button
             className="btn-ghost btn-sm !px-2 hover:!text-gold-500"
             onClick={() => navigate(`/invoice/${encodeURIComponent(row.id)}`)}
-            title="View invoice"
+            title={t('invoiceList.viewInvoice')} aria-label={t('invoiceList.viewInvoice')}
           >
             <Eye className="w-3.5 h-3.5" />
           </button>
           <button
             className="btn-ghost btn-sm !px-2 hover:!text-gold-500"
             onClick={() => navigate(`/invoice/${encodeURIComponent(row.id)}/kwitansi`)}
-            title="Print kwitansi/receipt"
+            title={t('invoiceList.printKwitansi')} aria-label={t('invoiceList.printKwitansi')}
           >
             <Receipt className="w-3.5 h-3.5" />
           </button>

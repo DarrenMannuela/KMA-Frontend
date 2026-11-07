@@ -2,13 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { Trans, useTranslation } from 'react-i18next'
 import {
-  ArrowDown, ArrowUp, ChevronRight, Download, FileUp, Link2, Plus, Printer, Search, Trash2, X,
-  ArrowRightLeft, Tag, Copy, CheckSquare, Palette,
+  ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, FileUp, Link2, Plus, Printer, Search, Trash2, X,
+  ArrowRightLeft, Tag, Copy, CheckSquare,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import { EditableCell, formatRp } from '@/components/ui'
-import { PageHeader, LoadingState, ErrorState } from '@/components/ui/Page'
+import { LoadingState, ErrorState } from '@/components/ui/Page'
+import { ScrollX } from '@/components/ui/ScrollX'
 import { ConfirmDialog } from '@/components/ui'
 import {
   productionHooks, operationHooks, supplierHooks, orderHooks, useFinanceHeaders, useFinanceBatch, undoLast, useBudgets,
@@ -36,6 +37,8 @@ import { ledgerSheet, exportLedger } from './ledgerExport'
 import { guessColumns, readRows } from './columnGuess'
 import type { Grid } from '@/utils/tableText'
 import { isTyping } from '@/utils/isTyping'
+import { useCreateOnArrival } from '@/hooks/useCreateOnArrival'
+import { useRovingCells } from '@/hooks/useRovingCells'
 
 type GroupBy = 'kasbon' | 'group' | 'order' | 'none'
 type SortKey = 'header_id' | 'date' | 'name' | 'group' | 'qty' | 'price' | 'total' | 'order_id'
@@ -72,12 +75,12 @@ function loadPrefs(kind: Kind): Partial<LedgerFilters> {
 /** The Production or Operations spreadsheet: every Kas Bon line, searchable
  *  across months, editable in place, with bulk changes, paste from Excel,
  *  import/export and undo. */
-export function Ledger({ kind, initial, title, icon }: {
+export function Ledger({ kind, initial, title }: {
   kind: Kind
   initial?: Partial<LedgerFilters>
   title: string
-  icon: LucideIcon
 }) {
+  const { t } = useTranslation()
   const isMobile = useIsMobile()
   const qc = useQueryClient()
   const navigate = useNavigate()
@@ -115,6 +118,7 @@ export function Ledger({ kind, initial, title, icon }: {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [limit, setLimit] = useState(PAGE)
   const [form, setForm] = useState<{ headerId?: string; lines?: DraftLine[] } | null>(null)
+  useCreateOnArrival(() => setForm({}))
   const [importGrid, setImportGrid] = useState<Grid | null | undefined>(undefined)
   const [dialog, setDialog] = useState<null | 'move' | 'supplier_id' | 'category' | 'order_id' | 'delete'>(null)
   const [editing, setEditing] = useState<LedgerRow | null>(null)
@@ -145,7 +149,7 @@ export function Ledger({ kind, initial, title, icon }: {
     () => [...new Set(operations.data.map(r => r.category).filter(Boolean))].sort(),
     [operations.data],
   )
-  const groupName = useCallback((r: LedgerRow) => (kind === 'production' ? supplierLabel(suppliers, r.supplier_id) : r.category || 'Uncategorized'), [kind, suppliers])
+  const groupName = useCallback((r: LedgerRow) => (kind === 'production' ? supplierLabel(suppliers, r.supplier_id) : r.category || t('ledger.uncategorized')), [kind, suppliers, t])
 
   // ── Filtering ──────────────────────────────────────────────────────────────
   const texts = useMemo(() => new Map(allRows.map(r => [r.id, searchText(r, suppliers, orders)])), [allRows, suppliers, orders])
@@ -298,12 +302,12 @@ export function Ledger({ kind, initial, title, icon }: {
   const editRow = (r: LedgerRow, field: EditField, value: unknown) => {
     if (field === 'order_id') {
       const v = String(value ?? '').trim().toUpperCase()
-      if (v && !orders.some(o => o.id === v)) return void toast.error(`There's no order ${v}`)
+      if (v && !orders.some(o => o.id === v)) return void toast.error(t('ledger.noOrder', { id: v }))
       value = v || null
     }
     if (field === 'date') {
       const d = String(value ?? '').trim()
-      if (!d || Number.isNaN(new Date(d).getTime())) return void toast.error('Date is required')
+      if (!d || Number.isNaN(new Date(d).getTime())) return void toast.error(t('orders.dateRequired'))
       value = d
     }
     if (field === 'header_id') {
@@ -311,14 +315,16 @@ export function Ledger({ kind, initial, title, icon }: {
       if (!id || id === r.header_id) return
       const b = editBatch([r], 'header_id', id)
       if (!headers.some(h => h.id === id)) b.headers = [{ id, date: r.date, description: r.description }]
-      return apply(b, `Moved ${r.name || r.category} to ${id}`)
+      return apply(b, t('ledger.movedLineTo', { name: r.name || r.category, id }))
     }
-    const what = field === 'date' || field === 'description' ? `the ${field} of ${r.header_id}` : `${r.name || r.category}`
-    apply(editBatch([r], field, value), `Changed ${what}`)
+    const label = field === 'date' ? t('ledger.changedDateOf', { id: r.header_id })
+      : field === 'description' ? t('ledger.changedDescriptionOf', { id: r.header_id })
+      : t('ledger.changedLine', { name: `${r.name || r.category}` })
+    apply(editBatch([r], field, value), label)
   }
 
   const removeRows = (rows: LedgerRow[]) =>
-    apply(deleteBatch(rows), rows.length === 1 ? `Deleted ${rows[0].name || rows[0].category}` : `Deleted ${rows.length} lines`, () => setSelected(new Set()))
+    apply(deleteBatch(rows), rows.length === 1 ? t('ledger.deletedLine', { name: rows[0].name || rows[0].category }) : t('ledger.deletedLines', { n: rows.length }), () => setSelected(new Set()))
 
   const duplicateRows = (rows: LedgerRow[]) => {
     const b: FinanceBatch = { production_create: [], operation_create: [] }
@@ -326,7 +332,7 @@ export function Ledger({ kind, initial, title, icon }: {
       if (r.kind === 'production') b.production_create!.push({ header_id: r.header_id, material_name: r.name, supplier_id: r.supplier_id, amount: r.qty, si_unit: r.unit, price: r.price, order_id: r.order_id })
       else b.operation_create!.push({ header_id: r.header_id, category: r.category, description: r.name, price: r.price, order_id: r.order_id })
     }
-    apply(b, `Copied ${rows.length} line${rows.length === 1 ? '' : 's'}`)
+    apply(b, t('ledger.copiedLines', { count: rows.length }))
   }
 
   const exportRows = (rows: LedgerRow[], suffix = periodSlug(searchPeriod)) =>
@@ -382,6 +388,9 @@ export function Ledger({ kind, initial, title, icon }: {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (form || importGrid !== undefined || dialog || editing) return
+      // A focused cell already consumed this key (typing into it starts
+      // editing with that keystroke) — "n" must not also open New Kas Bon.
+      if (e.defaultPrevented) return
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey && !isTyping(e.target)) {
         e.preventDefault()
         undoLast(qc)
@@ -399,6 +408,16 @@ export function Ledger({ kind, initial, title, icon }: {
 
   // ── Cell navigation (arrow keys between cells, like Excel) ─────────────────
   const cellRefs = useRef(new Map<string, HTMLElement>())
+  const onGridFocus = useRovingCells(cellRefs)
+  const onGridKey = (e: React.KeyboardEvent) => {
+    if (e.key !== ' ' || !e.shiftKey || e.defaultPrevented) return
+    for (const [key, el] of cellRefs.current) {
+      if (el !== e.target) continue
+      e.preventDefault()
+      toggle(Number(key.split(':')[0]), false)
+      return
+    }
+  }
   const cellRef = (key: string) => (el: HTMLElement | null) => {
     if (el) cellRefs.current.set(key, el)
     else cellRefs.current.delete(key)
@@ -424,15 +443,18 @@ export function Ledger({ kind, initial, title, icon }: {
     value: (r: LedgerRow) => string | number
     render?: (r: LedgerRow) => React.ReactNode
   }
-  const money = (v: number) => <span className="font-mono tabular-nums">{formatRp(v)}</span>
+  // Plain numbers in the sheet's cells: the column header says "(Rp)" once,
+  // the way their Excel sheet does, instead of every cell repeating it.
+  const amount = (v: number) => v.toLocaleString('id-ID')
+  const money = (v: number) => <span className="font-mono tabular-nums">{amount(v)}</span>
   const columns: Col[] = [
     ...(!byKasBon ? [
-      { key: 'header_id', header: 'Kas Bon', width: '6.5rem', sortKey: 'header_id' as SortKey, field: 'header_id' as EditField, type: 'text' as const, suggestions: headerSuggestions, value: (r: LedgerRow) => r.header_id, render: (r: LedgerRow) => <span className="font-mono text-xs">{r.header_id}</span> },
-      { key: 'date', header: 'Date', width: '6.5rem', sortKey: 'date' as SortKey, field: 'date' as EditField, type: 'date' as const, value: (r: LedgerRow) => r.date.slice(0, 10), render: (r: LedgerRow) => <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{formatDateShort(r.date)}</span> },
-      { key: 'description', header: 'Description', width: '11rem', field: 'description' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.description, render: (r: LedgerRow) => <span className="text-slate-600 dark:text-slate-300">{r.description}</span> },
+      { key: 'header_id', header: t('ledger.columns.kasBon'), width: '6.5rem', sortKey: 'header_id' as SortKey, field: 'header_id' as EditField, type: 'text' as const, suggestions: headerSuggestions, value: (r: LedgerRow) => r.header_id, render: (r: LedgerRow) => <span className="font-mono text-xs">{r.header_id}</span> },
+      { key: 'date', header: t('common.date'), width: '6.5rem', sortKey: 'date' as SortKey, field: 'date' as EditField, type: 'date' as const, value: (r: LedgerRow) => r.date.slice(0, 10), render: (r: LedgerRow) => <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{formatDateShort(r.date)}</span> },
+      { key: 'description', header: t('ledger.columns.description'), width: '11rem', field: 'description' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.description, render: (r: LedgerRow) => <span className="text-slate-600 dark:text-slate-300">{r.description}</span> },
     ] : []),
     ...(kind === 'production' ? [
-      { key: 'name', header: 'Bahan', width: 'auto', sortKey: 'name' as SortKey, field: 'name' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.name,
+      { key: 'name', header: t('ledger.columns.bahan'), width: 'auto', sortKey: 'name' as SortKey, field: 'name' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.name,
         render: (r: LedgerRow) => {
           // A swatch for whatever colour is already baked into this line's
           // own name ("… - CODE"), the same code a Kas Bon line's colour
@@ -449,40 +471,52 @@ export function Ledger({ kind, initial, title, icon }: {
           const catColors = catalogue && catMatch ? catalogue.colorsFor(catMatch) : []
           const catCode = catMatch ? colorCodeFromText(catMatch, r.name) : undefined
           const c = catCode ? catColors.find(x => x.code === catCode) : undefined
+          // The colour is its own little picker chip (dot, code, caret) at the
+          // cell's right edge, so it reads as "this can be changed" on touch
+          // screens too, where a hover hint would never show. The name drops
+          // the " - CODE" the chip already shows; the saved name is unchanged.
+          const shownName = catMatch && catCode ? materialLabel(catMatch) : r.name
           return (
-            <span className="inline-flex items-center gap-1.5 min-w-0">
+            <span className="flex items-center gap-2 min-w-0">
+              <span className="font-medium text-slate-800 truncate dark:text-slate-200" title={r.name}>{shownName}</span>
               {catMatch && catColors.length > 0 && (
                 <button
                   type="button"
                   onClick={e => { e.stopPropagation(); setColorPickFor({ row: r, material: catMatch, colors: catColors, selectedCode: catCode }) }}
-                  className="shrink-0 rounded-full p-0.5 -m-0.5"
-                  title={c ? `${c.code}${c.category ? ` · ${c.category}` : ''} — click to change` : 'Pick a colour'}
+                  className="ml-auto shrink-0 inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white pl-1 pr-1.5 py-0.5 text-[11px] text-slate-700 shadow-sm hover:border-navy-400 hover:bg-navy-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-navy-400 dark:border-navy-600 dark:bg-navy-950 dark:text-slate-200 dark:hover:border-navy-400 dark:hover:bg-navy-800"
+                  title={c ? t('ledger.colourClickToChange', { colour: `${c.code}${c.category ? ` · ${c.category}` : ''}` }) : t('ledger.pickColour')}
+                  aria-label={c ? t('ledger.colourClickToChange', { colour: c.code }) : t('ledger.pickColour')}
                 >
                   {c
-                    ? <span className="block w-3.5 h-3.5 rounded-full ring-1 ring-black/10 hover:ring-2 hover:ring-navy-400" style={{ background: c.hex }} />
-                    : <Palette size={14} className="text-slate-300 hover:text-navy-600 dark:text-navy-700 dark:hover:text-slate-300" />}
+                    ? <span className="block w-3 h-3 rounded-full ring-1 ring-black/25 dark:ring-white/30" style={{ background: c.hex }} />
+                    : catCode
+                      ? <span className="block w-3 h-3 rounded-full border border-dashed border-slate-400 dark:border-slate-500" />
+                      : <Plus size={11} className="text-slate-500 dark:text-slate-400" />}
+                  <span className={`max-w-[7rem] truncate ${catCode ? 'font-mono' : ''}`}>{catCode ?? t('ledger.colourChip')}</span>
+                  <ChevronDown size={11} className="text-slate-400 dark:text-slate-500" />
                 </button>
               )}
-              <span className="font-medium text-slate-800 truncate dark:text-slate-200">{r.name}</span>
             </span>
           )
         } },
-      { key: 'supplier', header: 'Supplier', width: '11rem', sortKey: 'group' as SortKey, field: 'supplier_id' as EditField, type: 'select' as const, options: supplierOptions, value: (r: LedgerRow) => r.supplier_id,
+      { key: 'supplier', header: t('ledger.columns.supplier'), width: '14rem', sortKey: 'group' as SortKey, field: 'supplier_id' as EditField, type: 'select' as const, options: supplierOptions, value: (r: LedgerRow) => r.supplier_id,
         render: (r: LedgerRow) => {
           const s = suppliers.find(x => x.id === r.supplier_id)
-          return <span className="inline-flex items-center gap-1.5">{s && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: CATEGORY_COLORS[s.supplier_category] }} />}{s?.supplier_name ?? 'No supplier'}</span>
+          return <span className="flex items-center gap-1.5 min-w-0">{s && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: CATEGORY_COLORS[s.supplier_category] }} />}<span className="truncate" title={s?.supplier_name}>{s?.supplier_name ?? t('ledger.noSupplier')}</span></span>
         } },
-      { key: 'qty', header: 'Qty', width: '4.5rem', sortKey: 'qty' as SortKey, align: 'right' as const, field: 'qty' as EditField, type: 'number' as const, value: (r: LedgerRow) => r.qty, render: (r: LedgerRow) => <span className="tabular-nums">{r.qty.toLocaleString('id-ID')}</span> },
-      { key: 'unit', header: 'Unit', width: '5rem', field: 'unit' as EditField, type: 'select' as const, options: unitOptions, value: (r: LedgerRow) => r.unit },
+      { key: 'qty', header: t('ledger.columns.qty'), width: '4.5rem', sortKey: 'qty' as SortKey, align: 'right' as const, field: 'qty' as EditField, type: 'number' as const, value: (r: LedgerRow) => r.qty, render: (r: LedgerRow) => <span className="tabular-nums">{r.qty.toLocaleString('id-ID')}</span> },
+      { key: 'unit', header: t('ledger.columns.unit'), width: '5rem', field: 'unit' as EditField, type: 'select' as const, options: unitOptions, value: (r: LedgerRow) => r.unit },
     ] : [
-      { key: 'category', header: 'Category', width: '9rem', sortKey: 'group' as SortKey, field: 'category' as EditField, type: 'text' as const, suggestions: categories, value: (r: LedgerRow) => r.category },
-      { key: 'name', header: 'Item', width: 'auto', sortKey: 'name' as SortKey, field: 'name' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.name, render: (r: LedgerRow) => <span className="font-medium text-slate-800 dark:text-slate-200">{r.name}</span> },
+      { key: 'category', header: t('ledger.columns.category'), width: '9rem', sortKey: 'group' as SortKey, field: 'category' as EditField, type: 'text' as const, suggestions: categories, value: (r: LedgerRow) => r.category },
+      { key: 'name', header: t('ledger.columns.item'), width: 'auto', sortKey: 'name' as SortKey, field: 'name' as EditField, type: 'text' as const, value: (r: LedgerRow) => r.name, render: (r: LedgerRow) => <span className="font-medium text-slate-800 dark:text-slate-200">{r.name}</span> },
     ]),
-    { key: 'price', header: 'Price', width: '7.5rem', sortKey: 'price', align: 'right', field: 'price', type: 'number', value: r => r.price, render: r => money(r.price) },
-    ...(kind === 'production' ? [{ key: 'total', header: 'Total', width: '8rem', sortKey: 'total' as SortKey, align: 'right' as const, value: (r: LedgerRow) => r.total, render: (r: LedgerRow) => <span className="font-mono tabular-nums font-semibold">{formatRp(r.total)}</span> }] : []),
-    { key: 'order', header: 'Order', width: '8rem', sortKey: 'order_id', field: 'order_id', type: 'text', suggestions: orderSuggestions, value: r => r.order_id ?? '',
+    { key: 'price', header: `${t('ledger.columns.price')} (Rp)`, width: '7.5rem', sortKey: 'price', align: 'right', field: 'price', type: 'number', value: r => r.price, render: r => money(r.price) },
+    ...(kind === 'production' ? [{ key: 'total', header: `${t('ledger.columns.total')} (Rp)`, width: '8rem', sortKey: 'total' as SortKey, align: 'right' as const, value: (r: LedgerRow) => r.total, render: (r: LedgerRow) => <span className="font-mono tabular-nums font-semibold">{amount(r.total)}</span> }] : []),
+    { key: 'order', header: t('ledger.columns.order'), width: '8rem', sortKey: 'order_id', field: 'order_id', type: 'text', suggestions: orderSuggestions, value: r => r.order_id ?? '',
       render: r => (r.order_id ? <span className="font-mono text-xs text-navy-700 dark:text-slate-200" title={orderLabel(orders, r.order_id)}>{r.order_id}</span> : <span className="text-slate-300 dark:text-navy-700">—</span>) },
   ]
+  // The checkbox and actions columns (2.25rem each) plus every fixed-width column.
+  const fixedRem = 4.5 + columns.reduce((n, c) => n + (c.width.endsWith('rem') ? parseFloat(c.width) : 0), 0)
 
   const moveFocus = (rowId: number, col: number, dRow: number, dCol: number) => {
     const i = flatShown.findIndex(r => r.id === rowId)
@@ -494,8 +528,8 @@ export function Ledger({ kind, initial, title, icon }: {
   const sortBy = (key?: SortKey) => key && setSort(s => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'date' || key === 'total' || key === 'price' ? 'desc' : 'asc' }))
 
   // ── Rendering ──────────────────────────────────────────────────────────────
-  if (source.isLoading) return <LoadingState label={`Loading the ${kind} lines…`} />
-  if (source.isError) return <div className="p-4 md:p-6"><div className="card"><ErrorState what={`the ${kind} lines`} onRetry={() => source.refetch()} /></div></div>
+  if (source.isLoading) return <LoadingState label={kind === 'production' ? t('ledger.loadingProduction') : t('ledger.loadingOperation')} />
+  if (source.isError) return <div className="p-4 md:p-6"><div className="card"><ErrorState what={kind === 'production' ? t('ledger.errorProduction') : t('ledger.errorOperation')} onRetry={() => source.refetch()} /></div></div>
 
   // The group's running sum: a separate value from the label content below,
   // since the desktop table now places it in its own cell aligned under a
@@ -523,7 +557,7 @@ export function Ledger({ kind, initial, title, icon }: {
         operation_update: [],
         header_update: [{ id: key, date: patch.date ?? first.date.slice(0, 10), description: (patch.description ?? first.description ?? '').toUpperCase() }],
       },
-      `Changed the ${patch.date ? 'date' : 'description'} of ${key}`,
+      patch.date ? t('ledger.changedDateOf', { id: key }) : t('ledger.changedDescriptionOf', { id: key }),
     )
   const groupHeader = (key: string, rows: LedgerRow[], editable = false) => {
     if (filters.groupBy === 'kasbon') {
@@ -539,17 +573,17 @@ export function Ledger({ kind, initial, title, icon }: {
       // several of them in a row.
       return (
         <>
-          <span className="font-mono text-base font-bold text-navy-900 dark:text-slate-50">{key}</span>
+          <span className="shrink-0 font-mono text-sm font-bold px-2 py-0.5 rounded-md bg-white border border-slate-300 text-navy-900 shadow-sm dark:bg-navy-950 dark:border-navy-600 dark:text-slate-50">{key}</span>
           {editable ? (
             <EditableCell
               value={first.description}
-              placeholder="No description"
+              placeholder={t('ledger.noDescription')}
               uppercase
-              format={v => <span className="text-sm text-slate-500 truncate dark:text-slate-400">{v || 'No description'}</span>}
+              format={v => <span className="text-sm font-medium text-slate-700 truncate dark:text-slate-200">{v || t('ledger.noDescription')}</span>}
               onSave={v => editHeader(key, first, { description: String(v) })}
             />
           ) : (
-            <span className="text-sm text-slate-500 truncate dark:text-slate-400">{first.description || 'No description'}</span>
+            <span className="text-sm font-medium text-slate-700 truncate dark:text-slate-200">{first.description || t('ledger.noDescription')}</span>
           )}
           {editable ? (
             <EditableCell
@@ -561,17 +595,17 @@ export function Ledger({ kind, initial, title, icon }: {
           ) : (
             <span className="text-slate-500 text-xs whitespace-nowrap dark:text-slate-400">{formatDateShort(first.date)}</span>
           )}
-          {others > 0 && <span className="badge-slate !text-[10px]" title={`This Kas Bon also has ${others} ${kind === 'production' ? 'operation' : 'production'} line(s)`}>+{others} {kind === 'production' ? 'ops' : 'bahan'}</span>}
+          {others > 0 && <span className="badge-slate !text-[10px]" title={kind === 'production' ? t('ledger.alsoHasOperationLines', { n: others }) : t('ledger.alsoHasProductionLines', { n: others })}>{kind === 'production' ? t('ledger.moreOps', { n: others }) : t('ledger.moreBahan', { n: others })}</span>}
         </>
       )
     }
     const label = filters.groupBy === 'order'
-      ? (key ? orderLabel(orders, key) : 'Not linked to an order')
-      : kind === 'production' ? supplierLabel(suppliers, Number(key)) : key || 'Uncategorized'
+      ? (key ? orderLabel(orders, key) : t('ledger.notLinkedToOrder'))
+      : kind === 'production' ? supplierLabel(suppliers, Number(key)) : key || t('ledger.uncategorized')
     return (
       <>
         <span className="font-semibold text-navy-900 dark:text-slate-50">{label}</span>
-        <span className="text-slate-500 text-xs dark:text-slate-400">{rows.length} line{rows.length === 1 ? '' : 's'}</span>
+        <span className="text-slate-500 text-xs dark:text-slate-400">{t('ledger.lineCount', { count: rows.length })}</span>
       </>
     )
   }
@@ -589,18 +623,40 @@ export function Ledger({ kind, initial, title, icon }: {
 
   return (
     <div className="p-4 md:p-6 space-y-4" onPaste={onPaste}>
-      <PageHeader
-        icon={icon}
-        title={title}
-        subtitle={kind === 'production' ? 'Bahan bought, Kas Bon by Kas Bon' : 'Running costs, Kas Bon by Kas Bon'}
-        actions={
-          <>
-            <button className="btn-secondary btn-sm" onClick={() => setImportGrid(null)} title="Import from Excel or CSV"><FileUp size={14} /><span className="hidden sm:inline">Import</span></button>
-            <button className="btn-secondary btn-sm" onClick={() => exportRows(sorted)} disabled={!visible.length} title="Download what's shown as Excel"><Download size={14} /><span className="hidden sm:inline">Export</span></button>
+      {/* One toolbar for the sheet: the total and its actions, the filters, and
+         the spend per supplier/category. It used to be a page heading (repeating
+         the top bar and the tab above it), a filter card and a summary card, so
+         a laptop showed the first line of the sheet about 470px down. */}
+      <div className="card divide-y divide-slate-100 dark:divide-navy-800">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0">
+            <span className="text-xl font-semibold text-navy-900 font-mono tabular-nums dark:text-slate-50">{formatRp(total)}</span>
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              {t('ledger.summary', { count: visible.length, kasBon: kasBonCount, period: searching ? t('ledger.allMonths') : periodLabel(searchPeriod) })}
+            </span>
+            {change != null && Number.isFinite(change) && (
+              <span className={`text-xs font-medium ${change > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                {t('ledger.vsPrevious', { arrow: change > 0 ? '▲' : '▼', percent: Math.abs(change), period: prevName })}
+              </span>
+            )}
+          </div>
+          {budget != null && (
+            <span className="flex items-center gap-2 text-xs text-slate-500 w-full sm:w-auto dark:text-slate-400">
+              {t('ledger.budget', { amount: formatRp(budget) })}
+              <span className="h-1.5 flex-1 sm:flex-none sm:w-20 rounded-full bg-slate-100 overflow-hidden dark:bg-white/10">
+                <span className={`block h-full rounded-full ${total > budget ? 'bg-red-500' : total > budget * 0.8 ? 'bg-amber-400' : 'bg-green-500'}`} style={{ width: `${Math.min(100, (total / budget) * 100)}%` }} />
+              </span>
+              <span className={total > budget ? 'text-red-600 font-medium dark:text-red-400' : ''}>{Math.round((total / budget) * 100)}%</span>
+            </span>
+          )}
+          <div className="flex flex-wrap items-center gap-2 ml-auto">
+            <button className="btn-secondary btn-sm" onClick={() => setImportGrid(null)} title={t('ledger.importTitle')} aria-label={t('ledger.import')}><FileUp size={14} /><span className="hidden min-[1400px]:inline">{t('ledger.import')}</span></button>
+            <button className="btn-secondary btn-sm" onClick={() => exportRows(sorted)} disabled={!visible.length} title={t('ledger.exportTitle')} aria-label={t('ledger.export')}><Download size={14} /><span className="hidden min-[1400px]:inline">{t('ledger.export')}</span></button>
             <button
               className="btn-secondary btn-sm"
               disabled={!visible.length}
-              title="Print this period’s Kas Bon"
+              title={t('ledger.printTitle')}
+              aria-label={t('ledger.print')}
               onClick={() => {
                 const p = filters.period
                 const qs = p.mode === 'range'
@@ -610,119 +666,101 @@ export function Ledger({ kind, initial, title, icon }: {
                 navigate(`/finance/kasbon/print?${qs}`)
               }}
             >
-              <Printer size={14} /><span className="hidden sm:inline">Print</span>
+              <Printer size={14} /><span className="hidden min-[1400px]:inline">{t('ledger.print')}</span>
             </button>
-            <button className="btn-primary btn-sm" onClick={() => setForm({})} title="New Kas Bon (N)"><Plus size={14} /> New Kas Bon</button>
-          </>
-        }
-      />
-
-      {/* Filters */}
-      <div className="card p-3.5 flex flex-wrap items-center gap-2.5">
-        <div className="relative flex-1 min-w-[12rem]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400" />
-          <input
-            ref={searchRef}
-            className="field !pl-8 !py-1.5"
-            placeholder="Search everything…   /"
-            value={filters.q}
-            onChange={e => setFilter('q', e.target.value)}
-          />
-          {filters.q && <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-300" onClick={() => setFilter('q', '')} aria-label="Clear search"><X size={14} /></button>}
-        </div>
-        <PeriodPicker value={filters.period} onChange={p => setFilter('period', p)} />
-        {/* A deliberate 2-up grid below `sm:`, Group-by spanning the full
-           second row — the three selects used to each land alone on their
-           own full-width-looking line (auto-width inside a wrapped flex
-           row, with nothing beside them), every one a different width with
-           empty space trailing it. `sm:contents` drops this wrapper from
-           layout entirely from `sm:` up, so desktop is exactly as before:
-           each select flows inline in the filter bar's own flex-wrap row. */}
-        <div className="grid grid-cols-2 gap-2 w-full sm:contents">
-          <select className="field !w-full sm:!w-auto !py-1.5 text-xs sm:max-w-[12rem]" value={filters.group} onChange={e => setFilter('group', e.target.value)} aria-label={kind === 'production' ? 'Supplier' : 'Category'}>
-            <option value="">{kind === 'production' ? 'All suppliers' : 'All categories'}</option>
-            {groupOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <select className="field !w-full sm:!w-auto !py-1.5 text-xs sm:max-w-[11rem]" value={filters.order} onChange={e => setFilter('order', e.target.value)} aria-label="Order link">
-            <option value="any">Any order</option>
-            <option value="linked">Linked to an order</option>
-            <option value="none">Not linked</option>
-            {[...new Set([...(['any', 'none', 'linked'].includes(filters.order) ? [] : [filters.order]), ...orders.slice(-100).reverse().map(o => o.id)])]
-              .map(id => <option key={id} value={id}>{orderLabel(orders, id)}</option>)}
-          </select>
-          <select className="field !w-full sm:!w-auto !py-1.5 text-xs col-span-2 sm:col-span-1" value={filters.groupBy} onChange={e => setFilter('groupBy', e.target.value as GroupBy)} aria-label="Group by">
-            <option value="kasbon">Group: Kas Bon</option>
-            <option value="group">Group: {kind === 'production' ? 'supplier' : 'category'}</option>
-            <option value="order">Group: order</option>
-            <option value="none">No groups</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Summary: the total, how it compares, and where it went */}
-      <div className="card p-4 space-y-3">
-        <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
-          <span className="text-2xl font-semibold text-navy-900 font-mono tabular-nums dark:text-slate-50">{formatRp(total)}</span>
-          <span className="text-sm text-slate-500 dark:text-slate-400">
-            {visible.length} line{visible.length === 1 ? '' : 's'} · {kasBonCount} Kas Bon · {searching ? 'all months' : periodLabel(searchPeriod)}
-          </span>
-          {change != null && Number.isFinite(change) && (
-            <span className={`text-xs font-medium ${change > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-              {change > 0 ? '▲' : '▼'} {Math.abs(change)}% vs {prevName}
-            </span>
-          )}
-          {budget != null && (
-            <span className="flex items-center gap-2 text-xs text-slate-500 min-w-[14rem] ml-auto dark:text-slate-400">
-              Budget {formatRp(budget)}
-              <span className="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden dark:bg-white/10">
-                <span className={`block h-full rounded-full ${total > budget ? 'bg-red-500' : total > budget * 0.8 ? 'bg-amber-400' : 'bg-green-500'}`} style={{ width: `${Math.min(100, (total / budget) * 100)}%` }} />
-              </span>
-              <span className={total > budget ? 'text-red-600 font-medium dark:text-red-400' : ''}>{Math.round((total / budget) * 100)}%</span>
-            </span>
-          )}
-        </div>
-        {groupTotals.length > 1 && (
-          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-2">
-            {groupTotals.slice(0, 12).map(([key, sum]) => {
-              const on = filters.group === key
-              const max = groupTotals[0][1] || 1
-              const s = kind === 'production' ? suppliers.find(x => x.id === Number(key)) : undefined
-              return (
-                <button
-                  key={key || 'none'}
-                  onClick={() => setFilter('group', on ? '' : key)}
-                  className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${on ? 'border-navy-900 bg-navy-50' : 'border-transparent hover:border-slate-200 hover:bg-slate-50 dark:hover:bg-white/5'}`}
-                  title={on ? 'Show all again' : `Only ${kind === 'production' ? 'this supplier' : 'this category'}`}
-                >
-                  <span className="flex items-center gap-1.5 text-xs text-slate-600 truncate dark:text-slate-300">
-                    {s && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: CATEGORY_COLORS[s.supplier_category] }} />}
-                    <span className="truncate">{kind === 'production' ? supplierLabel(suppliers, Number(key)) : key || 'Uncategorized'}</span>
-                  </span>
-                  <span className="block font-mono text-sm tabular-nums text-navy-900 dark:text-slate-50">{formatRp(sum)}</span>
-                  <span className="block h-1 mt-1 rounded-full bg-slate-100 overflow-hidden dark:bg-white/10">
-                    <span className="block h-full rounded-full bg-navy-500" style={{ width: `${(sum / max) * 100}%` }} />
-                  </span>
-                </button>
-              )
-            })}
+            <button className="btn-primary btn-sm" onClick={() => setForm({})} title={t('ledger.newKasBonTitle')}><Plus size={14} /> {t('ledger.newKasBon')}</button>
           </div>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-2.5 px-4 py-3">
+          <div className="relative flex-1 min-w-[8rem]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400" />
+            <input
+              ref={searchRef}
+              className="field !pl-8 !py-1.5"
+              placeholder={t('ledger.searchPlaceholder')}
+              value={filters.q}
+              onChange={e => setFilter('q', e.target.value)}
+            />
+            {filters.q && <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-300" onClick={() => setFilter('q', '')} aria-label={t('ledger.clearSearch')}><X size={14} /></button>}
+          </div>
+          <PeriodPicker value={filters.period} onChange={p => setFilter('period', p)} />
+          {/* A deliberate 2-up grid below `sm:`, Group-by spanning the full
+             second row — the three selects used to each land alone on their
+             own full-width-looking line (auto-width inside a wrapped flex
+             row, with nothing beside them), every one a different width with
+             empty space trailing it. `sm:contents` drops this wrapper from
+             layout entirely from `sm:` up, so desktop is exactly as before:
+             each select flows inline in the filter bar's own flex-wrap row. */}
+          <div className="grid grid-cols-2 gap-2 w-full sm:contents">
+            <select className="field !w-full sm:!w-36 !py-1.5 text-xs" value={filters.group} onChange={e => setFilter('group', e.target.value)} aria-label={kind === 'production' ? t('ledger.columns.supplier') : t('ledger.columns.category')}>
+              <option value="">{kind === 'production' ? t('ledger.allSuppliers') : t('ledger.allCategories')}</option>
+              {groupOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <select className="field !w-full sm:!w-36 !py-1.5 text-xs" value={filters.order} onChange={e => setFilter('order', e.target.value)} aria-label={t('ledger.orderLink')}>
+              <option value="any">{t('ledger.anyOrder')}</option>
+              <option value="linked">{t('ledger.linkedToOrder')}</option>
+              <option value="none">{t('ledger.notLinked')}</option>
+              {[...new Set([...(['any', 'none', 'linked'].includes(filters.order) ? [] : [filters.order]), ...orders.slice(-100).reverse().map(o => o.id)])]
+                .map(id => <option key={id} value={id}>{orderLabel(orders, id)}</option>)}
+            </select>
+            <select className="field !w-full sm:!w-auto !py-1.5 text-xs col-span-2 sm:col-span-1" value={filters.groupBy} onChange={e => setFilter('groupBy', e.target.value as GroupBy)} aria-label={t('ledger.groupBy')}>
+              <option value="kasbon">{t('ledger.groupKasBon')}</option>
+              <option value="group">{kind === 'production' ? t('ledger.groupSupplier') : t('ledger.groupCategory')}</option>
+              <option value="order">{t('ledger.groupOrder')}</option>
+              <option value="none">{t('ledger.noGroups')}</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Spend per supplier/category: one slim row of pills that filter the
+           sheet, scrolling sideways past what fits instead of a grid of cards. */}
+        {groupTotals.length > 1 && (
+          <ScrollX className="px-3 py-2.5">
+            <div className="flex gap-1.5 w-max">
+              {groupTotals.slice(0, 12).map(([key, sum]) => {
+                const on = filters.group === key
+                const max = groupTotals[0][1] || 1
+                const sp = kind === 'production' ? suppliers.find(x => x.id === Number(key)) : undefined
+                const name = kind === 'production' ? supplierLabel(suppliers, Number(key)) : key || t('ledger.uncategorized')
+                return (
+                  <button
+                    key={key || 'none'}
+                    onClick={() => setFilter('group', on ? '' : key)}
+                    aria-pressed={on}
+                    className={`relative shrink-0 flex items-center gap-2 rounded-full border pl-2.5 pr-3 py-1.5 text-xs overflow-hidden transition-colors ${on ? 'border-navy-900 bg-navy-50 dark:border-slate-300 dark:bg-white/10' : 'border-slate-200 hover:bg-slate-50 dark:border-navy-700 dark:hover:bg-white/5'}`}
+                    title={`${name} · ${on ? t('ledger.showAllAgain') : kind === 'production' ? t('ledger.onlyThisSupplier') : t('ledger.onlyThisCategory')}`}
+                  >
+                    {sp && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: CATEGORY_COLORS[sp.supplier_category] }} />}
+                    <span className="max-w-[11rem] truncate text-slate-600 dark:text-slate-300">{name}</span>
+                    <span className="font-mono tabular-nums text-navy-900 dark:text-slate-50">{formatRp(sum)}</span>
+                    {/* Its share of the biggest, as the old cards showed. */}
+                    <span aria-hidden className="absolute left-3 right-3 bottom-0.5 h-0.5 rounded-full bg-slate-100 dark:bg-white/10">
+                      <span className="block h-full rounded-full bg-navy-500 dark:bg-navy-300" style={{ width: `${(sum / max) * 100}%` }} />
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </ScrollX>
         )}
       </div>
 
       {!visible.length ? (
         <div className="card p-10 text-center text-sm text-slate-500 dark:text-slate-400">
-          {allRows.length ? 'Nothing matches. Try another period, or clear the search and filters.' : 'No lines yet.'}
+          {allRows.length ? t('ledger.nothingMatches') : t('ledger.noLinesYet')}
           <div className="mt-3 flex justify-center gap-2">
-            <button className="btn-primary btn-sm" onClick={() => setForm({})}><Plus size={14} /> New Kas Bon</button>
-            <button className="btn-secondary btn-sm" onClick={() => setImportGrid(null)}><FileUp size={14} /> Import</button>
+            <button className="btn-primary btn-sm" onClick={() => setForm({})}><Plus size={14} /> {t('ledger.newKasBon')}</button>
+            <button className="btn-secondary btn-sm" onClick={() => setImportGrid(null)}><FileUp size={14} /> {t('ledger.import')}</button>
           </div>
-          <p className="mt-3 text-xs">Tip: copy rows in Excel and press Ctrl+V here to bring them in.</p>
+          <p className="mt-3 text-xs">{t('ledger.pasteTip')}</p>
         </div>
       ) : isMobile ? (
         <div className="space-y-3">
           <div className="flex justify-end">
             <button className={`btn-sm ${selectMode ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { setSelectMode(m => !m); setSelected(new Set()) }}>
-              <CheckSquare size={14} /> {selectMode ? 'Done' : 'Select'}
+              <CheckSquare size={14} /> {selectMode ? t('ledger.done') : t('ledger.select')}
             </button>
           </div>
           {shown.map(({ group, rows }) => {
@@ -768,7 +806,7 @@ export function Ledger({ kind, initial, title, icon }: {
                   </li>
                 ))}
                 {byKasBon && rows.length > 0 && (
-                  <li><button className="w-full px-4 py-2 text-xs text-navy-600 text-left dark:text-navy-300" onClick={() => setForm({ headerId: group.key })}><Plus size={12} className="inline" /> Add lines</button></li>
+                  <li><button className="w-full px-4 py-2 text-xs text-navy-600 text-left dark:text-navy-300" onClick={() => setForm({ headerId: group.key })}><Plus size={12} className="inline" /> {t('ledger.addLines')}</button></li>
                 )}
               </ul>
               </div>
@@ -779,7 +817,13 @@ export function Ledger({ kind, initial, title, icon }: {
       ) : (
         <div className="card overflow-hidden">
           <div className="overflow-auto max-h-[70vh]">
-            <table className="min-w-full text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
+            {/* table-layout:fixed only takes effect with a definite width; without
+               one the browser lays the table out by content, and one long Bahan
+               name pushed the Order column out of view even at 1440px. Full
+               width, but never narrower than the fixed columns plus Bahan's
+               12rem floor, below which it scrolls instead. The 2px leaves room
+               for the collapsed outer gridlines, which otherwise add a scrollbar. */}
+            <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: `max(calc(100% - 2px), ${fixedRem + 12}rem)` }}>
               <colgroup>
                 <col style={{ width: '2.25rem' }} />
                 {/* 'auto' (Bahan/Item) gets a floor, not left unconstrained: with
@@ -798,7 +842,7 @@ export function Ledger({ kind, initial, title, icon }: {
               <thead className="bg-slate-200 sticky top-0 z-20 shadow-[0_2px_0_#94a3b8] dark:bg-navy-900 dark:shadow-[0_2px_0_#3e4f8f]">
                 <tr>
                   <th className="border border-slate-300 px-2 py-1.5 dark:border-navy-700">
-                    <input type="checkbox" aria-label="Select everything shown" checked={allVisibleSelected} onChange={e => setMany(visible, e.target.checked)} />
+                    <input type="checkbox" aria-label={t('ledger.selectAllShown')} checked={allVisibleSelected} onChange={e => setMany(visible, e.target.checked)} />
                   </th>
                   {columns.map(c => (
                     <th key={c.key} className={`border border-slate-300 px-2 py-1.5 overflow-hidden whitespace-nowrap text-ellipsis text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:border-navy-700 dark:text-slate-300 ${c.align === 'right' ? 'text-right' : 'text-left'}`}>
@@ -813,7 +857,9 @@ export function Ledger({ kind, initial, title, icon }: {
                   <th className="border border-slate-300 dark:border-navy-700" />
                 </tr>
               </thead>
-              <tbody>
+              {/* The whole sheet is one Tab stop (see useRovingCells): arrows move,
+                 Shift+Space selects the line, Del deletes the selected lines. */}
+              <tbody onFocus={onGridFocus} onKeyDown={onGridKey}>
                 {shown.map(({ group, rows }) => {
                   const isCollapsed = collapsed.has(group.key)
                   const allIn = group.rows.every(r => selected.has(r.id))
@@ -828,6 +874,11 @@ export function Ledger({ kind, initial, title, icon }: {
                   // "a new Kas Bon starts here" the way a spreadsheet's own
                   // subtotal-row rule would.
                   const cellBorder = 'border border-slate-200 border-b-2 border-b-slate-300 dark:border-navy-800 dark:border-b-navy-600'
+                  // Kas Bon rows stay pinned under the column headers while their
+                  // lines scroll by; each one slides over the last. A collapsed
+                  // table's borders don't move with a sticky cell, so the rule
+                  // under it is drawn as a shadow too, as the header row does.
+                  const pin = byKasBon ? 'sticky top-[33px] z-10 bg-slate-100 shadow-[0_2px_0_#cbd5e1] dark:bg-navy-900 dark:shadow-[0_2px_0_#3e4f8f]' : ''
                   const monthDivider = monthDividers.get(group.key)
                   return (
                     <React.Fragment key={group.key || 'all'}>
@@ -840,42 +891,39 @@ export function Ledger({ kind, initial, title, icon }: {
                       )}
                       {filters.groupBy !== 'none' && (
                         <tr className="bg-slate-100 group/gh dark:bg-navy-900">
-                          <td className={`${cellBorder} px-2 py-3`}>
+                          <td className={`${cellBorder} ${pin} px-2 py-3`}>
                             <input
-                              type="checkbox" aria-label="Select this group" checked={allIn} onChange={e => setMany(group.rows, e.target.checked)}
-                              className={`block transition-opacity ${allIn ? '' : 'opacity-0 group-hover/gh:opacity-100 focus:opacity-100'}`}
+                              type="checkbox" aria-label={t('ledger.selectGroup')} checked={allIn} onChange={e => setMany(group.rows, e.target.checked)}
+                              className={`block transition-opacity ${allIn ? '' : 'can-hover:opacity-0 group-hover/gh:opacity-100 focus:opacity-100'}`}
                             />
                           </td>
                           {/* Split across real column boundaries (not one wide flex cell)
                              so the group sum lines up under Total/Price instead of
                              floating to the row's far right, where it used to sit
                              right under the Order column and read as an order figure. */}
-                          <td colSpan={sumColIndex} className={`${cellBorder} px-2 py-3`}>
+                          <td colSpan={sumColIndex} className={`${cellBorder} ${pin} px-2 py-3`}>
                             <div className="flex items-center gap-2.5 text-sm min-w-0">
-                              <button onClick={() => setCollapsed(c => { const n = new Set(c); if (n.has(group.key)) n.delete(group.key); else n.add(group.key); return n })} className="text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200" aria-label={isCollapsed ? 'Expand' : 'Collapse'}>
+                              <button onClick={() => setCollapsed(c => { const n = new Set(c); if (n.has(group.key)) n.delete(group.key); else n.add(group.key); return n })} className="text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200" aria-label={isCollapsed ? t('ledger.expand') : t('ledger.collapse')}>
                                 <ChevronRight size={14} className={`transition-transform ${isCollapsed ? '' : 'rotate-90'}`} />
                               </button>
                               {groupHeader(group.key, group.rows, true)}
                             </div>
                           </td>
-                          {/* Quiet and small on purpose: a summary aside, not a second
-                             figure competing with the bold Total every data row already
-                             carries — that's the one number this table trains the eye to
-                             look for. A solo line's own Total cell, right below, already
-                             shows this number, so it's left out of its header entirely. */}
-                          <td className={`${cellBorder} px-2 py-3 text-right font-mono tabular-nums whitespace-nowrap text-xs text-slate-400 dark:text-slate-500`}>
-                            {!solo && formatRp(groupSum(group.rows))}
+                          {/* Clearer than it was, still lighter than each line's own bold Total
+                             below; a solo line's Total already shows it, so it's left out. */}
+                          <td className={`${cellBorder} ${pin} px-2 py-3 text-right font-mono tabular-nums whitespace-nowrap text-sm font-medium text-navy-700 dark:text-slate-300`}>
+                            {!solo && amount(groupSum(group.rows))}
                           </td>
                           {sumColIndex < columns.length - 1 && (
-                            <td colSpan={columns.length - sumColIndex - 1} className={cellBorder} />
+                            <td colSpan={columns.length - sumColIndex - 1} className={`${cellBorder} ${pin}`} />
                           )}
-                          <td className={`${cellBorder} px-1 text-center`}>
+                          <td className={`${cellBorder} ${pin} px-1 text-center`}>
                             {byKasBon && (
                               <span className="inline-flex items-center gap-1.5">
-                                <button className="opacity-0 group-hover/gh:opacity-100 text-slate-500 hover:text-navy-700 dark:text-slate-400" title={`Add lines to ${group.key}`} onClick={() => setForm({ headerId: group.key })}>
+                                <button className="can-hover:opacity-0 group-hover/gh:opacity-100 focus-visible:opacity-100 text-slate-500 hover:text-navy-700 dark:text-slate-400" title={t('ledger.addLinesTo', { id: group.key })} aria-label={t('ledger.addLinesTo', { id: group.key })} onClick={() => setForm({ headerId: group.key })}>
                                   <Plus size={14} />
                                 </button>
-                                <button className="opacity-0 group-hover/gh:opacity-100 text-slate-500 hover:text-navy-700 dark:text-slate-400" title={`Print ${group.key}`} onClick={() => navigate(`/finance/kasbon/print?id=${encodeURIComponent(group.key)}`)}>
+                                <button className="can-hover:opacity-0 group-hover/gh:opacity-100 focus-visible:opacity-100 text-slate-500 hover:text-navy-700 dark:text-slate-400" title={t('ledger.printId', { id: group.key })} aria-label={t('ledger.printId', { id: group.key })} onClick={() => navigate(`/finance/kasbon/print?id=${encodeURIComponent(group.key)}`)}>
                                   <Printer size={14} />
                                 </button>
                               </span>
@@ -890,8 +938,8 @@ export function Ledger({ kind, initial, title, icon }: {
                         <tr key={r.id} className={`group ${selected.has(r.id) ? 'bg-navy-50' : 'bg-white hover:bg-slate-50 dark:bg-transparent dark:hover:bg-white/5'}`}>
                           <td className="border border-slate-200 px-2 py-2 dark:border-navy-800">
                             <input
-                              type="checkbox" aria-label="Select line" checked={selected.has(r.id)} onChange={() => undefined} onClick={e => toggle(r.id, e.shiftKey)}
-                              className={`block transition-opacity ${selected.has(r.id) ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
+                              type="checkbox" tabIndex={-1} aria-label={t('ledger.selectLine')} checked={selected.has(r.id)} onChange={() => undefined} onClick={e => toggle(r.id, e.shiftKey)}
+                              className={`block transition-opacity ${selected.has(r.id) ? '' : 'can-hover:opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
                             />
                           </td>
                           {columns.map((c, ci) => (
@@ -908,10 +956,11 @@ export function Ledger({ kind, initial, title, icon }: {
                                   format={() => (c.render ? c.render(r) : c.value(r))}
                                   onSave={v => editRow(r, c.field!, v)}
                                   cellRef={cellRef(`${r.id}:${ci}`)}
+                                  tabIndex={-1}
                                   onNavigate={(dr, dc) => moveFocus(r.id, ci, dr, dc)}
                                 />
                               ) : (
-                                <div ref={cellRef(`${r.id}:${ci}`)} tabIndex={0} className="px-2.5 py-1.5 min-h-[2rem] flex items-center focus:outline-none focus:bg-navy-50/50 rounded-sm"
+                                <div ref={cellRef(`${r.id}:${ci}`)} tabIndex={-1} className="px-2.5 py-1.5 min-h-[2rem] flex items-center focus:outline-none focus:bg-navy-50/50 rounded-sm"
                                   onKeyDown={e => {
                                     const d = ({ ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] } as Record<string, [number, number]>)[e.key]
                                     if (d) { e.preventDefault(); moveFocus(r.id, ci, d[0], d[1]) }
@@ -929,7 +978,7 @@ export function Ledger({ kind, initial, title, icon }: {
                                button only duplicated whichever one of those
                                was fastest, so delete is the one action left
                                that has no cell of its own to live in. */}
-                            <button onClick={() => setConfirmDeleteRow(r)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 focus-within:opacity-100 dark:text-navy-700" title="Delete line">
+                            <button onClick={() => setConfirmDeleteRow(r)} tabIndex={-1} className="text-slate-400 hover:text-red-500 can-hover:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 dark:text-slate-500" title={t('ledger.deleteLine')} aria-label={t('ledger.deleteLine')}>
                               <Trash2 size={14} />
                             </button>
                           </td>
@@ -942,12 +991,12 @@ export function Ledger({ kind, initial, title, icon }: {
             </table>
             {flatShown.length < visible.length && (
               <div className="p-3 text-center border-t border-slate-200 dark:border-navy-700">
-                <button className="btn-secondary btn-sm" onClick={() => setLimit(l => l + PAGE)}>Show more ({visible.length - flatShown.length} left)</button>
+                <button className="btn-secondary btn-sm" onClick={() => setLimit(l => l + PAGE)}>{t('ledger.showMoreLeft', { n: visible.length - flatShown.length })}</button>
               </div>
             )}
           </div>
           <div className="flex items-center gap-4 px-4 py-2 border-t-2 border-slate-300 bg-slate-100 text-xs text-slate-500 dark:border-navy-600 dark:bg-navy-900 dark:text-slate-400">
-            <span>Click a cell to edit · arrows move · shift-click selects a range · Ctrl+V pastes rows from Excel · Ctrl+Z undoes</span>
+            <span>{t('ledger.tableHint')}</span>
             <span className="ml-auto font-mono text-sm text-navy-900 font-semibold tabular-nums dark:text-slate-50">{formatRp(total)}</span>
           </div>
         </div>
@@ -957,14 +1006,14 @@ export function Ledger({ kind, initial, title, icon }: {
       {selected.size > 0 && (
         <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-3 pointer-events-none dock:left-[var(--sidebar-w)]" data-bulk-bar>
           <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 rounded-2xl bg-navy-900 text-white shadow-2xl px-3 py-2 max-w-full">
-            <span className="px-2 text-sm"><span className="font-semibold">{selected.size}</span> selected · <span className="font-mono">{formatRp(selectedTotal)}</span></span>
-            <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" onClick={() => setDialog('move')}><ArrowRightLeft size={13} /> Move</button>
-            <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" onClick={() => setDialog(kind === 'production' ? 'supplier_id' : 'category')}><Tag size={13} /> {kind === 'production' ? 'Supplier' : 'Category'}</button>
-            <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" onClick={() => setDialog('order_id')}><Link2 size={13} /> Order</button>
-            <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" disabled={batch.isPending} onClick={() => duplicateRows(selectedRows)}><Copy size={13} /> Copy</button>
-            <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" onClick={() => exportRows(selectedRows, 'selection')}><Download size={13} /> Export</button>
-            <button className="btn-sm btn rounded-lg text-red-200 hover:bg-red-500/20" onClick={() => setDialog('delete')}><Trash2 size={13} /> Delete</button>
-            <button className="p-1.5 rounded-lg hover:bg-white/10" onClick={() => setSelected(new Set())} aria-label="Clear selection"><X size={14} /></button>
+            <span className="px-2 text-sm"><Trans i18nKey="ledger.selectedSummary" values={{ n: selected.size, amount: formatRp(selectedTotal) }} components={{ b: <span className="font-semibold" />, m: <span className="font-mono" /> }} /></span>
+            <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" onClick={() => setDialog('move')}><ArrowRightLeft size={13} /> {t('ledger.move')}</button>
+            <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" onClick={() => setDialog(kind === 'production' ? 'supplier_id' : 'category')}><Tag size={13} /> {kind === 'production' ? t('ledger.columns.supplier') : t('ledger.columns.category')}</button>
+            <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" onClick={() => setDialog('order_id')}><Link2 size={13} /> {t('ledger.columns.order')}</button>
+            <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" disabled={batch.isPending} onClick={() => duplicateRows(selectedRows)}><Copy size={13} /> {t('ledger.copy')}</button>
+            <button className="btn-sm btn rounded-lg text-white/90 hover:bg-white/10" onClick={() => exportRows(selectedRows, t('ledger.exportSelectionSuffix'))}><Download size={13} /> {t('ledger.export')}</button>
+            <button className="btn-sm btn rounded-lg text-red-200 hover:bg-red-500/20" onClick={() => setDialog('delete')}><Trash2 size={13} /> {t('common.delete')}</button>
+            <button className="p-1.5 rounded-lg hover:bg-white/10" onClick={() => setSelected(new Set())} aria-label={t('ledger.clearSelection')}><X size={14} /></button>
           </div>
         </div>
       )}
@@ -984,16 +1033,18 @@ export function Ledger({ kind, initial, title, icon }: {
       )}
       {dialog === 'delete' && (
         <ConfirmDialog
-          message={`Delete ${selected.size} line${selected.size === 1 ? '' : 's'} (${formatRp(selectedTotal)})? You can undo this right after.`}
+          message={t('ledger.deleteLinesConfirm', { count: selected.size, amount: formatRp(selectedTotal) })}
           onConfirm={() => removeRows(selectedRows)}
           onCancel={() => setDialog(null)}
+          focusConfirm
         />
       )}
       {confirmDeleteRow && (
         <ConfirmDialog
-          message={`Delete "${confirmDeleteRow.name || confirmDeleteRow.category}" (${formatRp(confirmDeleteRow.total)})? You can undo this right after.`}
+          message={t('ledger.deleteLineConfirm', { name: confirmDeleteRow.name || confirmDeleteRow.category, amount: formatRp(confirmDeleteRow.total) })}
           onConfirm={() => { removeRows([confirmDeleteRow]); setConfirmDeleteRow(null); setEditing(null) }}
           onCancel={() => setConfirmDeleteRow(null)}
+          focusConfirm
         />
       )}
       {editing && (

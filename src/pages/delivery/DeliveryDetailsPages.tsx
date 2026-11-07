@@ -34,7 +34,7 @@ export function DeliveryDetailPage() {
     <div className="p-4 md:p-6 space-y-5">
       {/* min-w-0 lets the title shrink and wrap so Print stays on screen. */}
       <div className="flex items-center gap-3 flex-wrap fade-up">
-        <button onClick={() => navigate('/delivery')} className="btn-secondary !px-2.5 shrink-0" title={t('delivery.backToDelivery')}>
+        <button onClick={() => navigate('/delivery')} className="btn-secondary !px-2.5 shrink-0" title={t('delivery.backToDelivery')} aria-label={t('delivery.backToDelivery')}>
           <ArrowLeft size={14} />
         </button>
         <div className="flex-1 min-w-0">

@@ -1,0 +1,6 @@
+{
+  "catalogueModel": {
+    "noHeader": "No header row: the first row should name the columns (Item, Size, Notes, 2025, 2026…)",
+    "noPriceColumns": "No price columns: name them by year (2025, 2026…)"
+  }
+}

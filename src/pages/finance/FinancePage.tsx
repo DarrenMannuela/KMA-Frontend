@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Trans, useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { AlertCircle, BarChart3, CheckCircle2, ChevronRight, Download, Hourglass, MessageCircle, PiggyBank, Printer, Receipt, Repeat, Scale, TrendingUp, Unlink, Wallet } from 'lucide-react'
 import { formatRp } from '@/components/ui'
 import { PageHeader, Card, LoadingState, ErrorState } from '@/components/ui/Page'
+import { ScrollX } from '@/components/ui/ScrollX'
 import {
   orderHooks, itemHooks, invoiceHooks, clientHooks, clientContactHooks, supplierHooks, productionHooks, operationHooks, buktiKasHooks, useBudgets, useRecurringCosts,
 } from '@/hooks'
@@ -16,7 +19,7 @@ import { periodParam, sheetParams } from '@/components/finance/ledgerParams'
 import {
   monthly, totals, cashFlow, receivables, orderStats, clientStats, dueOn, AGING, budgetUsage, monthKey,
 } from '@/components/finance/financeStats'
-import { TrendChart, TREND_LEGEND, CashFlowChart, CASH_LEGEND, Legend, RankBars, SplitBar, shortRp } from '@/components/finance/FinanceCharts'
+import { TrendChart, trendLegend, CashFlowChart, cashLegend, Legend, RankBars, SplitBar, shortRp } from '@/components/finance/FinanceCharts'
 import { ledgerSheet, exportLedger } from '@/components/finance/ledgerExport'
 import type { SheetSpec } from '@/utils/xlsx'
 
@@ -51,15 +54,24 @@ function Attention({ icon: Icon, tone, children, action, onAction }: {
 }
 
 const pct = (part: number, whole: number) => (whole ? `${Math.round((part / whole) * 100)}%` : '—')
-const delta = (now: number, before: number) => {
+const delta = (now: number, before: number, t: TFunction) => {
   if (!before) return null
   const d = Math.round(((now - before) / Math.abs(before)) * 100)
-  return `${d > 0 ? '▲' : d < 0 ? '▼' : ''} ${Math.abs(d)}% vs last year`
+  return t('financeOverview.vsLastYear', { arrow: d > 0 ? '▲' : d < 0 ? '▼' : '', percent: Math.abs(d) })
+}
+
+const AGING_KEYS: Record<string, string> = {
+  current: 'financeOverview.aging.current',
+  '1-30': 'financeOverview.aging.days1to30',
+  '31-60': 'financeOverview.aging.days31to60',
+  '61-90': 'financeOverview.aging.days61to90',
+  '90+': 'financeOverview.aging.over90',
 }
 
 /** Money in and out across the business: the year month by month, where it
  *  goes, who owes what, and how each client and order did. */
 export function FinancePage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [period, setPeriod] = useState<Period>(() => currentPeriod('year'))
   const [breakdown, setBreakdown] = useState<Breakdown>('supplier')
@@ -97,7 +109,7 @@ export function FinancePage() {
   const year = period.mode === 'month' || period.mode === 'year' ? period.year : new Date().getFullYear()
   const months = useMemo(() => monthly(year, invoices, costs, buktiKas), [year, invoices, costs, buktiKas])
   const lastYear = useMemo(() => monthly(year - 1, invoices, costs, buktiKas), [year, invoices, costs, buktiKas])
-  const t = useMemo(() => totals(period, invoices, costs, buktiKas), [period, invoices, costs, buktiKas])
+  const tot = useMemo(() => totals(period, invoices, costs, buktiKas), [period, invoices, costs, buktiKas])
   const prevT = useMemo(() => (period.mode === 'year' || period.mode === 'month' ? totals({ ...period, year: period.year - 1 }, invoices, costs, buktiKas) : null), [period, invoices, costs, buktiKas])
   const flow = useMemo(() => cashFlow(period, invoices, costs, [...costs.map(c => c.date.slice(0, 10)), ...invoices.map(i => i.tanggal.slice(0, 10)), ...buktiKas.map(b => b.date.slice(0, 10))], buktiKas), [period, invoices, costs, buktiKas])
   const open = useMemo(() => receivables(invoices, orders, clients), [invoices, orders, clients])
@@ -117,19 +129,19 @@ export function FinancePage() {
       sum.set(id, cur)
     }
     for (const c of periodCosts) {
-      if (breakdown === 'category' && c.kind === 'operation') add(c.category, c.category || 'Uncategorized', c.total)
+      if (breakdown === 'category' && c.kind === 'operation') add(c.category, c.category || t('financeOverview.uncategorized'), c.total)
       if (c.kind !== 'production') continue
       if (breakdown === 'supplier') {
         const s = suppliers.find(x => x.id === c.supplier_id)
-        add(String(c.supplier_id), s?.supplier_name ?? 'No supplier', c.total, s ? CATEGORY_COLORS[s.supplier_category] : undefined)
+        add(String(c.supplier_id), s?.supplier_name ?? t('financeOverview.noSupplier'), c.total, s ? CATEGORY_COLORS[s.supplier_category] : undefined)
       } else if (breakdown === 'material') {
         add(c.name, c.name, c.total)
       }
     }
     return [...sum.entries()].map(([id, v]) => ({ id, ...v })).sort((a, b) => b.value - a.value).slice(0, 12)
-  }, [periodCosts, breakdown, suppliers])
+  }, [periodCosts, breakdown, suppliers, t])
 
-  const aging = AGING.map(b => ({ key: b.key, label: b.label, color: b.color, value: open.filter(r => r.bucket === b.key).reduce((n, r) => n + r.amount, 0) }))
+  const aging = AGING.map(b => ({ key: b.key, label: AGING_KEYS[b.key] ? t(AGING_KEYS[b.key]) : b.label, color: b.color, value: open.filter(r => r.bucket === b.key).reduce((n, r) => n + r.amount, 0) }))
   const owed = open.reduce((n, r) => n + r.amount, 0)
   const overdue = open.filter(r => r.daysLate > 0).reduce((n, r) => n + r.amount, 0)
 
@@ -181,18 +193,18 @@ export function FinancePage() {
     exportLedger(`Finance ${periodSlug(period)}`, sheets)
   }
 
-  if (queries.some(q => q.isLoading)) return <LoadingState label="Loading the finance numbers…" />
+  if (queries.some(q => q.isLoading)) return <LoadingState label={t('financeOverview.loading')} />
   if (queries.some(q => q.isError)) {
-    return <div className="p-4 md:p-6"><div className="card"><ErrorState what="all the finance data" onRetry={() => queries.forEach(q => q.refetch())} /></div></div>
+    return <div className="p-4 md:p-6"><div className="card"><ErrorState what={t('financeOverview.errorWhat')} onRetry={() => queries.forEach(q => q.refetch())} /></div></div>
   }
 
-  const margin = t.invoiced ? t.profit / t.invoiced : 0
+  const margin = tot.invoiced ? tot.profit / tot.invoiced : 0
   return (
     <div className="p-4 md:p-6 space-y-5 max-w-[1400px]">
       <PageHeader
         icon={BarChart3}
-        title="Overview"
-        subtitle={`${periodLabel(period)} · invoiced against Kas Bon spending`}
+        title={t('financeOverview.title')}
+        subtitle={t('financeOverview.subtitle', { period: periodLabel(period) })}
         actions={
           <>
             <PeriodPicker value={period} onChange={setPeriod} />
@@ -200,54 +212,54 @@ export function FinancePage() {
               <button
                 className="btn-secondary btn-sm"
                 onClick={() => navigate(`/finance/report?mode=${period.mode}&year=${period.year}&month=${period.month}`)}
-                title="A printable monthly or yearly report — same numbers as this page, formatted as a document"
+                title={t('financeOverview.printReportTitle')}
               >
-                <Printer size={14} /> Print Report
+                <Printer size={14} /> {t('financeOverview.printReport')}
               </button>
             )}
-            <button className="btn-secondary btn-sm" onClick={download} title="Summary, lines, clients and receivables as one Excel file"><Download size={14} /> Excel</button>
+            <button className="btn-secondary btn-sm" onClick={download} title={t('financeOverview.excelTitle')}><Download size={14} /> Excel</button>
           </>
         }
       />
 
-      <Card title={`Needs attention · ${monthLabel(now.getFullYear(), now.getMonth())}`} icon={AlertCircle} bodyClassName="px-5 pb-2">
+      <Card title={t('financeOverview.needsAttention', { month: monthLabel(now.getFullYear(), now.getMonth()) })} icon={AlertCircle} bodyClassName="px-5 pb-2">
         {late.length || tight.length || recurringDue.length || unlinkedNow > 0 ? (
           <ul className="divide-y divide-slate-100 dark:divide-navy-800">
             {late.length > 0 && (
-              <Attention icon={Hourglass} tone="bad" action="See who" onAction={() => document.getElementById('owed')?.scrollIntoView({ behavior: 'smooth' })}>
-                <b>{late.length} invoice{late.length === 1 ? '' : 's'} overdue</b>, {formatRp(late.reduce((n, r) => n + r.amount, 0))}; the oldest {late[0].daysLate} days late ({late[0].client}).
+              <Attention icon={Hourglass} tone="bad" action={t('financeOverview.seeWho')} onAction={() => document.getElementById('owed')?.scrollIntoView({ behavior: 'smooth' })}>
+                <Trans i18nKey="financeOverview.overdueInvoices" count={late.length} values={{ amount: formatRp(late.reduce((n, r) => n + r.amount, 0)), days: late[0].daysLate, client: late[0].client }} components={{ b: <b /> }} />
               </Attention>
             )}
             {tight.map(u => (
-              <Attention key={u.budget.id} icon={Scale} tone={u.share > 1 ? 'bad' : 'warn'} action="Budgets" onAction={() => navigate('/finance/budgets')}>
-                <b>{u.label}</b> is at {Math.round(u.share * 100)}% of its budget: {formatRp(u.spent)} of {formatRp(u.budget.amount)}.
+              <Attention key={u.budget.id} icon={Scale} tone={u.share > 1 ? 'bad' : 'warn'} action={t('financeOverview.budgets')} onAction={() => navigate('/finance/budgets')}>
+                <Trans i18nKey="financeOverview.budgetTight" values={{ label: u.label, percent: Math.round(u.share * 100), spent: formatRp(u.spent), budget: formatRp(u.budget.amount) }} components={{ b: <b /> }} />
               </Attention>
             ))}
             {recurringDue.length > 0 && (
-              <Attention icon={Repeat} tone="info" action="Add them" onAction={() => navigate('/finance/budgets')}>
-                {recurringDue.length} recurring cost{recurringDue.length === 1 ? '' : 's'} ({formatRp(recurringDue.reduce((n, c) => n + c.price, 0))}) not added for this month yet.
+              <Attention icon={Repeat} tone="info" action={t('financeOverview.addThem')} onAction={() => navigate('/finance/budgets')}>
+                {t('financeOverview.recurringDue', { count: recurringDue.length, amount: formatRp(recurringDue.reduce((n, c) => n + c.price, 0)) })}
               </Attention>
             )}
             {unlinkedNow > 0 && (
-              <Attention icon={Unlink} tone="info" action="Link them" onAction={() => navigate(`/production?${new URLSearchParams(sheetParams({ order: 'none', period: thisMonth })).toString()}`)}>
-                {formatRp(unlinkedNow)} of bahan this month isn't linked to an order, so it's missing from order profits.
+              <Attention icon={Unlink} tone="info" action={t('financeOverview.linkThem')} onAction={() => navigate(`/production?${new URLSearchParams(sheetParams({ order: 'none', period: thisMonth })).toString()}`)}>
+                {t('financeOverview.unlinkedThisMonth', { amount: formatRp(unlinkedNow) })}
               </Attention>
             )}
           </ul>
         ) : (
-          <p className="flex items-center gap-2 py-3 text-sm text-green-700 dark:text-green-400"><CheckCircle2 size={16} /> Nothing needs attention: no overdue invoices, budgets on track, recurring costs added.</p>
+          <p className="flex items-center gap-2 py-3 text-sm text-green-700 dark:text-green-400"><CheckCircle2 size={16} /> {t('financeOverview.nothingNeedsAttention')}</p>
         )}
       </Card>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <Kpi label="Invoiced" icon={Receipt} value={shortRp(t.invoiced)} sub={prevT ? delta(t.invoiced, prevT.invoiced) ?? formatRp(t.invoiced) : formatRp(t.invoiced)} />
-        <Kpi label="Spent" icon={Wallet} value={shortRp(t.cost)} sub={`${shortRp(t.production)} bahan · ${shortRp(t.operation)} ops`} />
-        <Kpi label="Profit" icon={TrendingUp} value={shortRp(t.profit)} tone={t.profit < 0 ? 'bad' : 'good'} sub={t.invoiced ? `${Math.round(margin * 100)}% margin` : undefined} />
-        <Kpi label="Cash, in minus out" icon={PiggyBank} value={shortRp(t.cashIn - t.cost)} tone={t.cashIn - t.cost < 0 ? 'bad' : 'good'} sub={`${shortRp(t.cashIn)} paid in · ${pct(t.cashIn, t.invoiced)} of invoiced`} />
-        <Kpi label="Owed to you" icon={Hourglass} value={shortRp(owed)} tone={overdue > 0 ? 'bad' : 'default'} sub={overdue > 0 ? `${shortRp(overdue)} overdue` : 'nothing overdue'} />
+        <Kpi label={t('financeCharts.invoiced')} icon={Receipt} value={shortRp(tot.invoiced)} sub={prevT ? delta(tot.invoiced, prevT.invoiced, t) ?? formatRp(tot.invoiced) : formatRp(tot.invoiced)} />
+        <Kpi label={t('financeCharts.spent')} icon={Wallet} value={shortRp(tot.cost)} sub={t('financeOverview.spentSub', { production: shortRp(tot.production), operation: shortRp(tot.operation) })} />
+        <Kpi label={t('common.profit')} icon={TrendingUp} value={shortRp(tot.profit)} tone={tot.profit < 0 ? 'bad' : 'good'} sub={tot.invoiced ? t('financeOverview.marginSub', { percent: Math.round(margin * 100) }) : undefined} />
+        <Kpi label={t('financeOverview.cashInMinusOut')} icon={PiggyBank} value={shortRp(tot.cashIn - tot.cost)} tone={tot.cashIn - tot.cost < 0 ? 'bad' : 'good'} sub={t('financeOverview.cashSub', { paidIn: shortRp(tot.cashIn), share: pct(tot.cashIn, tot.invoiced) })} />
+        <Kpi label={t('financeOverview.owedToYou')} icon={Hourglass} value={shortRp(owed)} tone={overdue > 0 ? 'bad' : 'default'} sub={overdue > 0 ? t('financeOverview.overdueAmount', { amount: shortRp(overdue) }) : t('financeOverview.nothingOverdue')} />
       </div>
 
-      <Card title={`${year} month by month`} actions={<><Legend items={TREND_LEGEND} /><span className="text-xs text-slate-500 hidden md:inline dark:text-slate-400">Click a month to look at it</span></>}>
+      <Card title={t('financeOverview.monthByMonth', { year })} actions={<><Legend items={trendLegend(t)} /><span className="text-xs text-slate-500 hidden md:inline dark:text-slate-400">{t('financeOverview.clickMonth')}</span></>}>
         <TrendChart
           data={months.map((m, i) => ({ label: shortMonthLabel(m.month), invoiced: m.invoiced, cost: m.cost, profit: m.profit, lastYearProfit: lastYear[i].invoiced || lastYear[i].cost ? lastYear[i].profit : undefined }))}
           selected={selectedMonth}
@@ -257,10 +269,10 @@ export function FinancePage() {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
         <Card
-          title="Where the money goes"
+          title={t('financeOverview.whereMoneyGoes')}
           actions={
             <div className="inline-flex rounded-lg bg-slate-100 p-0.5 dark:bg-white/10">
-              {([['supplier', 'Suppliers'], ['material', 'Bahan'], ['category', 'Operations']] as [Breakdown, string][]).map(([k, label]) => (
+              {([['supplier', t('financeOverview.suppliers')], ['material', 'Bahan'], ['category', t('common.operations')]] as [Breakdown, string][]).map(([k, label]) => (
                 <button key={k} onClick={() => setBreakdown(k)} className={`px-2.5 py-1 text-xs font-medium rounded-md ${breakdown === k ? 'bg-white text-navy-900 shadow-sm dark:bg-navy-900 dark:text-slate-50' : 'text-slate-600 dark:text-slate-400'}`}>{label}</button>
               ))}
             </div>
@@ -270,9 +282,9 @@ export function FinancePage() {
             items={where}
             onSelect={id => (breakdown === 'supplier' ? openSheet('production', { group: id }) : breakdown === 'material' ? openSheet('production', { q: id }) : openSheet('operations', { group: id }))}
           />
-          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">Click a row to open its lines.{unlinked > 0 && ` ${formatRp(unlinked)} of bahan in this period isn't linked to an order yet.`}</p>
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{t('financeOverview.clickRow')}{unlinked > 0 && ` ${t('financeOverview.unlinkedInPeriod', { amount: formatRp(unlinked) })}`}</p>
         </Card>
-        <Card title={`Cash in and out · ${periodLabel(period)}`} actions={<Legend items={CASH_LEGEND} />}>
+        <Card title={t('financeOverview.cashInOut', { period: periodLabel(period) })} actions={<Legend items={cashLegend(t)} />}>
           <CashFlowChart data={flow} />
         </Card>
       </div>
@@ -282,17 +294,18 @@ export function FinancePage() {
         className="scroll-mt-20"
         title={
           <span className="inline-flex flex-wrap items-baseline gap-3">
-            Owed to you
+            {t('financeOverview.owedToYou')}
             <span className="font-mono font-normal text-slate-600 dark:text-slate-300">{formatRp(owed)}</span>
-            <span className="text-xs font-normal text-slate-500 dark:text-slate-400">{open.length} unpaid invoice{open.length === 1 ? '' : 's'}</span>
+            <span className="text-xs font-normal text-slate-500 dark:text-slate-400">{t('financeOverview.unpaidInvoices', { count: open.length })}</span>
           </span>
         }
       >
         <SplitBar parts={aging} />
         {open.length > 0 && (
-          <div className="mt-4 overflow-x-auto">
-            <table className="kma-table text-xs [&_td]:!px-2 [&_th]:!px-2 [&_td]:whitespace-nowrap">
-              <thead><tr><th>Client</th><th>Invoice</th><th>Order</th><th>Due</th><th className="!text-right">Late</th><th className="!text-right">Amount</th><th /></tr></thead>
+          <div className="mt-4">
+            <ScrollX>
+              <table className="kma-table text-xs [&_td]:!px-2 [&_th]:!px-2 [&_td]:whitespace-nowrap">
+              <thead><tr><th>{t('common.client')}</th><th>{t('financeOverview.columns.invoice')}</th><th>{t('financeOverview.columns.order')}</th><th>{t('financeOverview.columns.due')}</th><th className="!text-right">{t('financeOverview.columns.late')}</th><th className="!text-right">{t('financeOverview.columns.amount')}</th><th /></tr></thead>
               <tbody>
                 {(showAllOwed ? open : open.slice(0, ROW_PREVIEW)).map(r => {
                   const clientId = orders.find(o => o.id === r.invoice.order_id)?.client_id ?? null
@@ -306,7 +319,7 @@ export function FinancePage() {
                     <td><span className="font-mono text-xs">{r.invoice.id}</span> <span className="text-xs text-slate-500 dark:text-slate-400">{r.invoice.type === 'dp' ? 'DP' : 'pelunasan'}</span></td>
                     <td className="font-mono text-xs">{r.invoice.order_id}</td>
                     <td className="text-xs">{dueOn(r.invoice)}</td>
-                    <td className={`!text-right text-xs ${r.daysLate > 30 ? 'text-red-600 font-semibold dark:text-red-400' : r.daysLate > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}`}>{r.daysLate > 0 ? `${r.daysLate} days` : 'not due'}</td>
+                    <td className={`!text-right text-xs ${r.daysLate > 30 ? 'text-red-600 font-semibold dark:text-red-400' : r.daysLate > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}`}>{r.daysLate > 0 ? t('financeOverview.daysLate', { days: r.daysLate }) : t('financeOverview.notDue')}</td>
                     <td className="!text-right font-mono tabular-nums">{formatRp(r.amount)}</td>
                     <td className="!text-right">
                       {wa && (
@@ -315,7 +328,7 @@ export function FinancePage() {
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={e => e.stopPropagation()}
-                          title="Remind on WhatsApp"
+                          title={t('financeOverview.remindOnWhatsapp')}
                           className="inline-flex w-6 h-6 rounded-md items-center justify-center text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-500/10 transition-colors"
                         >
                           <MessageCircle className="w-3.5 h-3.5" />
@@ -327,9 +340,10 @@ export function FinancePage() {
                 })}
               </tbody>
             </table>
+              </ScrollX>
             {open.length > ROW_PREVIEW && (
               <button className="btn-ghost btn-sm mt-2" onClick={() => setShowAllOwed(v => !v)}>
-                {showAllOwed ? 'Show less' : `Show all ${open.length} unpaid invoices`} <ChevronRight size={14} className={`transition-transform ${showAllOwed ? '-rotate-90' : 'rotate-90'}`} />
+                {showAllOwed ? t('financeOverview.showLess') : t('financeOverview.showAllUnpaid', { total: open.length })} <ChevronRight size={14} className={`transition-transform ${showAllOwed ? '-rotate-90' : 'rotate-90'}`} />
               </button>
             )}
           </div>
@@ -337,11 +351,12 @@ export function FinancePage() {
       </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
-        <Card title={`Clients · ${periodLabel(period)}`} bodyClassName="p-5 overflow-x-auto">
-          {!byClient.length ? <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">No orders in this period</p> : (
+        <Card title={t('financeOverview.clientsInPeriod', { period: periodLabel(period) })} bodyClassName="p-5">
+          {!byClient.length ? <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">{t('financeOverview.noOrdersInPeriod')}</p> : (
             <>
+              <ScrollX>
               <table className="kma-table text-xs [&_td]:!px-2 [&_th]:!px-2 [&_td]:whitespace-nowrap">
-                <thead><tr><th>Client</th><th className="!text-right">Orders</th><th className="!text-right">Value</th><th className="!text-right">Costs</th><th className="!text-right">Profit</th><th className="!text-right">Owed</th></tr></thead>
+                <thead><tr><th>{t('common.client')}</th><th className="!text-right">{t('financeOverview.columns.orders')}</th><th className="!text-right">{t('financeOverview.columns.value')}</th><th className="!text-right">{t('financeOverview.columns.costs')}</th><th className="!text-right">{t('common.profit')}</th><th className="!text-right">{t('financeOverview.columns.owed')}</th></tr></thead>
                 <tbody>
                   {(showAllClients ? byClient : byClient.slice(0, ROW_PREVIEW)).map(c => (
                     <tr key={c.key} className={c.clientId != null ? 'cursor-pointer' : ''} onClick={() => c.clientId != null && navigate(`/clients/${c.clientId}`)}>
@@ -355,34 +370,37 @@ export function FinancePage() {
                   ))}
                 </tbody>
               </table>
+              </ScrollX>
               {byClient.length > ROW_PREVIEW && (
                 <button className="btn-ghost btn-sm mt-2" onClick={() => setShowAllClients(v => !v)}>
-                  {showAllClients ? 'Show less' : `Show all ${byClient.length} clients`} <ChevronRight size={14} className={`transition-transform ${showAllClients ? '-rotate-90' : 'rotate-90'}`} />
+                  {showAllClients ? t('financeOverview.showLess') : t('financeOverview.showAllClients', { total: byClient.length })} <ChevronRight size={14} className={`transition-transform ${showAllClients ? '-rotate-90' : 'rotate-90'}`} />
                 </button>
               )}
             </>
           )}
         </Card>
-        <Card title="Orders · profit after linked costs" icon={PiggyBank} bodyClassName="p-5 overflow-x-auto">
-          {!periodStats.length ? <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">No orders in this period</p> : (
+        <Card title={t('financeOverview.ordersProfit')} icon={PiggyBank} bodyClassName="p-5">
+          {!periodStats.length ? <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">{t('financeOverview.noOrdersInPeriod')}</p> : (
             <>
+              <ScrollX>
               <table className="kma-table text-xs [&_td]:!px-2 [&_th]:!px-2 [&_td]:whitespace-nowrap">
-                <thead><tr><th>Order</th><th className="!text-right">Value</th><th className="!text-right">Costs</th><th className="!text-right">Profit</th><th className="!text-right">Paid</th></tr></thead>
+                <thead><tr><th>{t('financeOverview.columns.order')}</th><th className="!text-right">{t('financeOverview.columns.value')}</th><th className="!text-right">{t('financeOverview.columns.costs')}</th><th className="!text-right">{t('common.profit')}</th><th className="!text-right">{t('financeOverview.columns.paid')}</th></tr></thead>
                 <tbody>
                   {(showAllOrders ? periodStats : periodStats.slice(0, ROW_PREVIEW)).map(s => (
                     <tr key={s.order.id} className="cursor-pointer" onClick={() => navigate(`/orders/${encodeURIComponent(s.order.id)}`)}>
                       <td><span className="font-mono text-xs">{s.order.id}</span> <span className="text-xs text-slate-500 truncate dark:text-slate-400">{s.client}</span></td>
                       <td className="!text-right font-mono tabular-nums">{shortRp(s.value)}</td>
-                      <td className="!text-right font-mono tabular-nums text-slate-500 dark:text-slate-400">{s.costs ? shortRp(s.costs) : <span className="text-amber-500 text-[11px] dark:text-amber-400" title="No Kas Bon lines are linked to this order yet">none linked</span>}</td>
+                      <td className="!text-right font-mono tabular-nums text-slate-500 dark:text-slate-400">{s.costs ? shortRp(s.costs) : <span className="text-amber-500 text-[11px] dark:text-amber-400" title={t('financeOverview.noKasBonLinked')}>{t('financeOverview.noneLinked')}</span>}</td>
                       <td className={`!text-right font-mono tabular-nums ${s.profit < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>{shortRp(s.profit)} <span className="text-[10px] text-slate-500 dark:text-slate-400">{pct(s.profit, s.value)}</span></td>
                       <td className="!text-right text-xs text-slate-500 dark:text-slate-400">{pct(s.paid, s.value)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </ScrollX>
               {periodStats.length > ROW_PREVIEW && (
                 <button className="btn-ghost btn-sm mt-2" onClick={() => setShowAllOrders(v => !v)}>
-                  {showAllOrders ? 'Show less' : `Show all ${periodStats.length} orders`} <ChevronRight size={14} className={`transition-transform ${showAllOrders ? '-rotate-90' : 'rotate-90'}`} />
+                  {showAllOrders ? t('financeOverview.showLess') : t('financeOverview.showAllOrders', { total: periodStats.length })} <ChevronRight size={14} className={`transition-transform ${showAllOrders ? '-rotate-90' : 'rotate-90'}`} />
                 </button>
               )}
             </>

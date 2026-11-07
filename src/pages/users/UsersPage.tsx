@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Plus, UserX, UserCheck, Circle, Loader2, ShieldCheck, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
 import { usersApi, UsersApiError } from '@/api/usersApi'
 import type { AdminUser } from '@/api/usersApi'
 import { ConfirmDialog } from '@/components/ui'
@@ -11,6 +12,7 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 
 export function UsersPage() {
   const isMobile = useIsMobile()
+  const { t } = useTranslation()
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
   // A failed fetch shows an error, not an empty list.
@@ -30,25 +32,27 @@ export function UsersPage() {
       const { users } = await usersApi.list()
       setUsers(users)
     } catch (err) {
-      toast.error(err instanceof UsersApiError ? err.message : 'Could not load users')
+      toast.error(err instanceof UsersApiError ? err.message : t('usersAdmin.couldNotLoad'))
       setLoadError(true)
     } finally {
       setLoading(false)
     }
   }
 
+  // Load once on mount; loadUsers only reads t() for its error toast.
   useEffect(() => {
     loadUsers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function handleDeactivate(u: AdminUser) {
     setPendingId(u.id)
     try {
       await usersApi.deactivate(u.id)
-      toast.success(`${u.name} deactivated`)
+      toast.success(t('usersAdmin.deactivatedToast', { name: u.name }))
       setUsers(prev => prev.map(x => (x.id === u.id ? { ...x, active: false } : x)))
     } catch (err) {
-      toast.error(err instanceof UsersApiError ? err.message : 'Could not deactivate user')
+      toast.error(err instanceof UsersApiError ? err.message : t('usersAdmin.couldNotDeactivate'))
     } finally {
       setPendingId(null)
     }
@@ -58,10 +62,10 @@ export function UsersPage() {
     setPendingId(u.id)
     try {
       await usersApi.reactivate(u.id)
-      toast.success(`${u.name} reactivated`)
+      toast.success(t('usersAdmin.reactivatedToast', { name: u.name }))
       setUsers(prev => prev.map(x => (x.id === u.id ? { ...x, active: true } : x)))
     } catch (err) {
-      toast.error(err instanceof UsersApiError ? err.message : 'Could not reactivate user')
+      toast.error(err instanceof UsersApiError ? err.message : t('usersAdmin.couldNotReactivate'))
     } finally {
       setPendingId(null)
     }
@@ -71,10 +75,10 @@ export function UsersPage() {
     setPendingId(u.id)
     try {
       await usersApi.delete(u.id)
-      toast.success(`${u.name} deleted`)
+      toast.success(t('usersAdmin.deletedToast', { name: u.name }))
       setUsers(prev => prev.filter(x => x.id !== u.id))
     } catch (err) {
-      toast.error(err instanceof UsersApiError ? err.message : 'Could not delete user')
+      toast.error(err instanceof UsersApiError ? err.message : t('usersAdmin.couldNotDelete'))
     } finally {
       setPendingId(null)
     }
@@ -84,19 +88,19 @@ export function UsersPage() {
     <div className="p-4 md:p-6 space-y-5 max-w-[1400px]">
       <PageHeader
         icon={ShieldCheck}
-        title="Users"
-        subtitle="Staff accounts are provisioned here — there's no self-signup."
+        title={t('topbar.titles.users')}
+        subtitle={t('usersAdmin.subtitle')}
         actions={
           <button onClick={() => setShowForm(true)} className="btn-primary text-sm">
             <Plus className="w-4 h-4" />
-            Add user
+            {t('usersAdmin.addUser')}
           </button>
         }
       />
 
       {/* Always a popup: a short, rarely used form. */}
       {showForm && (
-        <Modal title="Add User" onClose={() => setShowForm(false)}>
+        <Modal title={t('usersAdmin.addUserTitle')} onClose={() => setShowForm(false)}>
           <AddUserForm
             onCreated={(u) => {
               setUsers(prev => [...prev, u])
@@ -108,11 +112,11 @@ export function UsersPage() {
 
       <div className="card overflow-hidden">
         {loading ? (
-          <LoadingState label="Loading users…" />
+          <LoadingState label={t('usersAdmin.loading')} />
         ) : loadError ? (
-          <ErrorState what="users" onRetry={loadUsers} />
+          <ErrorState what={t('usersAdmin.errorWhat')} onRetry={loadUsers} />
         ) : users.length === 0 ? (
-          <p className="text-center text-sm text-slate-400 py-12 dark:text-slate-500">No users yet.</p>
+          <p className="text-center text-sm text-slate-400 py-12 dark:text-slate-500">{t('usersAdmin.noUsers')}</p>
         ) : isMobile ? (
           // One card per user, so the action buttons are never clipped.
           <div className="divide-y divide-slate-50 dark:divide-navy-800/60">
@@ -122,13 +126,13 @@ export function UsersPage() {
                 <div className="text-sm text-slate-500 break-all dark:text-slate-400">{u.email}</div>
                 <div className="flex items-center gap-2 mt-2">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                    u.role === 'admin' ? 'bg-gold-50 text-gold-700' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'
+                    u.role === 'admin' ? 'bg-gold-50 text-gold-700 dark:bg-gold-500/15 dark:text-gold-300' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'
                   }`}>
-                    {u.role}
+                    {t(`usersAdmin.roles.${u.role}`, { defaultValue: u.role })}
                   </span>
                   <span className={`flex items-center gap-1.5 text-xs font-medium ${u.active ? 'text-green-700 dark:text-green-400' : 'text-slate-400 dark:text-slate-500'}`}>
                     <Circle className={`w-2 h-2 ${u.active ? 'fill-green-400 text-green-400' : 'fill-slate-300 text-slate-300 dark:text-navy-700'}`} />
-                    {u.active ? 'Active' : 'Deactivated'}
+                    {u.active ? t('usersAdmin.active') : t('usersAdmin.deactivated')}
                   </span>
                 </div>
                 <div className="flex items-center gap-4 mt-3">
@@ -139,7 +143,7 @@ export function UsersPage() {
                       className="flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
                     >
                       <UserX className="w-3.5 h-3.5" />
-                      Deactivate
+                      {t('usersAdmin.deactivate')}
                     </button>
                   ) : (
                     <button
@@ -148,7 +152,7 @@ export function UsersPage() {
                       className="flex items-center gap-1.5 text-xs font-medium text-green-700 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 disabled:opacity-50"
                     >
                       <UserCheck className="w-3.5 h-3.5" />
-                      Reactivate
+                      {t('usersAdmin.reactivate')}
                     </button>
                   )}
                   <button
@@ -157,7 +161,7 @@ export function UsersPage() {
                     className="flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-red-700 dark:text-slate-500 dark:hover:text-red-400 disabled:opacity-50"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    Delete
+                    {t('common.delete')}
                   </button>
                 </div>
               </div>
@@ -167,10 +171,10 @@ export function UsersPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-left text-xs font-semibold uppercase tracking-widest text-slate-400 dark:border-navy-800 dark:text-slate-500">
-                <th className="px-5 py-3">Name</th>
-                <th className="px-5 py-3">Email</th>
-                <th className="px-5 py-3">Role</th>
-                <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3">{t('usersAdmin.name')}</th>
+                <th className="px-5 py-3">{t('usersAdmin.email')}</th>
+                <th className="px-5 py-3">{t('usersAdmin.role')}</th>
+                <th className="px-5 py-3">{t('common.status')}</th>
                 <th className="px-5 py-3" />
               </tr>
             </thead>
@@ -181,19 +185,19 @@ export function UsersPage() {
                   <td className="px-5 py-3 text-slate-500 dark:text-slate-400">{u.email}</td>
                   <td className="px-5 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      u.role === 'admin' ? 'bg-gold-50 text-gold-700' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'
+                      u.role === 'admin' ? 'bg-gold-50 text-gold-700 dark:bg-gold-500/15 dark:text-gold-300' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'
                     }`}>
-                      {u.role}
+                      {t(`usersAdmin.roles.${u.role}`, { defaultValue: u.role })}
                     </span>
                   </td>
                   <td className="px-5 py-3">
                     <span className={`flex items-center gap-1.5 text-xs font-medium ${u.active ? 'text-green-700 dark:text-green-400' : 'text-slate-400 dark:text-slate-500'}`}>
                       <Circle className={`w-2 h-2 ${u.active ? 'fill-green-400 text-green-400' : 'fill-slate-300 text-slate-300 dark:text-navy-700'}`} />
-                      {u.active ? 'Active' : 'Deactivated'}
+                      {u.active ? t('usersAdmin.active') : t('usersAdmin.deactivated')}
                     </span>
                   </td>
                   <td className="px-5 py-3 text-right">
-                    <div className="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                    <div className="flex items-center justify-end gap-3 can-hover:opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                       {u.active ? (
                         <button
                           onClick={() => setConfirmDeactivate(u)}
@@ -201,7 +205,7 @@ export function UsersPage() {
                           className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
                         >
                           <UserX className="w-3.5 h-3.5" />
-                          Deactivate
+                          {t('usersAdmin.deactivate')}
                         </button>
                       ) : (
                         <button
@@ -210,17 +214,17 @@ export function UsersPage() {
                           className="inline-flex items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 disabled:opacity-50"
                         >
                           <UserCheck className="w-3.5 h-3.5" />
-                          Reactivate
+                          {t('usersAdmin.reactivate')}
                         </button>
                       )}
                       <button
                         onClick={() => setConfirmDelete(u)}
                         disabled={pendingId === u.id}
-                        title={`Permanently delete ${u.name}`}
+                        title={t('usersAdmin.permanentlyDeleteTitle', { name: u.name })}
                         className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-red-700 dark:text-slate-500 dark:hover:text-red-400 disabled:opacity-50"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        Delete
+                        {t('common.delete')}
                       </button>
                     </div>
                   </td>
@@ -233,8 +237,8 @@ export function UsersPage() {
 
       {confirmDeactivate && (
         <ConfirmDialog
-          message={`Deactivate ${confirmDeactivate.name}? They'll be signed out everywhere immediately.`}
-          confirmLabel="Deactivate"
+          message={t('usersAdmin.confirmDeactivate', { name: confirmDeactivate.name })}
+          confirmLabel={t('usersAdmin.deactivate')}
           onConfirm={() => { handleDeactivate(confirmDeactivate); setConfirmDeactivate(null) }}
           onCancel={() => setConfirmDeactivate(null)}
         />
@@ -242,8 +246,8 @@ export function UsersPage() {
 
       {confirmDelete && (
         <ConfirmDialog
-          message={`Permanently delete ${confirmDelete.name}? This removes their account entirely — unlike deactivating, this can't be undone.`}
-          confirmLabel="Delete permanently"
+          message={t('usersAdmin.confirmDelete', { name: confirmDelete.name })}
+          confirmLabel={t('usersAdmin.deletePermanently')}
           onConfirm={() => { handleDelete(confirmDelete); setConfirmDelete(null) }}
           onCancel={() => setConfirmDelete(null)}
         />
@@ -253,6 +257,7 @@ export function UsersPage() {
 }
 
 function AddUserForm({ onCreated }: { onCreated: (u: AdminUser) => void }) {
+  const { t } = useTranslation()
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [role, setRole] = useState<'admin' | 'staff'>('staff')
@@ -265,13 +270,13 @@ function AddUserForm({ onCreated }: { onCreated: (u: AdminUser) => void }) {
     setSubmitting(true)
     try {
       const { user } = await usersApi.create({ email, name, role })
-      toast.success(`Invite sent to ${user.email}`)
+      toast.success(t('usersAdmin.inviteSent', { email: user.email }))
       onCreated(user)
       setEmail('')
       setName('')
       setRole('staff')
     } catch (err) {
-      setError(err instanceof UsersApiError ? err.message : 'Could not create user')
+      setError(err instanceof UsersApiError ? err.message : t('usersAdmin.couldNotCreate'))
     } finally {
       setSubmitting(false)
     }
@@ -280,35 +285,35 @@ function AddUserForm({ onCreated }: { onCreated: (u: AdminUser) => void }) {
   return (
     <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
-        <label className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">Name</label>
+        <label className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">{t('usersAdmin.name')}</label>
         <input
           required value={name} onChange={e => setName(e.target.value)}
           className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 dark:border-navy-700 dark:text-slate-100"
-          placeholder="Full name"
+          placeholder={t('usersAdmin.fullNamePlaceholder')}
         />
       </div>
       <div>
-        <label className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">Email</label>
+        <label className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">{t('usersAdmin.email')}</label>
         <input
           required type="email" value={email} onChange={e => setEmail(e.target.value)}
           className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 dark:border-navy-700 dark:text-slate-100"
-          placeholder="name@company.com"
+          placeholder={t('usersAdmin.emailPlaceholder')}
         />
       </div>
       <div className="col-span-1 sm:col-span-2">
-        <label className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">Role</label>
+        <label className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">{t('usersAdmin.role')}</label>
         <select
           value={role} onChange={e => setRole(e.target.value as 'admin' | 'staff')}
           className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 dark:border-navy-700 dark:text-slate-100"
         >
-          <option value="staff">Staff</option>
-          <option value="admin">Admin</option>
+          <option value="staff">{t('usersAdmin.roleOptions.staff')}</option>
+          <option value="admin">{t('usersAdmin.roleOptions.admin')}</option>
         </select>
       </div>
 
       {/* No password here: the new user gets an email link to set their own. */}
       <p className="col-span-1 sm:col-span-2 text-xs text-slate-400 -mt-2 dark:text-slate-500">
-        They'll get an email with a link to set their own password. The link expires after a couple of days.
+        {t('usersAdmin.inviteHint')}
       </p>
 
       {error && <p className="col-span-1 sm:col-span-2 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 dark:bg-red-500/10 dark:text-red-400">{error}</p>}
@@ -319,7 +324,7 @@ function AddUserForm({ onCreated }: { onCreated: (u: AdminUser) => void }) {
         className="btn-primary col-span-1 sm:col-span-2 justify-center text-sm"
       >
         {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-        {submitting ? 'Sending invite…' : 'Add user'}
+        {submitting ? t('usersAdmin.sendingInvite') : t('usersAdmin.addUser')}
       </button>
     </form>
   )

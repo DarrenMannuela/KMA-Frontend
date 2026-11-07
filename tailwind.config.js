@@ -36,10 +36,14 @@ export default {
           950: '#0a0f1e',
         },
         gold: {
+          50:  '#fffbeb',
+          100: '#fef3c7',
           300: '#fcd34d',
           400: '#fbbf24',
           500: '#f59e0b',
           600: '#d97706',
+          700: '#b45309',
+          800: '#92400e',
         },
         slate: {
           50:  '#f8fafc',
@@ -61,5 +65,9 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // `can-hover:opacity-0` hides a row's secondary buttons until hover only
+    // where hovering is possible; a phone or touch tablet always shows them.
+    ({ addVariant }) => addVariant('can-hover', '@media (hover: hover)'),
+  ],
 }

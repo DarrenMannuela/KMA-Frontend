@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Plus, Trash2, Factory, Wrench } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { formatRp } from '@/components/ui'
@@ -33,6 +34,7 @@ const isBlank = (d: DraftLine) => !d.name.trim() && !d.category.trim() && !d.pri
 
 /** A Kas Bon with all its lines, entered in one go. */
 export function KasBonForm({ kind, headers, suppliers, orders, categories, headerId: existingId, lines: initialLines, defaultSupplierId, onClose }: KasBonFormProps) {
+  const { t } = useTranslation()
   const existing = existingId ? headers.find(h => h.id === existingId) : undefined
   const defaults = (k: Kind): Partial<DraftLine> => (k === 'production' ? { supplier_id: defaultSupplierId ?? suppliers[0]?.id ?? 0 } : {})
   const [date, setDate] = useState(existing?.date?.slice(0, 10) ?? todayISODate())
@@ -61,7 +63,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
     restoredRef.current = true
     const draft = loadDraft<Draft>(draftKey)
     if (!draft || (!draft.description.trim() && !draft.lines.some(l => !isBlank(l)))) return
-    if (window.confirm('Restore the Kas Bon you were entering before?')) {
+    if (window.confirm(t('kasBon.restoreDraft'))) {
       setDate(draft.date)
       setId(draft.id)
       setIdTouched(true)
@@ -147,7 +149,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
     }
     save.mutate({
       batch: draftsToBatch(filled, target?.id ?? headerId, batch),
-      label: `Saved ${filled.length} line${filled.length === 1 ? '' : 's'} on ${target?.id ?? headerId}`,
+      label: t('kasBon.savedLinesOn', { count: filled.length, id: target?.id ?? headerId }),
     }, {
       onSuccess: () => { clearDraft(draftKey); onClose() },
       onError: e => {
@@ -157,12 +159,12 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
     })
   }
 
-  const title = existing ? `Add lines to ${existing.id}` : 'New Kas Bon'
+  const title = existing ? t('kasBon.addLinesTo', { id: existing.id }) : t('ledger.newKasBon')
   const orderListId = 'kasbon-orders'
   const categoryListId = 'kasbon-categories'
 
   return (
-    <Modal title={title} onClose={close} size="xl">
+    <Modal title={title} onClose={close} size="xl" guard={false}>
       <div
         ref={formRef}
         className="space-y-4"
@@ -170,7 +172,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
       >
         <div className="grid grid-cols-1 sm:grid-cols-[10rem_10rem_1fr] gap-3">
           <label className="block">
-            <span className="field-label">Kas Bon ID</span>
+            <span className="field-label">{t('kasBon.kasBonId')}</span>
             <input
               className={`field font-mono ${showErrors && !id.trim() ? 'border-red-300' : ''}`}
               value={id}
@@ -179,33 +181,33 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
               list="kasbon-ids"
             />
             <datalist id="kasbon-ids">{headers.slice(-200).map(h => <option key={h.id} value={h.id} />)}</datalist>
-            {!existing && target && <span className="text-[11px] text-amber-600 dark:text-amber-400">Exists: lines will be added to it</span>}
+            {!existing && target && <span className="text-[11px] text-amber-600 dark:text-amber-400">{t('kasBon.existsWillAdd')}</span>}
           </label>
           <label className="block">
-            <span className="field-label">Date</span>
+            <span className="field-label">{t('common.date')}</span>
             <input type="date" className="field" value={date} onChange={e => changeDate(e.target.value)} />
           </label>
           <label className="block">
-            <span className="field-label">Description</span>
+            <span className="field-label">{t('ledger.columns.description')}</span>
             <input
               className="field"
               value={description}
-              placeholder={kind === 'production' ? 'e.g. BELI BAHAN DRILL' : 'e.g. BIAYA BULANAN'}
+              placeholder={kind === 'production' ? t('kasBon.descriptionPlaceholderProduction') : t('kasBon.descriptionPlaceholderOperation')}
               onChange={e => setDescription(e.target.value.toUpperCase())}
             />
           </label>
         </div>
 
         <div className="rounded-xl border border-slate-100 overflow-hidden dark:border-navy-800">
-          <div className="hidden md:grid grid-cols-[1.5rem_minmax(0,1.6fr)_minmax(0,1.3fr)_4.5rem_5.5rem_7rem_7rem_minmax(0,1fr)_2rem] gap-2 px-3 py-2 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-navy-950 dark:text-slate-400">
+          <div className="hidden md:grid grid-cols-[1.5rem_minmax(0,1.3fr)_minmax(0,1.6fr)_4.5rem_5.5rem_7rem_7rem_minmax(0,1fr)_2rem] gap-2 px-3 py-2 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-navy-950 dark:text-slate-400">
             <span />
-            <span>Bahan / item</span>
-            <span>Supplier / category</span>
-            <span className="text-right">Qty</span>
-            <span>Unit</span>
-            <span className="text-right">Price</span>
-            <span className="text-right">Total</span>
-            <span>Order</span>
+            <span>{t('kasBon.supplierCategory')}</span>
+            <span>{t('kasBon.bahanItem')}</span>
+            <span className="text-right">{t('ledger.columns.qty')}</span>
+            <span>{t('ledger.columns.unit')}</span>
+            <span className="text-right">{t('ledger.columns.price')}</span>
+            <span className="text-right">{t('ledger.columns.total')}</span>
+            <span>{t('ledger.columns.order')}</span>
             <span />
           </div>
           <div className="divide-y divide-slate-100 max-h-[45vh] overflow-y-auto dark:divide-navy-800">
@@ -220,14 +222,35 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
               const catColors = catalogue && catMatch ? catalogue.colorsFor(catMatch) : []
               return (
                 <div key={l.key} className={`px-3 py-2 ${problem ? 'bg-red-50/50 dark:bg-red-500/10' : ''}`}>
-                  <div className="grid grid-cols-2 md:grid-cols-[1.5rem_minmax(0,1.6fr)_minmax(0,1.3fr)_4.5rem_5.5rem_7rem_7rem_minmax(0,1fr)_2rem] gap-2 items-center">
-                    <span className="hidden md:flex text-slate-300 dark:text-navy-700" title={prod ? 'Production line' : 'Operation cost'}>
+                  <div className="grid grid-cols-2 md:grid-cols-[1.5rem_minmax(0,1.3fr)_minmax(0,1.6fr)_4.5rem_5.5rem_7rem_7rem_minmax(0,1fr)_2rem] gap-2 items-center">
+                    <span className="hidden md:flex text-slate-300 dark:text-navy-700" title={prod ? t('kasBon.productionLine') : t('kasBon.operationCost')}>
                       {prod ? <Factory size={14} /> : <Wrench size={14} />}
                     </span>
+                    {prod ? (
+                      <select
+                        data-line-first
+                        className="field col-span-2 md:col-span-1 !py-1.5"
+                        value={l.supplier_id || ''}
+                        onChange={e => setLine(l.key, { supplier_id: Number(e.target.value) })}
+                        {...keys}
+                      >
+                        <option value="">{t('ledger.supplierPlaceholder')}</option>
+                        {suppliers.map(s => <option key={s.id} value={s.id}>{supplierWithCategory(s)}</option>)}
+                      </select>
+                    ) : (
+                      <input
+                        data-line-first
+                        className="field col-span-2 md:col-span-1 !py-1.5"
+                        placeholder={t('kasBon.categoryPlaceholder')}
+                        list={categoryListId}
+                        value={l.category}
+                        onChange={e => setLine(l.key, { category: e.target.value.toUpperCase() })}
+                        {...keys}
+                      />
+                    )}
                     <input
-                      data-line-first
                       className="field col-span-2 md:col-span-1 !py-1.5"
-                      placeholder={catalogue ? 'Bahan — pick from catalogue or type' : prod ? 'Bahan, e.g. DRILL 902' : 'Item, e.g. OJEK AMBIL BAHAN'}
+                      placeholder={catalogue ? t('kasBon.namePlaceholderCatalogue') : prod ? t('kasBon.namePlaceholderProduction') : t('kasBon.namePlaceholderOperation')}
                       value={l.name}
                       list={catalogue ? `material-catalogue-${catalogue.id}` : undefined}
                       onChange={e => {
@@ -244,36 +267,17 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
                       {...keys}
                     />
                     {prod ? (
-                      <select
-                        className="field col-span-2 md:col-span-1 !py-1.5"
-                        value={l.supplier_id || ''}
-                        onChange={e => setLine(l.key, { supplier_id: Number(e.target.value) })}
-                        {...keys}
-                      >
-                        <option value="">Supplier…</option>
-                        {suppliers.map(s => <option key={s.id} value={s.id}>{supplierWithCategory(s)}</option>)}
-                      </select>
-                    ) : (
-                      <input
-                        className="field col-span-2 md:col-span-1 !py-1.5"
-                        placeholder="Category, e.g. TRANSPORT"
-                        list={categoryListId}
-                        value={l.category}
-                        onChange={e => setLine(l.key, { category: e.target.value.toUpperCase() })}
-                        {...keys}
-                      />
-                    )}
-                    {prod ? (
                       <>
                         <input
                           className="field !py-1.5 text-right"
                           inputMode="decimal"
-                          aria-label="Qty"
+                          aria-label={t('ledger.columns.qty')}
+                          placeholder={t('ledger.columns.qty')}
                           value={l.qty}
                           onChange={e => setLine(l.key, { qty: e.target.value.replace(/[^\d.,]/g, '') })}
                           {...keys}
                         />
-                        <select className="field !py-1.5" aria-label="Unit" value={l.unit} onChange={e => setLine(l.key, { unit: e.target.value })} {...keys}>
+                        <select className="field !py-1.5" aria-label={t('ledger.columns.unit')} value={l.unit} onChange={e => setLine(l.key, { unit: e.target.value })} {...keys}>
                           {[...new Set([...SI_UNITS, l.unit])].map(u => <option key={u} value={u}>{u}</option>)}
                         </select>
                       </>
@@ -283,7 +287,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
                     <input
                       className="field !py-1.5 text-right font-mono"
                       inputMode="numeric"
-                      placeholder="Price"
+                      placeholder={t('ledger.columns.price')}
                       value={l.price ? Number(l.price).toLocaleString('id-ID') : ''}
                       onChange={e => setLine(l.key, { price: e.target.value.replace(/\D/g, '') })}
                       {...keys}
@@ -291,13 +295,14 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
                     <span className="text-right font-mono text-sm text-slate-700 tabular-nums dark:text-slate-300">{formatRp(draftTotal(l))}</span>
                     <input
                       className="field !py-1.5 font-mono text-xs"
-                      placeholder="Order (optional)"
+                      placeholder={t('ledger.columns.order')}
+                      aria-label={t('ledger.orderOptional')}
                       list={orderListId}
                       value={l.order_id}
                       onChange={e => setLine(l.key, { order_id: e.target.value.toUpperCase() })}
                       {...keys}
                     />
-                    <button type="button" onClick={() => removeLine(l.key)} className="justify-self-end p-1 text-slate-300 hover:text-red-500 dark:text-navy-700" title="Remove line">
+                    <button type="button" onClick={() => removeLine(l.key)} className="justify-self-end p-2 -m-1 rounded-md text-slate-400 hover:text-red-500 dark:text-slate-500" title={t('kasBon.removeLine')} aria-label={t('kasBon.removeLine')}>
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -306,7 +311,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
                     <>
                       <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                         {catMatch.composition}
-                        {catMatch.widthCm != null && catMatch.rollYards != null && <> · roll {catMatch.widthCm} cm × {catMatch.rollYards} yd</>}
+                        {catMatch.widthCm != null && catMatch.rollYards != null && <> {t('ledger.rollInfo', { width: catMatch.widthCm, yards: catMatch.rollYards })}</>}
                       </p>
                       {catColors.length > 0 ? (
                         <MaterialColorPicker
@@ -324,7 +329,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
                         // Series") — say so, rather than silently showing
                         // nothing where the picker usually sits, which
                         // reads as broken instead of "no data yet".
-                        <p className="mt-1 text-[11px] text-slate-400 italic dark:text-navy-600">No colour list recorded for this fabric yet — type the colour/code after the name if you know it.</p>
+                        <p className="mt-1 text-[11px] text-slate-400 italic dark:text-navy-600">{t('ledger.noColourList')}</p>
                       )}
                     </>
                   )}
@@ -334,13 +339,13 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
           </div>
           <div className="flex flex-wrap items-center gap-3 px-3 py-2 bg-slate-50/60 border-t border-slate-100 dark:bg-navy-950/60 dark:border-navy-800">
             <button type="button" onClick={() => { addLine(kind); focusLine(lines.length) }} className="btn-ghost btn-sm">
-              <Plus size={13} /> {kind === 'production' ? 'Add bahan' : 'Add cost'}
+              <Plus size={13} /> {kind === 'production' ? t('kasBon.addBahan') : t('kasBon.addCost')}
             </button>
             <button type="button" onClick={() => { addLine(kind === 'production' ? 'operation' : 'production'); focusLine(lines.length) }} className="btn-ghost btn-sm">
-              <Plus size={13} /> {kind === 'production' ? 'Add an operation cost (ojek, parkir…)' : 'Add a bahan line'}
+              <Plus size={13} /> {kind === 'production' ? t('kasBon.addOperationCost') : t('kasBon.addBahanLine')}
             </button>
             <span className="ml-auto text-sm text-slate-500 dark:text-slate-400">
-              {filled.length} line{filled.length === 1 ? '' : 's'} · <span className="font-mono font-semibold text-navy-900 dark:text-slate-50">{formatRp(total)}</span>
+              {t('ledger.lineCount', { count: filled.length })} · <span className="font-mono font-semibold text-navy-900 dark:text-slate-50">{formatRp(total)}</span>
             </span>
           </div>
         </div>
@@ -358,13 +363,13 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
         ))}
 
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Enter moves to the next line · paste rows copied from Excel into any line · Ctrl+Enter saves
+          {t('kasBon.hint')}
         </p>
-        {showErrors && !filled.length && <p className="text-sm text-red-500 dark:text-red-400">Add at least one line.</p>}
+        {showErrors && !filled.length && <p className="text-sm text-red-500 dark:text-red-400">{t('kasBon.addAtLeastOne')}</p>}
         <div className="flex justify-end gap-2 pt-1">
-          <button type="button" className="btn-secondary" onClick={close}>Cancel</button>
+          <button type="button" className="btn-secondary" onClick={close}>{t('common.cancel')}</button>
           <button type="button" className="btn-primary" onClick={submit} disabled={save.isPending}>
-            {save.isPending ? 'Saving…' : `Save ${filled.length || ''} line${filled.length === 1 ? '' : 's'}`}
+            {save.isPending ? t('common.saving') : t('kasBon.saveLines', { count: filled.length, n: filled.length || '' })}
           </button>
         </div>
       </div>

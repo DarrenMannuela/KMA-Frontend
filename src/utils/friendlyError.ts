@@ -1,4 +1,5 @@
 import { ApiError } from '@/api'
+import i18n from '@/i18n/config'
 
 /** Turns a caught error into a plain-language message, safe to show in a
  *  toast to someone who isn't a developer. The backend's own validation
@@ -10,14 +11,14 @@ import { ApiError } from '@/api'
  *  mean anything to them or suggest what to do about it. */
 export function friendlyError(e: unknown): string {
   if (e instanceof ApiError) {
-    if (!e.status) return "Can't reach the server — check your internet connection and try again."
-    if (e.status === 401) return 'Your session has expired — please sign in again.'
-    if (e.status >= 500) return "Something went wrong on our end — please try again in a moment, and let us know if it keeps happening."
-    return e.message || 'Something went wrong. Please try again.'
+    if (!e.status) return i18n.t('errors.cantReachServer')
+    if (e.status === 401) return i18n.t('errors.sessionExpired')
+    if (e.status >= 500) return i18n.t('errors.serverError')
+    return e.message || i18n.t('errors.generic')
   }
   if (e instanceof Error) {
-    if (/network|fetch/i.test(e.message)) return "Can't reach the server — check your internet connection and try again."
-    return e.message || 'Something went wrong. Please try again.'
+    if (/network|fetch/i.test(e.message)) return i18n.t('errors.cantReachServer')
+    return e.message || i18n.t('errors.generic')
   }
-  return 'Something went wrong. Please try again.'
+  return i18n.t('errors.generic')
 }

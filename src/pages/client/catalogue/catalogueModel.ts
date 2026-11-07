@@ -1,3 +1,4 @@
+import i18n from '@/i18n/config'
 import type { ClientItem, ClientItemPrice } from '@/types'
 import { cellText, parseNumber, type Grid } from '@/utils/tableText'
 import type { SheetSpec } from '@/utils/xlsx'
@@ -117,13 +118,13 @@ const isHeader = (v: string, words: string[]) => words.some(w => v === w || v.st
  *  holding prices. */
 export function readCatalogueGrid(grid: Grid): { rows: ImportRow[]; years: number[] } | { error: string } {
   const headerAt = grid.findIndex(r => r.some(c => isHeader(cellText(c).toLowerCase(), ['item', 'nama', 'barang', 'name'])))
-  if (headerAt < 0) return { error: 'No header row: the first row should name the columns (Item, Size, Notes, 2025, 2026…)' }
+  if (headerAt < 0) return { error: i18n.t('catalogueModel.noHeader') }
   const header = grid[headerAt].map(c => cellText(c).toLowerCase())
   const nameCol = header.findIndex(h => isHeader(h, ['item', 'nama', 'barang', 'name']))
   const sizeCol = header.findIndex(h => isHeader(h, ['size', 'ukuran']))
   const notesCol = header.findIndex(h => isHeader(h, ['notes', 'note', 'catatan', 'keterangan']))
   const yearCols = header.flatMap((h, i) => (/^(19|20)\d\d$/.test(h) ? [{ i, year: Number(h) }] : []))
-  if (!yearCols.length) return { error: 'No price columns: name them by year (2025, 2026…)' }
+  if (!yearCols.length) return { error: i18n.t('catalogueModel.noPriceColumns') }
 
   const rows: ImportRow[] = []
   for (const r of grid.slice(headerAt + 1)) {

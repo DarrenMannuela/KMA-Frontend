@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ShoppingBag, Eye, RotateCcw, Building2, ArrowRight } from 'lucide-react'
+import { ShoppingBag, Eye, RotateCcw, Building2 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
@@ -11,6 +11,7 @@ import { useDateLocale } from '@/i18n/dateLocale'
 import type { Order, CreateOrderRequest } from '@/types'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '@/api'
+import { useIsMobile } from '@/hooks/useIsMobile'
 
 // ─── ID auto-numbering ────────────────────────────────────────────────────
 // Order IDs are "NNN/KMA/YY", numbered from 001 each year.
@@ -138,7 +139,7 @@ function OrderForm({ editing, onClose }: { editing: Order | null; onClose: () =>
             <button
               type="button"
               className="btn-ghost btn-sm !px-2 shrink-0"
-              title={t('orders.resetIdTitle')}
+              title={t('orders.resetIdTitle')} aria-label={t('orders.resetIdTitle')}
               onClick={resetIdSuggestion}
             >
               <RotateCcw size={14} />
@@ -200,6 +201,7 @@ export function OrdersPage() {
   const { data: items = [] } = itemHooks.useList()
   const { data: invoices = [] } = invoiceHooks.useList()
   const del = orderHooks.useDelete()
+  const isMobile = useIsMobile()
   const update = orderHooks.useUpdate()
   const navigate = useNavigate()
   // Newest first, with each order's value and where its payment stands.
@@ -221,17 +223,36 @@ export function OrdersPage() {
       searchKeys={['company', 'po_number']}
       columns={[
         { header: t('orders.columns.orderId'),  key: 'id',         render: r => <span className="id-chip">{r.id}</span> },
-        { header: t('orders.columns.company'),   key: 'company',     edit: { type: 'text', uppercase: true }, render: r => <span className="font-medium text-navy-900 dark:text-slate-50">{r.company ?? '—'}</span> },
-        { header: t('orders.columns.client'),    key: 'client_id',   secondary: true, render: r => r.client_id ? (
+        { header: t('orders.columns.company'),   key: 'company',     edit: { type: 'text', uppercase: true }, render: r => (
+          // The client link sits beside the name on desktop, where the Client
+          // column is left out to keep the table on screen.
+          <span className="flex items-center gap-1.5 min-w-[8.5rem]">
+            <span className="font-medium text-navy-900 dark:text-slate-50">{r.company ?? '—'}</span>
+            {r.client_id != null && !isMobile && (
+              <button
+                onClick={e => { e.stopPropagation(); navigate(`/clients/${r.client_id}`) }}
+                className="shrink-0 rounded p-1 -m-0.5 text-navy-500 hover:text-navy-800 hover:bg-navy-50 dark:text-navy-300 dark:hover:bg-white/10"
+                title={t('orders.viewClientRecord')}
+                aria-label={t('orders.viewClientRecord')}
+              >
+                <Building2 size={13} />
+              </button>
+            )}
+          </span>
+        ) },
+        { header: t('orders.columns.client'),    key: 'client_id',   secondary: true, mobileOnly: true, render: r => r.client_id ? (
+            // An icon, not "View →" on every row: the column was one of the
+            // widest in the table for one link.
             <button
               onClick={(e) => { e.stopPropagation(); navigate(`/clients/${r.client_id}`) }}
-              className="inline-flex items-center gap-1 text-sm font-medium text-navy-600 hover:text-navy-800"
+              className="btn-ghost btn-sm !px-2 text-navy-600 dark:text-navy-300"
               title={t('orders.viewClientRecord')}
+              aria-label={t('orders.viewClientRecord')}
             >
-              <Building2 size={12} /> {t('common.view')} <ArrowRight size={12} />
+              <Building2 size={14} />
             </button>
-          ) : <span className="text-slate-500 text-xs dark:text-navy-300">{t('orders.notLinked')}</span> },
-        { header: t('orders.columns.poNumber'), key: 'po_number',   secondary: true, edit: { type: 'text', uppercase: true, value: r => r.po_number ?? '' }, render: r => <span className="font-mono text-xs">{r.po_number ?? '—'}</span> },
+          ) : <span className="text-slate-400 dark:text-slate-500" title={t('orders.notLinked')}>—</span> },
+        { header: t('orders.columns.poNumber'), key: 'po_number',   secondary: true, edit: { type: 'text', uppercase: true, value: r => r.po_number ?? '' }, render: r => <span className="font-mono text-xs whitespace-nowrap">{r.po_number ?? '—'}</span> },
         { header: t('orders.columns.date'),      key: 'date',        edit: { type: 'date', value: r => r.date ? r.date.slice(0, 10) : '' }, render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
         { header: t('orders.columns.value'),     key: 'value', render: r => value.get(r.id) ? <span className="font-mono tabular-nums whitespace-nowrap">{formatRp(value.get(r.id)!)}</span> : <span className="text-slate-500 text-xs dark:text-navy-300">{t('orders.noItems')}</span> },
         { header: t('orders.columns.payment'),   key: 'payment', render: r => {
@@ -243,11 +264,13 @@ export function OrdersPage() {
       renderForm={(editing, onClose) => <OrderForm editing={editing} onClose={onClose} />}
       onDelete={id => del.mutate(id)}
       deleteMessage={r => t('orders.deleteConfirm', { id: r.id })}
+      undoDeletes
+      rowHref={row => `/orders/${encodeURIComponent(row.id)}`}
       rowActions={row => (
         <button
           className="btn-ghost btn-sm !px-2 hover:!text-gold-500"
           onClick={() => navigate(`/orders/${encodeURIComponent(row.id)}`)}
-          title={t('orders.viewItems')}
+          title={t('orders.viewItems')} aria-label={t('orders.viewItems')}
         >
           <Eye className="w-3.5 h-3.5" />
         </button>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Search, Palette } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { useIsMobile } from '@/hooks/useIsMobile'
@@ -23,6 +24,7 @@ export function MaterialColorPicker({ material, colors, selectedCode, onPick }: 
   selectedCode?: string
   onPick: (code: string) => void
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const isMobile = useIsMobile()
   const selected = selectedCode ? colors.find(c => c.code === selectedCode) : undefined
@@ -51,7 +53,7 @@ export function MaterialColorPicker({ material, colors, selectedCode, onPick }: 
         ) : (
           <>
             <Palette size={isMobile ? 16 : 11} className={isMobile ? 'text-navy-700 dark:text-navy-200' : 'text-slate-500 dark:text-slate-400'} />
-            <span className={isMobile ? 'font-medium text-navy-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}>Pick a colour ({colors.length})</span>
+            <span className={isMobile ? 'font-medium text-navy-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}>{t('ledger.colourPicker.pickColourCount', { n: colors.length })}</span>
           </>
         )}
       </button>
@@ -81,6 +83,7 @@ export function MaterialColorPickerModal({ material, colors, selectedCode, onPic
   onPick: (code: string) => void
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const isMobile = useIsMobile()
   const viewportHeight = useVisualViewportHeight()
@@ -88,7 +91,7 @@ export function MaterialColorPickerModal({ material, colors, selectedCode, onPic
   const filtered = q ? colors.filter(c => c.code.toLowerCase().includes(q) || (c.category ?? '').toLowerCase().includes(q)) : colors
 
   return (
-    <Modal title={`${materialLabel(material)} — colours`} onClose={onClose} size="lg">
+    <Modal title={t('ledger.colourPicker.modalTitle', { material: materialLabel(material) })} onClose={onClose} size="lg" guard={false}>
       <div className="space-y-3">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400" />
@@ -101,13 +104,13 @@ export function MaterialColorPickerModal({ material, colors, selectedCode, onPic
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search by number or category…"
+            placeholder={t('ledger.colourPicker.searchPlaceholder')}
             className="field !pl-9"
           />
         </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400">{filtered.length} of {colors.length} colours</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{t('ledger.colourPicker.countOf', { shown: filtered.length, total: colors.length })}</p>
         {filtered.length === 0 ? (
-          <p className="text-sm text-slate-500 text-center py-10 dark:text-slate-400">No colour matches "{query}".</p>
+          <p className="text-sm text-slate-500 text-center py-10 dark:text-slate-400">{t('ledger.colourPicker.noMatch', { query })}</p>
         ) : (
           // Same real-viewport-height signal as Modal's own sheet sizing
           // (see useVisualViewportHeight) — so if the keyboard does open

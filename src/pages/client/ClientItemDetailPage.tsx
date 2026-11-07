@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Image as ImageIcon, Pencil, X, Check, Tag, Trash2, ShoppingBag } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
 import { EditableCell, FormField, formatRp, UppercaseField } from '@/components/ui'
 import { Card, ErrorState, LoadingState } from '@/components/ui/Page'
 import { clientHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
@@ -16,6 +17,7 @@ import { adjustPrice, compareSizes, itemKey, itemLabel, pctChange, yearStart } f
 
 // The item's photo: upload, replace, remove.
 function ItemPhotoPanel({ item }: { item: ClientItem }) {
+  const { t } = useTranslation()
   const upload = clientItemHooks.useUploadPhoto()
   const remove = clientItemHooks.useDeletePhoto()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -26,13 +28,13 @@ function ItemPhotoPanel({ item }: { item: ClientItem }) {
   const handleRemove = () => {
     if (!confirmingRemove) { setConfirmingRemove(true); return }
     setConfirmingRemove(false)
-    remove.mutate(item.id, { onError: () => toast.error("Couldn't remove the photo — check your connection and try again.") })
+    remove.mutate(item.id, { onError: () => toast.error(t('catalogue.item.removePhotoFailed')) })
   }
 
   return (
     <div className="card p-4 flex flex-col items-center gap-3">
       {item.photo_path && !imgFailed ? (
-        <a href={item.photo_path} target="_blank" rel="noopener noreferrer" title="View full size" className="w-full">
+        <a href={item.photo_path} target="_blank" rel="noopener noreferrer" title={t('catalogue.item.viewFullSize')} className="w-full">
           <img
             src={item.photo_path}
             alt={item.item_name}
@@ -41,7 +43,7 @@ function ItemPhotoPanel({ item }: { item: ClientItem }) {
           />
         </a>
       ) : item.photo_path && imgFailed ? (
-        <div className="w-full aspect-square rounded-xl bg-red-50 flex items-center justify-center text-red-300 border border-red-100 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-500" title="Image failed to load">
+        <div className="w-full aspect-square rounded-xl bg-red-50 flex items-center justify-center text-red-300 border border-red-100 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-500" title={t('catalogue.item.imageFailed')}>
           <ImageIcon size={40} />
         </div>
       ) : (
@@ -55,7 +57,7 @@ function ItemPhotoPanel({ item }: { item: ClientItem }) {
           disabled={upload.isPending}
           className="text-sm text-navy-600 hover:underline disabled:opacity-40 disabled:no-underline"
         >
-          {upload.isPending ? 'Uploading…' : item.photo_path ? 'Replace photo' : 'Upload photo'}
+          {upload.isPending ? t('catalogue.item.uploading') : item.photo_path ? t('catalogue.item.replacePhoto') : t('catalogue.item.uploadPhoto')}
         </button>
         {item.photo_path && (
           <button
@@ -64,7 +66,7 @@ function ItemPhotoPanel({ item }: { item: ClientItem }) {
             disabled={remove.isPending}
             className={`text-sm hover:underline disabled:opacity-40 disabled:no-underline ${confirmingRemove ? 'text-red-700 font-medium dark:text-red-300' : 'text-red-500 dark:text-red-400'}`}
           >
-            {remove.isPending ? 'Removing…' : confirmingRemove ? 'Click again to confirm' : 'Remove'}
+            {remove.isPending ? t('catalogue.item.removing') : confirmingRemove ? t('catalogue.item.clickAgain') : t('catalogue.item.remove')}
           </button>
         )}
       </div>
@@ -73,7 +75,7 @@ function ItemPhotoPanel({ item }: { item: ClientItem }) {
         onChange={e => {
           const file = e.target.files?.[0]
           if (file) {
-            upload.mutate({ id: item.id, file }, { onError: () => toast.error("Couldn't upload the photo — check your connection and try again.") })
+            upload.mutate({ id: item.id, file }, { onError: () => toast.error(t('catalogue.item.uploadPhotoFailed')) })
             setImgFailed(false)
           }
           e.target.value = ''
@@ -85,6 +87,7 @@ function ItemPhotoPanel({ item }: { item: ClientItem }) {
 
 // Name, size and notes, edited in place.
 function ItemDetailsPanel({ item }: { item: ClientItem }) {
+  const { t } = useTranslation()
   const update = clientItemHooks.useUpdate()
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<UpdateClientItemRequest>({
@@ -97,7 +100,7 @@ function ItemDetailsPanel({ item }: { item: ClientItem }) {
   }
   const save = () => update.mutate({ id: item.id, body: form }, {
     onSuccess: () => setEditing(false),
-    onError: () => toast.error("Couldn't save — check your connection and try again."),
+    onError: () => toast.error(t('catalogue.item.saveFailed')),
   })
 
   if (!editing) {
@@ -106,37 +109,37 @@ function ItemDetailsPanel({ item }: { item: ClientItem }) {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-lg font-semibold text-navy-900 dark:text-slate-50">{item.item_name}</h1>
-            <p className="text-sm text-slate-500 mt-0.5 dark:text-slate-400">{item.size ?? 'No size specified'}</p>
+            <p className="text-sm text-slate-500 mt-0.5 dark:text-slate-400">{item.size ?? t('catalogue.item.noSize')}</p>
           </div>
-          <button onClick={startEdit} className="btn-ghost btn-sm !px-2" title="Edit item">
+          <button onClick={startEdit} className="btn-ghost btn-sm !px-2" title={t('catalogue.item.editItem')} aria-label={t('catalogue.item.editItem')}>
             <Pencil size={14} />
           </button>
         </div>
-        <p className="text-sm text-slate-500 mt-3 whitespace-pre-wrap dark:text-slate-400">{item.notes || 'No notes.'}</p>
+        <p className="text-sm text-slate-500 mt-3 whitespace-pre-wrap dark:text-slate-400">{item.notes || t('catalogue.item.noNotes')}</p>
       </div>
     )
   }
 
   return (
     <div className="card p-4 flex-1 space-y-3">
-      <FormField label="Item Name" required>
+      <FormField label={t('orders.itemForm.itemName')} required>
         <UppercaseField className="field" value={form.item_name ?? ''}
           onChange={v => setForm(p => ({ ...p, item_name: v }))} />
       </FormField>
-      <FormField label="Size">
+      <FormField label={t('orders.itemForm.size')}>
         <UppercaseField className="field" value={form.size ?? ''}
           onChange={v => setForm(p => ({ ...p, size: v || null }))} />
       </FormField>
-      <FormField label="Notes">
+      <FormField label={t('catalogue.item.notes')}>
         <UppercaseField as="textarea" className="field resize-none" rows={2} value={form.notes ?? ''}
           onChange={v => setForm(p => ({ ...p, notes: v || null }))} />
       </FormField>
       <div className="flex gap-2">
         <button className="btn-primary !py-1.5 !px-3 text-sm inline-flex items-center gap-1.5" disabled={update.isPending} onClick={save}>
-          <Check size={14} /> {update.isPending ? 'Saving…' : 'Save'}
+          <Check size={14} /> {update.isPending ? t('common.saving') : t('common.save')}
         </button>
         <button className="btn-secondary !py-1.5 !px-3 text-sm inline-flex items-center gap-1.5" onClick={() => setEditing(false)}>
-          <X size={14} /> Cancel
+          <X size={14} /> {t('common.cancel')}
         </button>
       </div>
     </div>
@@ -146,6 +149,7 @@ function ItemDetailsPanel({ item }: { item: ClientItem }) {
 /** The item's price for each year, newest first: edit in place, add a year,
  *  remove one. Saved through the catalogue batch, so Ctrl+Z undoes it. */
 function ItemPrices({ item, prices }: { item: ClientItem; prices: ClientItemPrice[] }) {
+  const { t } = useTranslation()
   const save = useCatalogueBatch()
   const rows = [...prices].sort((a, b) => b.year - a.year)
   const [newYear, setNewYear] = useState(() => (rows[0]?.year ?? new Date().getFullYear() - 1) + 1)
@@ -154,7 +158,7 @@ function ItemPrices({ item, prices }: { item: ClientItem; prices: ClientItemPric
     label, batch: { client_id: item.client_id, set_prices: [{ client_item_id: item.id, year, price, effective_date: effective }] },
   })
   const remove = (year: number) => save.mutate({
-    label: `Removed the ${year} price`, batch: { client_id: item.client_id, delete_prices: [{ client_item_id: item.id, year }] },
+    label: t('catalogue.item.removedPrice', { year }), batch: { client_id: item.client_id, delete_prices: [{ client_item_id: item.id, year }] },
   })
   const add = () => {
     const existing = rows.find(r => r.year === newYear)
@@ -165,7 +169,7 @@ function ItemPrices({ item, prices }: { item: ClientItem; prices: ClientItemPric
   const last = rows[0]
 
   return (
-    <Card title="Prices by year" icon={Tag} bodyClassName="p-0 pt-2">
+    <Card title={t('catalogue.item.pricesByYear')} icon={Tag} bodyClassName="p-0 pt-2">
       {/* overflow-x-auto: the fixed-width columns alone (Year/vs year
          before/From/delete) already add up to more than a phone's width,
          with nothing here to hide below a breakpoint the way the main
@@ -175,10 +179,10 @@ function ItemPrices({ item, prices }: { item: ClientItem; prices: ClientItemPric
       <table className="w-full text-sm">
         <thead>
           <tr className="text-xs text-slate-400 border-b border-slate-100 dark:text-slate-500 dark:border-navy-800">
-            <th className="text-left font-medium px-5 py-2 w-20">Year</th>
-            <th className="text-right font-medium px-2 py-2">Price</th>
-            <th className="text-right font-medium px-2 py-2 w-24">vs year before</th>
-            <th className="text-left font-medium px-4 py-2 w-40">From</th>
+            <th className="text-left font-medium px-5 py-2 w-20">{t('catalogue.item.year')}</th>
+            <th className="text-right font-medium px-2 py-2">{t('orders.detail.price')}</th>
+            <th className="text-right font-medium px-2 py-2 w-24">{t('catalogue.item.vsYearBefore')}</th>
+            <th className="text-left font-medium px-4 py-2 w-40">{t('catalogue.item.from')}</th>
             <th className="w-10" />
           </tr>
         </thead>
@@ -195,18 +199,18 @@ function ItemPrices({ item, prices }: { item: ClientItem; prices: ClientItemPric
                     onSave={v => (Number(v) ? set(p.year, Number(v), p.effective_date, `${p.year}: ${formatRp(Number(v))}`) : remove(p.year))} />
                 </td>
                 <td className={`px-2 py-1 text-right text-xs ${pct == null ? 'text-slate-300 dark:text-navy-700' : pct > 0 ? 'text-green-700 dark:text-green-400' : pct < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}>
-                  {pct == null ? '' : pct === 0 ? 'same' : `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`}
+                  {pct == null ? '' : pct === 0 ? t('catalogue.same') : `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`}
                 </td>
                 <td className="px-3 py-0.5 text-slate-500 dark:text-slate-400">
                   <EditableCell type="date" value={p.effective_date?.slice(0, 10) ?? null}
                     format={v => formatDateShort(String(v))}
-                    onSave={v => set(p.year, p.price, v ? new Date(String(v)).toISOString() : null, `${p.year} price date changed`)} />
+                    onSave={v => set(p.year, p.price, v ? new Date(String(v)).toISOString() : null, t('catalogue.item.priceDateChanged', { year: p.year }))} />
                 </td>
                 <td className="pr-3">
                   {/* opacity-60, not opacity-0: see the matching comment in
                      CatalogueTab.tsx — a hover-only reveal has no touch
                      equivalent, and removing a year's price has no other path. */}
-                  <button className="btn-ghost !p-2 opacity-60 group-hover:opacity-100 focus:opacity-100" title={`Remove the ${p.year} price`} onClick={() => remove(p.year)}>
+                  <button className="btn-ghost !p-2 opacity-60 group-hover:opacity-100 focus:opacity-100" title={t('catalogue.item.removeYearPrice', { year: p.year })} aria-label={t('catalogue.item.removeYearPrice', { year: p.year })} onClick={() => remove(p.year)}>
                     <Trash2 size={13} />
                   </button>
                 </td>
@@ -221,17 +225,17 @@ function ItemPrices({ item, prices }: { item: ClientItem; prices: ClientItemPric
             <td className="px-2 py-2" colSpan={3}>
               <div className="flex items-center gap-2 justify-end">
                 <input className="field !py-1 font-mono text-right max-w-[160px]" inputMode="numeric"
-                  placeholder={last ? formatThousands(String(last.price)) : 'price'}
+                  placeholder={last ? formatThousands(String(last.price)) : t('catalogue.item.pricePlaceholder')}
                   value={formatThousands(newPrice)} onChange={e => setNewPrice(stripCommas(e.target.value))}
                   onKeyDown={e => e.key === 'Enter' && newPrice && add()} />
                 {last && [5, 10].map(pct => (
-                  <button key={pct} className="btn-ghost btn-sm" title={`${pct}% over ${last.year}, rounded up to Rp 1,000`}
+                  <button key={pct} className="btn-ghost btn-sm" title={t('catalogue.item.roundedUpTitle', { pct, year: last.year })}
                     onClick={() => setNewPrice(String(adjustPrice(last.price, { mode: 'pct', amount: pct, roundTo: 1000 })))}>
                     +{pct}%
                   </button>
                 ))}
                 <button className="btn-primary btn-sm" disabled={!newPrice || save.isPending} onClick={add}>
-                  {rows.some(r => r.year === newYear) ? 'Replace' : 'Add'}
+                  {rows.some(r => r.year === newYear) ? t('catalogue.item.replace') : t('catalogue.item.add')}
                 </button>
               </div>
             </td>
@@ -240,7 +244,7 @@ function ItemPrices({ item, prices }: { item: ClientItem; prices: ClientItemPric
         </tbody>
       </table>
       </div>
-      {!rows.length && <p className="px-5 pb-3 text-xs text-slate-400 dark:text-slate-500">No prices yet: add this item's price for a year above.</p>}
+      {!rows.length && <p className="px-5 pb-3 text-xs text-slate-400 dark:text-slate-500">{t('catalogue.item.noPricesYet')}</p>}
     </Card>
   )
 }
@@ -248,30 +252,31 @@ function ItemPrices({ item, prices }: { item: ClientItem; prices: ClientItemPric
 /** Every order of this item by this client, with the price it went at next
  *  to the catalogue price for that year. */
 function ItemSales({ item, prices, client }: { item: ClientItem; prices: ClientItemPrice[]; client: Client | undefined }) {
+  const { t } = useTranslation()
   const { sales, isLoading } = useClientSales(client)
   const lines = sales.get(itemKey(item.item_name, item.size)) ?? []
   const byYear = new Map<number, number>()
   for (const s of lines) byYear.set(new Date(s.date).getFullYear(), (byYear.get(new Date(s.date).getFullYear()) ?? 0) + s.qty)
 
   return (
-    <Card title="Orders" icon={ShoppingBag} bodyClassName="p-0 pt-2"
+    <Card title={t('catalogue.item.orders')} icon={ShoppingBag} bodyClassName="p-0 pt-2"
       actions={byYear.size > 0 && (
         <span className="text-xs text-slate-500 dark:text-slate-400">
           {[...byYear].sort((a, b) => b[0] - a[0]).map(([y, q]) => `${y}: ${q.toLocaleString('id-ID')} pcs`).join(' · ')}
         </span>
       )}>
       {isLoading ? <LoadingState /> : !lines.length ? (
-        <p className="px-5 pb-4 text-sm text-slate-400 dark:text-slate-500">{client ? `${client.client_name} hasn't ordered this yet.` : 'Not ordered yet.'}</p>
+        <p className="px-5 pb-4 text-sm text-slate-400 dark:text-slate-500">{client ? t('catalogue.item.hasntOrdered', { name: client.client_name }) : t('catalogue.item.notOrderedYet')}</p>
       ) : (
         <div className="max-h-80 overflow-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs text-slate-400 border-b border-slate-100 dark:text-slate-500 dark:border-navy-800">
-                <th className="text-left font-medium px-5 py-2">Order</th>
-                <th className="text-left font-medium px-2 py-2">Date</th>
-                <th className="text-right font-medium px-2 py-2">Qty</th>
-                <th className="text-right font-medium px-2 py-2">Price</th>
-                <th className="text-right font-medium px-5 py-2">Catalogue</th>
+                <th className="text-left font-medium px-5 py-2">{t('catalogue.item.order')}</th>
+                <th className="text-left font-medium px-2 py-2">{t('common.date')}</th>
+                <th className="text-right font-medium px-2 py-2">{t('orders.detail.qty')}</th>
+                <th className="text-right font-medium px-2 py-2">{t('orders.detail.price')}</th>
+                <th className="text-right font-medium px-5 py-2">{t('catalogue.catalogue')}</th>
               </tr>
             </thead>
             <tbody>
@@ -299,6 +304,7 @@ function ItemSales({ item, prices, client }: { item: ClientItem; prices: ClientI
 export function ClientItemDetailPage() {
   const { clientId: clientIdParam, itemId: itemIdParam } = useParams<{ clientId: string; itemId: string }>()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const clientId = Number(clientIdParam)
   const itemId = Number(itemIdParam)
 
@@ -319,9 +325,9 @@ export function ClientItemDetailPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [qc])
 
-  if (itemLoading) return <div className="p-4 md:p-6"><LoadingState label="Loading item…" /></div>
-  if (itemError) return <div className="p-4 md:p-6"><ErrorState what="this item" onRetry={() => refetchItem()} /></div>
-  if (!item) return <div className="p-4 md:p-6"><ErrorState what="this item" /></div>
+  if (itemLoading) return <div className="p-4 md:p-6"><LoadingState label={t('catalogue.item.loading')} /></div>
+  if (itemError) return <div className="p-4 md:p-6"><ErrorState what={t('catalogue.item.errorWhat')} onRetry={() => refetchItem()} /></div>
+  if (!item) return <div className="p-4 md:p-6"><ErrorState what={t('catalogue.item.errorWhat')} /></div>
 
   const sizes = catalogue.filter(i => i.item_name === item.item_name).sort((a, b) => compareSizes(a.size, b.size))
   const back = `/clients/${clientId}?tab=catalogue`
@@ -329,12 +335,12 @@ export function ClientItemDetailPage() {
   return (
     <div className="p-4 md:p-6 space-y-5">
       <div className="flex items-center gap-3">
-        <button onClick={() => navigate(back)} className="btn-secondary !px-2.5 shrink-0" title="Back to catalogue">
+        <button onClick={() => navigate(back)} className="btn-secondary !px-2.5 shrink-0" title={t('catalogue.item.backToCatalogue')} aria-label={t('catalogue.item.backToCatalogue')}>
           <ArrowLeft size={14} />
         </button>
         <div className="min-w-0">
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            <Link to={back} className="hover:underline">{client?.client_name ?? 'Client'}</Link> / Catalogue
+            <Link to={back} className="hover:underline">{client?.client_name ?? t('common.client')}</Link> / {t('catalogue.catalogue')}
           </p>
           <h2 className="font-display font-semibold text-navy-900 leading-tight dark:text-slate-50">{itemLabel(item)}</h2>
         </div>
@@ -343,7 +349,7 @@ export function ClientItemDetailPage() {
             {sizes.map(s => (
               <Link key={s.id} to={`/clients/${clientId}/items/${s.id}`}
                 className={`px-2.5 py-1 rounded-lg text-xs border ${s.id === item.id ? 'bg-navy-900 text-white border-navy-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 dark:bg-navy-900 dark:text-slate-300 dark:border-navy-700 dark:hover:border-navy-600'}`}>
-                {s.size || 'one size'}
+                {s.size || t('catalogue.oneSize')}
               </Link>
             ))}
           </div>
@@ -359,7 +365,7 @@ export function ClientItemDetailPage() {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
         {pricesLoading ? <LoadingState /> : pricesError ? (
-          <ErrorState what="the prices" onRetry={() => refetchPrices()} />
+          <ErrorState what={t('catalogue.item.errorWhatPrices')} onRetry={() => refetchPrices()} />
         ) : (
           <ItemPrices item={item} prices={prices} />
         )}

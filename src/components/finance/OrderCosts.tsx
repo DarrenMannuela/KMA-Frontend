@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { PiggyBank } from 'lucide-react'
 import { formatRp } from '@/components/ui'
 import { productionHooks, operationHooks, supplierHooks } from '@/hooks'
@@ -9,6 +10,7 @@ import { sheetParams } from './ledgerParams'
 
 /** The Kas Bon lines linked to an order, and what the order made after them. */
 export function OrderCosts({ orderId, value }: { orderId: string; value: number }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const production = productionHooks.useList()
   const operations = operationHooks.useList()
@@ -26,17 +28,17 @@ export function OrderCosts({ orderId, value }: { orderId: string; value: number 
     <div className="card p-5">
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <PiggyBank size={16} className="text-navy-500" />
-        <h3 className="font-semibold text-navy-900 text-sm dark:text-slate-50">Costs & margin</h3>
+        <h3 className="font-semibold text-navy-900 text-sm dark:text-slate-50">{t('orderCosts.title')}</h3>
         <span className="ml-auto flex gap-2">
-          <button className="btn-ghost btn-sm" onClick={() => open('production')}>Bahan lines</button>
-          <button className="btn-ghost btn-sm" onClick={() => open('operations')}>Operation lines</button>
+          <button className="btn-ghost btn-sm" onClick={() => open('production')}>{t('orderCosts.bahanLines')}</button>
+          <button className="btn-ghost btn-sm" onClick={() => open('operations')}>{t('orderCosts.operationLines')}</button>
         </span>
       </div>
       <div className="grid grid-cols-3 gap-3 mb-3">
-        <div><div className="text-xs text-slate-500 dark:text-slate-400">Order value</div><div className="font-mono text-navy-900 dark:text-slate-50">{formatRp(value)}</div></div>
-        <div><div className="text-xs text-slate-500 dark:text-slate-400">Linked costs</div><div className="font-mono text-slate-700 dark:text-slate-300">{formatRp(costs)}</div></div>
+        <div><div className="text-xs text-slate-500 dark:text-slate-400">{t('orderCosts.orderValue')}</div><div className="font-mono text-navy-900 dark:text-slate-50">{formatRp(value)}</div></div>
+        <div><div className="text-xs text-slate-500 dark:text-slate-400">{t('orderCosts.linkedCosts')}</div><div className="font-mono text-slate-700 dark:text-slate-300">{formatRp(costs)}</div></div>
         <div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">Profit</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">{t('common.profit')}</div>
           <div className={`font-mono font-semibold ${profit < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
             {formatRp(profit)} {value > 0 && <span className="text-xs font-normal text-slate-500 dark:text-slate-400">{Math.round((profit / value) * 100)}%</span>}
           </div>
@@ -57,8 +59,7 @@ export function OrderCosts({ orderId, value }: { orderId: string; value: number 
         </ul>
       ) : (
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          No Kas Bon lines are linked to this order yet. In Production or Operations, fill the Order column of a line
-          (or select lines and use Order) to see what this order really cost.
+          {t('orderCosts.empty')}
         </p>
       )}
     </div>

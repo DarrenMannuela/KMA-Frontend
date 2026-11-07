@@ -1,11 +1,18 @@
 import { PageHeader, ErrorState } from './Page'
-import { useRef, useState } from 'react'
-import { Plus, Pencil, Trash2, Search, ChevronDown } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
+import { Plus, Pencil, Trash2, Search, ChevronDown, ChevronRight } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog, EditableCell, Spinner, EmptyState } from '@/components/ui'
 import { useIsMobile } from '@/hooks/useIsMobile'
+import { useCreateOnArrival } from '@/hooks/useCreateOnArrival'
+import { undoLastDelete } from '@/hooks/crud'
+import { isTyping } from '@/utils/isTyping'
+import { useRovingCells } from '@/hooks/useRovingCells'
+import { ScrollX } from './ScrollX'
 
 interface Column<T> {
   header: string
@@ -21,6 +28,9 @@ interface Column<T> {
    *  aren't needed for an at-a-glance read of the row; leave the rest
    *  (including columns with neither flag) visible as before. */
   secondary?: boolean
+  /** Mobile cards only: left out of the desktop table (whose other cells
+   *  already carry it), so a wide table fits the screen. */
+  mobileOnly?: boolean
   /** Desktop table only: click the cell (or arrow onto it and type) to edit
    *  in place, like the finance Ledger, instead of needing the Add/Edit
    *  modal for this field. Needs `onCellEdit` on CrudPage itself — a column
@@ -51,6 +61,13 @@ interface CrudPageProps<T extends { id: string | number }> {
   deleteMessage?: (row: T) => string
   searchKeys?: (keyof T)[]
   rowActions?: (row: T) => React.ReactNode
+  /** The row's own page. On phones the whole card opens it, instead of only
+   *  a small icon; the desktop table keeps its cells for inline editing. */
+  rowHref?: (row: T) => string
+  /** Deleting here can be undone (the backend keeps what was removed): the
+   *  confirm says so, the toast carries Undo, and Ctrl+Z puts back the most
+   *  recent one. */
+  undoDeletes?: boolean
   // Replaces the built-in edit modal (e.g. Invoices edit on their own page).
   onEditClick?: (row: T) => void
   // Same, for Add New.
@@ -66,7 +83,7 @@ interface CrudPageProps<T extends { id: string | number }> {
 export function CrudPage<T extends { id: string | number }>({
   title, icon: Icon, data = [], isLoading, isError = false, onRetry,
   columns, formTitle, renderForm, onDelete,
-  deleteMessage, searchKeys = [], rowActions, onEditClick, onAddClick, filterBar, onCellEdit,
+  deleteMessage, searchKeys = [], rowActions, rowHref, undoDeletes = false, onEditClick, onAddClick, filterBar, onCellEdit,
 }: CrudPageProps<T>) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<T | null>(null)
@@ -97,7 +114,22 @@ export function CrudPage<T extends { id: string | number }>({
     setEditing(row); setModalOpen(true)
   }
   const closeModal = () => { setModalOpen(false); setEditing(null) }
+  useCreateOnArrival(openCreate)
+
+  const qc = useQueryClient()
+  useEffect(() => {
+    if (!undoDeletes) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.shiftKey || !(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z' || isTyping(e.target)) return
+      if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return
+      e.preventDefault()
+      undoLastDelete(qc)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [undoDeletes, qc])
   const isMobile = useIsMobile()
+  const navigate = useNavigate()
   const titleKey = columns.find(c => c.primary)?.key ?? columns[0]?.key
   const { t } = useTranslation()
 
@@ -105,6 +137,8 @@ export function CrudPage<T extends { id: string | number }>({
   // Only wired up when a page opts in via onCellEdit — otherwise the table
   // renders exactly as it always has.
   const cellRefs = useRef(new Map<string, HTMLElement>())
+  const onGridFocus = useRovingCells(cellRefs)
+  const tableColumns = columns.filter(c => !c.mobileOnly)
   const setCellRef = (key: string) => (el: HTMLElement | null) => {
     if (el) cellRefs.current.set(key, el)
     else cellRefs.current.delete(key)
@@ -113,7 +147,7 @@ export function CrudPage<T extends { id: string | number }>({
     const i = filtered.findIndex(r => r.id === rowId)
     if (i < 0) return
     const row = filtered[Math.min(Math.max(i + dRow, 0), filtered.length - 1)]
-    const c = Math.min(Math.max(col + dCol, 0), columns.length - 1)
+    const c = Math.min(Math.max(col + dCol, 0), tableColumns.length - 1)
     if (row) cellRefs.current.get(`${row.id}:${c}`)?.focus()
   }
   const arrowDeltas: Record<string, [number, number]> = {
@@ -174,7 +208,7 @@ export function CrudPage<T extends { id: string | number }>({
                 const rendered = c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—')
                 return (
                   <div key={String(c.key)} className="flex items-baseline gap-1.5 text-sm">
-                    <span className="text-slate-400 text-xs shrink-0 dark:text-slate-500">{c.header}:</span>
+                    {c.header && <span className="text-slate-500 text-xs shrink-0 dark:text-slate-400">{c.header}:</span>}
                     <span className="text-slate-700 truncate dark:text-slate-300">{rendered}</span>
                   </div>
                 )
@@ -182,12 +216,24 @@ export function CrudPage<T extends { id: string | number }>({
               const visibleCols = columns.filter(c => c.key !== titleKey && !c.secondary)
               const hiddenCols = columns.filter(c => c.key !== titleKey && c.secondary)
               const titleCol = columns.find(c => c.key === titleKey)
+              const href = rowHref?.(row)
               return (
-              <div key={row.id} className="px-5 py-3">
+              <div
+                key={row.id}
+                className={`px-5 py-3 ${href ? 'cursor-pointer active:bg-slate-50 dark:active:bg-navy-800/50' : ''}`}
+                onClick={href ? e => {
+                  // Buttons, links and "Show more" inside the card keep their own job.
+                  if ((e.target as HTMLElement).closest('a,button,input,select,textarea,summary,label')) return
+                  navigate(href)
+                } : undefined}
+              >
                 <div className="space-y-0.5">
                   {titleCol && (
-                    <div className="text-sm font-medium text-navy-900 dark:text-slate-100">
-                      {titleCol.render ? titleCol.render(row) : String((row as Record<string, unknown>)[titleCol.key as string] ?? '—')}
+                    <div className="flex items-center gap-2 text-sm font-medium text-navy-900 dark:text-slate-100">
+                      <div className="min-w-0 flex-1">
+                        {titleCol.render ? titleCol.render(row) : String((row as Record<string, unknown>)[titleCol.key as string] ?? '—')}
+                      </div>
+                      {href && <ChevronRight className="w-4 h-4 shrink-0 text-slate-400 dark:text-slate-500" aria-hidden />}
                     </div>
                   )}
                   {visibleCols.map(renderLine)}
@@ -203,17 +249,19 @@ export function CrudPage<T extends { id: string | number }>({
                     </details>
                   )}
                 </div>
-                <div className="flex items-center justify-end gap-1 mt-1.5">
+                {/* 40px targets, and Delete set apart from Edit, so a thumb
+                   reaching for one doesn't land on the other. */}
+                <div className="flex items-center justify-end gap-1 mt-1.5 [&_button]:min-h-10 [&_button]:min-w-10 [&_button]:justify-center">
                   {rowActions && rowActions(row)}
                   <button className="btn-ghost btn-sm !px-2" onClick={() => openEdit(row)} aria-label={t('common.edit')}>
-                    <Pencil className="w-3.5 h-3.5" />
+                    <Pencil className="w-4 h-4" />
                   </button>
                   <button
-                    className="btn-ghost btn-sm !px-1.5 hover:!text-red-600"
+                    className="btn-ghost btn-sm !px-1.5 ml-3 hover:!text-red-600"
                     onClick={() => setConfirmRow(row)}
                     aria-label={t('common.delete')}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -221,21 +269,24 @@ export function CrudPage<T extends { id: string | number }>({
             })}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <ScrollX mask={false}>
 
         <table className="kma-table">
           <thead>
             <tr>
-              {columns.map(c => <th key={String(c.key)}>{c.header}</th>)}
-              <th>
+              {tableColumns.map(c => <th key={String(c.key)}>{c.header}</th>)}
+              {/* Pinned to the right edge: view/edit/delete never scroll out of
+                 reach on a narrow screen; the shadow shows only while other
+                 columns are hidden under it. */}
+              <th className="sticky right-0 z-[1] bg-white dark:bg-navy-900 [[data-fade-right]_&]:shadow-[-8px_0_12px_-6px_rgba(15,23,42,0.22)]">
                 <div className="flex items-center justify-end">{t('common.actions')}</div>
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody onFocus={onGridFocus}>
             {filtered.map(row => (
               <tr key={row.id}>
-                {columns.map((c, ci) => (
+                {tableColumns.map((c, ci) => (
                   <td key={String(c.key)} className={onCellEdit ? 'px-1 py-0.5' : undefined}>
                     {!onCellEdit ? (
                       c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—')
@@ -249,12 +300,13 @@ export function CrudPage<T extends { id: string | number }>({
                         format={() => (c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—'))}
                         onSave={v => onCellEdit(row, c.key as string, v)}
                         cellRef={setCellRef(`${row.id}:${ci}`)}
+                        tabIndex={-1}
                         onNavigate={(dr, dc) => moveFocus(row.id, ci, dr, dc)}
                       />
                     ) : (
                       <div
                         ref={setCellRef(`${row.id}:${ci}`)}
-                        tabIndex={0}
+                        tabIndex={-1}
                         className="px-2.5 py-1.5 min-h-[2rem] flex items-center focus:outline-none focus:bg-navy-50/50 dark:focus:bg-navy-800/50 rounded-sm"
                         onKeyDown={e => {
                           const d = arrowDeltas[e.key]
@@ -266,7 +318,7 @@ export function CrudPage<T extends { id: string | number }>({
                     )}
                   </td>
                 ))}
-                <td className="text-right">
+                <td className="text-right sticky right-0 z-[1] bg-white dark:bg-navy-900 [[data-fade-right]_&]:shadow-[-8px_0_12px_-6px_rgba(15,23,42,0.22)] [tr:hover>&]:bg-slate-50 dark:[tr:hover>&]:bg-[#1f2539]">
                   <div className="flex items-center justify-end gap-1">
                     {rowActions && rowActions(row)}
                     <button className="btn-ghost btn-sm !px-2" onClick={() => openEdit(row)} aria-label={t('common.edit')}>
@@ -285,7 +337,7 @@ export function CrudPage<T extends { id: string | number }>({
             ))}
           </tbody>
         </table>
-          </div>
+          </ScrollX>
         )}
         {onCellEdit && !isMobile && filtered.length > 0 && (
           <div className="px-4 py-2 border-t border-slate-100 bg-slate-50/60 text-xs text-slate-500 dark:border-navy-800 dark:bg-navy-950/60 dark:text-slate-400">
@@ -304,7 +356,7 @@ export function CrudPage<T extends { id: string | number }>({
       {/* Confirm delete */}
       {confirmRow && (
         <ConfirmDialog
-          message={deleteMessage ? deleteMessage(confirmRow) : t('common.deleteThisRecord')}
+          message={`${deleteMessage ? deleteMessage(confirmRow) : t('common.deleteThisRecord')}${undoDeletes ? ` ${t('common.canUndoAfter')}` : ''}`}
           onConfirm={() => { onDelete(confirmRow.id); setConfirmRow(null) }}
           onCancel={() => setConfirmRow(null)}
         />

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useId } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface SelectOption {
   value: string | number
@@ -30,6 +31,8 @@ interface EditableCellProps {
   uppercase?: boolean
   /** Registers the cell's focusable node (display div or input) for arrow-key navigation. */
   cellRef?: (el: HTMLElement | null) => void
+  /** -1 for a cell in a roving grid (see useRovingCells); 0 by default. */
+  tabIndex?: number
   /** Called to move focus to a neighboring cell: (rowDelta, colDelta), e.g.
    *  (0, 1) for "one cell right". SpreadsheetView owns the actual grid and
    *  resolves this into a .focus() call on the target cell. */
@@ -47,8 +50,10 @@ export function EditableCell({
   allowDecimal = false,
   uppercase = false,
   cellRef,
+  tabIndex = 0,
   onNavigate,
 }: EditableCellProps) {
+  const { t } = useTranslation()
   const [isEditing, setIsEditing] = useState(false)
   const [val, setVal] = useState(initialValue)
   // `T | null` keeps .current assignable, which the cellRef callbacks below need.
@@ -144,6 +149,9 @@ export function EditableCell({
       return
     }
     if (e.key === 'Escape') {
+      // Cancels this edit only; marked handled so a surrounding dialog
+      // doesn't take the same Escape as "close".
+      e.preventDefault()
       committed.current = true
       setVal(initialValue)
       setIsEditing(false)
@@ -171,6 +179,8 @@ export function EditableCell({
       case 'F2':
         e.preventDefault(); startEditing(); return
     }
+    // Shift+Space selects the row (as in Excel); it's the grid's to handle.
+    if (e.key === ' ' && e.shiftKey) return
     // Typing on a selected cell starts editing with that keystroke, like Excel
     // (text and number cells).
     if ((type === 'text' || type === 'number') && e.key.length === 1) {
@@ -197,7 +207,7 @@ export function EditableCell({
           onKeyDown={handleKeyDown}
           className="w-full px-2 py-1 text-sm border-2 border-navy-400 rounded outline-none bg-white dark:bg-navy-900 dark:text-slate-100"
         >
-          <option value="">Select…</option>
+          <option value="">{t('cells.select')}</option>
           {options?.map(o => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
@@ -234,7 +244,7 @@ export function EditableCell({
   return (
     <div
       ref={cellRef}
-      tabIndex={0}
+      tabIndex={tabIndex}
       onClick={() => startEditing()}
       onKeyDown={handleDisplayKeyDown}
       // The dotted underline marks the cell editable on touch screens, where hover
@@ -244,7 +254,7 @@ export function EditableCell({
       className="px-2.5 py-1.5 min-h-[2rem] cursor-cell border border-transparent [border-bottom-style:dotted] [@media(hover:none)]:border-b-slate-200 dark:[@media(hover:none)]:border-b-navy-700 hover:border-slate-300 hover:bg-slate-50 hover:[border-bottom-style:solid] dark:hover:border-navy-600 dark:hover:bg-white/5 focus:outline-none focus:border-navy-400 focus:bg-navy-50/50 dark:focus:bg-navy-800/50 focus:[border-bottom-style:solid] transition-colors break-words"
     >
       {isEmpty
-        ? <span className="text-slate-300 italic dark:text-slate-600">{placeholder ?? 'click to fill'}</span>
+        ? <span className="text-slate-400 italic whitespace-nowrap dark:text-slate-500">{placeholder ?? t('cells.clickToFill')}</span>
         : (format ? format(initialValue) : initialValue)}
     </div>
   )

@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { KeyRound, Lock, Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
 import { authApi, AuthApiError } from '@/api/authApi'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -11,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext'
 export function ChangePasswordPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { t } = useTranslation()
 
   // Forced (a temporary password) or chosen from the menu; only the latter can
   // be cancelled.
@@ -28,17 +30,17 @@ export function ChangePasswordPage() {
     setError(null)
 
     if (newPassword !== confirmPassword) {
-      setError("New passwords don't match")
+      setError(t('auth.changePassword.mismatch'))
       return
     }
 
     setSubmitting(true)
     try {
       await authApi.changePassword(currentPassword, newPassword)
-      toast.success('Password changed — please sign in again')
+      toast.success(t('auth.changePassword.successToast'))
       navigate('/login', { replace: true })
     } catch (err) {
-      const message = err instanceof AuthApiError ? err.message : 'Could not change password'
+      const message = err instanceof AuthApiError ? err.message : t('auth.changePassword.couldNotChange')
       setError(message)
     } finally {
       setSubmitting(false)
@@ -51,24 +53,24 @@ export function ChangePasswordPage() {
         {!isForced && (
           <button
             onClick={() => navigate('/')}
-            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-navy-700 transition-colors mb-6 dark:text-slate-500 dark:hover:text-slate-200"
+            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-navy-700 transition-colors mb-6 dark:text-slate-400 dark:hover:text-slate-200"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back
+            {t('auth.back')}
           </button>
         )}
 
         <div className="text-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-navy-900 flex items-center justify-center mx-auto mb-4">
+          <div className="w-12 h-12 rounded-xl bg-navy-900 flex items-center justify-center mx-auto mb-4 dark:bg-navy-800 dark:ring-1 dark:ring-white/10">
             <KeyRound className="w-5 h-5 text-gold-400" />
           </div>
           <h1 className="text-xl font-bold text-navy-900 dark:text-slate-50">
-            {isForced ? 'Set a new password' : 'Change your password'}
+            {isForced ? t('auth.changePassword.forcedTitle') : t('auth.changePassword.title')}
           </h1>
-          <p className="text-sm text-slate-400 mt-1 dark:text-slate-500">
+          <p className="text-sm text-slate-500 mt-1 dark:text-slate-400">
             {isForced
-              ? "You're signing in with a temporary password — choose one only you know before continuing."
-              : 'Enter your current password and choose a new one.'}
+              ? t('auth.changePassword.forcedSubtitle')
+              : t('auth.changePassword.subtitle')}
           </p>
         </div>
 
@@ -77,11 +79,11 @@ export function ChangePasswordPage() {
           className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 flex flex-col gap-4 dark:bg-navy-900 dark:border-navy-800"
         >
           <div>
-            <label htmlFor="current" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">
-              {isForced ? 'Temporary password' : 'Current password'}
+            <label htmlFor="current" className="block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1.5 dark:text-slate-400">
+              {isForced ? t('auth.changePassword.temporaryPassword') : t('auth.changePassword.currentPassword')}
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2 dark:text-navy-700" />
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 dark:text-slate-500" />
               <input
                 id="current"
                 type={showPasswords ? 'text' : 'password'}
@@ -91,17 +93,17 @@ export function ChangePasswordPage() {
                 onChange={e => setCurrentPassword(e.target.value)}
                 className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-navy-900
                            focus:outline-none focus:ring-2 focus:ring-navy-900/10 focus:border-navy-300 transition-colors dark:bg-navy-900 dark:border-navy-700 dark:text-slate-50"
-                placeholder={isForced ? 'What was shared with you' : 'Your current password'}
+                placeholder={isForced ? t('auth.changePassword.temporaryPlaceholder') : t('auth.changePassword.currentPlaceholder')}
               />
             </div>
           </div>
 
           <div>
-            <label htmlFor="new" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">
-              New password
+            <label htmlFor="new" className="block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1.5 dark:text-slate-400">
+              {t('auth.newPassword')}
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2 dark:text-navy-700" />
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 dark:text-slate-500" />
               <input
                 id="new"
                 type={showPasswords ? 'text' : 'password'}
@@ -116,7 +118,7 @@ export function ChangePasswordPage() {
               <button
                 type="button"
                 onClick={() => setShowPasswords(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors dark:text-navy-700 dark:hover:text-slate-400"
+                className="absolute right-1 top-1/2 -translate-y-1/2 p-2 rounded-md text-slate-500 hover:text-navy-700 transition-colors dark:text-slate-400 dark:hover:text-slate-400"
                 tabIndex={-1}
               >
                 {showPasswords ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -125,11 +127,11 @@ export function ChangePasswordPage() {
           </div>
 
           <div>
-            <label htmlFor="confirm" className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5 dark:text-slate-500">
-              Confirm new password
+            <label htmlFor="confirm" className="block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1.5 dark:text-slate-400">
+              {t('auth.changePassword.confirmNewPassword')}
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-300 absolute left-3 top-1/2 -translate-y-1/2 dark:text-navy-700" />
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 dark:text-slate-500" />
               <input
                 id="confirm"
                 type={showPasswords ? 'text' : 'password'}
@@ -151,11 +153,10 @@ export function ChangePasswordPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-navy-900 text-white text-sm font-semibold
-                       hover:bg-navy-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className="btn-primary mt-2 w-full justify-center !py-2.5 font-semibold"
           >
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-            {submitting ? 'Updating…' : 'Update password'}
+            {submitting ? t('auth.changePassword.updating') : t('auth.changePassword.submit')}
           </button>
         </form>
       </div>

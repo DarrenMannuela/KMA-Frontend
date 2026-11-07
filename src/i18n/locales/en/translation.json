@@ -48,7 +48,16 @@
     "clientRecord": "Client record",
     "switchToLanguage": "Switch to {{language}}",
     "languageEnglish": "English",
-    "languageIndonesian": "Bahasa Indonesia"
+    "languageIndonesian": "Bahasa Indonesia",
+    "close": "Close",
+    "discard": "Discard",
+    "discardChanges": "Discard unsaved changes?",
+    "undo": "Undo",
+    "undone": "Undone: {{label}}",
+    "couldntUndo": "Couldn't undo: {{message}}",
+    "nothingToUndo": "Nothing to undo",
+    "canUndoAfter": "You can undo this right after.",
+    "undoDeleteFailed": "Couldn't put it back: {{message}}"
   },
   "sidebar": {
     "dashboard": "Dashboard",
@@ -86,7 +95,8 @@
       "suppliers": "Suppliers",
       "operations": "Operations",
       "finance": "Finance",
-      "users": "Users"
+      "users": "Users",
+      "buktiKas": "Bukti Kas"
     }
   },
   "dashboard": {

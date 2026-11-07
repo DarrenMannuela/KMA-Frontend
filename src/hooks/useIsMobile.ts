@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react'
 
-// Below Tailwind's md breakpoint (768px).
-const QUERY = '(max-width: 767px)'
+// Exactly the screens that don't get the docked sidebar (see `dock` in
+// tailwind.config.js): narrow, or short like a phone held sideways. Keeping
+// this the same as `dock` means a landscape phone gets one consistent phone
+// layout instead of a drawer next to desktop tables and centred dialogs.
+export const PHONE_QUERY = '(max-width: 767px), (max-height: 499px)'
+const QUERY = PHONE_QUERY
 
 export function useIsMobile(): boolean {
   const [isMobile, setIsMobile] = useState(() => window.matchMedia(QUERY).matches)

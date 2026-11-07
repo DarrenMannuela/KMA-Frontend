@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import i18n from '@/i18n/config'
 
 const DRAFT_PREFIX = 'kma.draft.'
 
@@ -85,7 +86,7 @@ export function useUnsavedChanges(isDirty: boolean, onDiscard?: () => void) {
   }, [])
 
   const guardClose = (close: () => void) => {
-    if (isDirtyRef.current && !window.confirm('Discard unsaved changes?')) return
+    if (isDirtyRef.current && !window.confirm(i18n.t('common.discardChanges'))) return
     // Every path that discards instead of saving (Cancel, X, Escape,
     // backdrop — they all funnel through this one guard) must not leave a
     // stale autosaved draft behind for the next person to be offered.

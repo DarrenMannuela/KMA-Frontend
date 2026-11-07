@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Users, Printer } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { FormField, UppercaseField } from '@/components/ui'
 import { LoadingState, ErrorState } from '@/components/ui/Page'
@@ -10,6 +11,7 @@ import { CatalogueTab } from './catalogue/CatalogueTab'
 import type { ClientContact, CreateClientContactRequest, ClientItemPrice } from '@/types'
 
 function ClientContactForm({ clientId, editing, onClose }: { clientId: number; editing: ClientContact | null; onClose: () => void }) {
+  const { t } = useTranslation()
   const create = clientContactHooks.useCreate()
   const update = clientContactHooks.useUpdate()
 
@@ -36,42 +38,42 @@ function ClientContactForm({ clientId, editing, onClose }: { clientId: number; e
 
   return (
     <div className="space-y-4">
-      <FormField label="Name" required>
-        <UppercaseField className="field" placeholder="e.g. Budi Santoso" value={form.name}
+      <FormField label={t('clientsArea.contact.name')} required>
+        <UppercaseField className="field" placeholder={t('clientsArea.contact.namePlaceholder')} value={form.name}
           onChange={v => setForm(p => ({ ...p, name: v }))} />
       </FormField>
-      <FormField label="Role">
-        <UppercaseField className="field" placeholder="e.g. Purchasing Manager" value={form.role ?? ''}
+      <FormField label={t('clientsArea.contact.role')}>
+        <UppercaseField className="field" placeholder={t('clientsArea.contact.rolePlaceholder')} value={form.role ?? ''}
           onChange={v => setForm(p => ({ ...p, role: v || null }))} />
       </FormField>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <FormField label="Phone">
+        <FormField label={t('clientsArea.contact.phone')}>
           <input className="field" value={form.phone_number ?? ''}
             onChange={e => setForm(p => ({ ...p, phone_number: e.target.value || null }))} />
         </FormField>
-        <FormField label="Email">
+        <FormField label={t('clientsArea.contact.email')}>
           <input className="field" type="email" value={form.email ?? ''}
             onChange={e => setForm(p => ({ ...p, email: e.target.value || null }))} />
         </FormField>
       </div>
-      <FormField label="Location Label">
-        <UppercaseField className="field" placeholder="e.g. Head Office, Gudang Cikarang" value={form.location_label ?? ''}
+      <FormField label={t('clientsArea.contact.locationLabel')}>
+        <UppercaseField className="field" placeholder={t('clientsArea.contact.locationPlaceholder')} value={form.location_label ?? ''}
           onChange={v => setForm(p => ({ ...p, location_label: v || null }))} />
       </FormField>
-      <FormField label="Address">
+      <FormField label={t('clientsArea.contact.address')}>
         <UppercaseField as="textarea" className="field resize-none" rows={2} value={form.address ?? ''}
           onChange={v => setForm(p => ({ ...p, address: v || null }))} />
       </FormField>
       <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
         <input type="checkbox" checked={form.is_primary}
           onChange={e => setForm(p => ({ ...p, is_primary: e.target.checked }))} />
-        Primary contact
+        {t('clientsArea.contact.primaryContact')}
       </label>
       <div className="flex gap-2 pt-1">
         <button className="btn-primary" disabled={busy} onClick={handleSubmit}>
-          {busy ? 'Saving…' : editing ? 'Update Contact' : 'Add Contact'}
+          {busy ? t('common.saving') : editing ? t('clientsArea.contact.updateContact') : t('clientsArea.contact.addContact')}
         </button>
-        <button className="btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
       </div>
     </div>
   )
@@ -80,6 +82,7 @@ function ClientContactForm({ clientId, editing, onClose }: { clientId: number; e
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const clientId = Number(id)
 
   const { data: client, isLoading: clientLoading, isError: clientError, refetch: refetchClient } = clientHooks.useGet(clientId)
@@ -107,21 +110,21 @@ export function ClientDetailPage() {
   const setTab = (next: 'contacts' | 'catalogue') => setSearchParams({ tab: next }, { replace: true })
 
   if (clientLoading) {
-    return <div className="p-4 md:p-6"><LoadingState label="Loading client…" /></div>
+    return <div className="p-4 md:p-6"><LoadingState label={t('clientsArea.loading')} /></div>
   }
   // A failed fetch shows Retry, not "Client not found".
   if (clientError) {
-    return <div className="p-4 md:p-6"><ErrorState what="this client" onRetry={() => refetchClient()} /></div>
+    return <div className="p-4 md:p-6"><ErrorState what={t('clientsArea.errorWhat')} onRetry={() => refetchClient()} /></div>
   }
   if (!client) {
-    return <div className="p-4 md:p-6"><ErrorState what="this client" /></div>
+    return <div className="p-4 md:p-6"><ErrorState what={t('clientsArea.errorWhat')} /></div>
   }
 
   return (
     <div className="p-4 md:p-6 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/clients')} className="btn-secondary !px-2.5 shrink-0" title="Back to clients">
+          <button onClick={() => navigate('/clients')} className="btn-secondary !px-2.5 shrink-0" title={t('clientsArea.backToClients')} aria-label={t('clientsArea.backToClients')}>
             <ArrowLeft size={14} />
           </button>
           <div>
@@ -134,7 +137,7 @@ export function ClientDetailPage() {
           disabled={catalogueItems.length === 0}
           className="btn-secondary inline-flex items-center gap-1.5 text-sm disabled:opacity-40"
         >
-          <Printer size={15} /> Print Price List
+          <Printer size={15} /> {t('clientsArea.printPriceList')}
         </button>
       </div>
 
@@ -152,7 +155,7 @@ export function ClientDetailPage() {
             tab === 'contacts' ? 'border-navy-900 text-navy-900 dark:text-slate-50' : 'border-transparent text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
           }`}
         >
-          Points of Contact ({contacts.length})
+          {t('clientsArea.contactsTab', { count: contacts.length })}
         </button>
         <button
           onClick={() => setTab('catalogue')}
@@ -160,13 +163,13 @@ export function ClientDetailPage() {
             tab === 'catalogue' ? 'border-navy-900 text-navy-900 dark:text-slate-50' : 'border-transparent text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
           }`}
         >
-          Catalogue & Pricing ({catalogueItems.length})
+          {t('clientsArea.catalogueTab', { count: catalogueItems.length })}
         </button>
       </div>
 
       {tab === 'contacts' && (
         <CrudPage<ClientContact>
-          title="Points of Contact"
+          title={t('clientsArea.contactsTitle')}
           icon={Users}
           data={contacts}
           isLoading={contactsLoading}
@@ -174,21 +177,21 @@ export function ClientDetailPage() {
           onRetry={refetchContacts}
           searchKeys={['name', 'role', 'location_label']}
           columns={[
-            { header: 'Name', key: 'name', render: r => (
+            { header: t('clientsArea.contact.name'), key: 'name', render: r => (
               <span className="font-medium text-navy-900 inline-flex items-center gap-1.5 dark:text-slate-100">
                 {r.name}
-                {r.is_primary && <span className="badge bg-amber-50 text-amber-700 text-[10px] dark:bg-amber-500/10 dark:text-amber-400">Primary</span>}
+                {r.is_primary && <span className="badge bg-amber-50 text-amber-700 text-[10px] dark:bg-amber-500/10 dark:text-amber-400">{t('clientsArea.contact.primary')}</span>}
               </span>
             )},
-            { header: 'Role',     key: 'role',           render: r => <span className="text-slate-500 dark:text-slate-400">{r.role ?? '—'}</span> },
-            { header: 'Phone',    key: 'phone_number',    render: r => <span className="text-slate-500 dark:text-slate-400">{r.phone_number ?? '—'}</span> },
-            { header: 'Email',    key: 'email',           render: r => <span className="text-slate-500 dark:text-slate-400">{r.email ?? '—'}</span> },
-            { header: 'Location', key: 'location_label',  render: r => <span className="text-slate-500 dark:text-slate-400">{r.location_label ?? '—'}</span> },
+            { header: t('clientsArea.contact.role'), key: 'role',           render: r => <span className="text-slate-500 dark:text-slate-400">{r.role ?? '—'}</span> },
+            { header: t('clientsArea.contact.phone'), key: 'phone_number',    render: r => <span className="text-slate-500 dark:text-slate-400">{r.phone_number ?? '—'}</span> },
+            { header: t('clientsArea.contact.email'), key: 'email',           render: r => <span className="text-slate-500 dark:text-slate-400">{r.email ?? '—'}</span> },
+            { header: t('clientsArea.contact.location'), key: 'location_label',  render: r => <span className="text-slate-500 dark:text-slate-400">{r.location_label ?? '—'}</span> },
           ]}
-          formTitle={e => e ? 'Edit Contact' : 'Add Contact'}
+          formTitle={e => e ? t('clientsArea.contact.editContact') : t('clientsArea.contact.addContact')}
           renderForm={(editing, onClose) => <ClientContactForm clientId={clientId} editing={editing} onClose={onClose} />}
           onDelete={id => delContact.mutate(id)}
-          deleteMessage={r => `Remove contact "${r.name}"?`}
+          deleteMessage={r => t('clientsArea.contact.removeConfirm', { name: r.name })}
         />
       )}
 

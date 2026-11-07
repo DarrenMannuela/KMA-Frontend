@@ -1,3 +1,4 @@
+import i18n from '@/i18n/config'
 import type { FinanceBatch, ProductionRow, OperationRow, Supplier, Order } from '@/types'
 import { CATEGORY_LABELS } from '@/constants/supplierCategories'
 import { lineTotal } from '@/hooks/finance'
@@ -100,11 +101,11 @@ const num = (s: string) => {
 /** What's wrong with a line, or null. */
 export function draftProblem(d: DraftLine, supplierIds: Set<number>): string | null {
   if (d.kind === 'production') {
-    if (!d.name.trim()) return 'Bahan is missing'
-    if (!supplierIds.has(d.supplier_id)) return 'Pick a supplier'
-    if (!(num(d.qty) > 0)) return 'Qty must be more than 0'
-  } else if (!d.category.trim()) return 'Category is missing'
-  if (!(num(d.price) >= 0) || d.price.trim() === '') return 'Price is missing'
+    if (!supplierIds.has(d.supplier_id)) return i18n.t('financeModel.problems.pickSupplier')
+    if (!d.name.trim()) return i18n.t('financeModel.problems.bahanMissing')
+    if (!(num(d.qty) > 0)) return i18n.t('financeModel.problems.qtyPositive')
+  } else if (!d.category.trim()) return i18n.t('financeModel.problems.categoryMissing')
+  if (!(num(d.price) >= 0) || d.price.trim() === '') return i18n.t('financeModel.problems.priceMissing')
   return null
 }
 

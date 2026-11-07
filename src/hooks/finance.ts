@@ -1,6 +1,7 @@
-import { createElement, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { undoToast, undoMessages } from '@/utils/undoToast'
 import { friendlyError } from '@/utils/friendlyError'
 import {
   financeHeaderApi, productionItemApi, operationItemApi, financeBatchApi, budgetApi, recurringCostApi,
@@ -124,28 +125,19 @@ function invalidateFinance(qc: QueryClient) {
 export async function undoLast(qc: QueryClient) {
   const entry = undoStack.pop()
   if (!entry) {
-    toast('Nothing to undo')
+    undoMessages.nothing()
     return
   }
   try {
     await financeBatchApi.apply(entry.batch)
-    toast.success(`Undone: ${entry.label}`)
+    undoMessages.done(entry.label)
   } catch (e) {
-    toast.error(`Couldn't undo: ${(e as Error).message}`)
+    undoMessages.failed(e)
   } finally {
     invalidateFinance(qc)
   }
 }
 
-function undoToast(label: string, qc: QueryClient) {
-  toast.success(t => createElement('span', { className: 'flex items-center gap-3' },
-    label,
-    createElement('button', {
-      className: 'text-navy-600 font-semibold hover:underline',
-      onClick: () => { toast.dismiss(t.id); undoLast(qc) },
-    }, 'Undo'),
-  ), { duration: 6000 })
-}
 
 interface BatchRequest {
   batch: FinanceBatch
@@ -170,7 +162,7 @@ export function recordBatches(qc: QueryClient, label: string, results: FinanceBa
   }
   undoStack.push({ label, batch: inverse })
   if (undoStack.length > UNDO_DEPTH) undoStack.shift()
-  undoToast(label, qc)
+  undoToast(label, () => undoLast(qc))
 }
 
 /** Saves a batch of Kas Bon changes, with Undo in its toast and on Ctrl+Z. */
@@ -267,28 +259,19 @@ function invalidateBuktiKas(qc: QueryClient) {
 async function undoLastBuktiKas(qc: QueryClient) {
   const entry = buktiKasUndoStack.pop()
   if (!entry) {
-    toast('Nothing to undo')
+    undoMessages.nothing()
     return
   }
   try {
     await buktiKasBatchApi.apply(entry.batch)
-    toast.success(`Undone: ${entry.label}`)
+    undoMessages.done(entry.label)
   } catch (e) {
-    toast.error(`Couldn't undo: ${(e as Error).message}`)
+    undoMessages.failed(e)
   } finally {
     invalidateBuktiKas(qc)
   }
 }
 
-function buktiKasUndoToast(label: string, qc: QueryClient) {
-  toast.success(t => createElement('span', { className: 'flex items-center gap-3' },
-    label,
-    createElement('button', {
-      className: 'text-navy-600 font-semibold hover:underline',
-      onClick: () => { toast.dismiss(t.id); undoLastBuktiKas(qc) },
-    }, 'Undo'),
-  ), { duration: 6000 })
-}
 
 function recordBuktiKasBatch(qc: QueryClient, label: string, result: BuktiKasBatchResult) {
   invalidateBuktiKas(qc)
@@ -299,7 +282,7 @@ function recordBuktiKasBatch(qc: QueryClient, label: string, result: BuktiKasBat
   }
   buktiKasUndoStack.push({ label, batch: inverse })
   if (buktiKasUndoStack.length > UNDO_DEPTH) buktiKasUndoStack.shift()
-  buktiKasUndoToast(label, qc)
+  undoToast(label, () => undoLastBuktiKas(qc))
 }
 
 interface BuktiKasBatchRequest {

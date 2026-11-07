@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Trash2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { formatRp } from '@/components/ui'
@@ -19,6 +20,7 @@ export function MoveDialog({ rows, headers, saving, onApply, onClose }: {
   onApply: (batch: FinanceBatch, label: string) => void
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [id, setId] = useState('')
   const [date, setDate] = useState(rows[0]?.date.slice(0, 10) || todayISODate())
   const [description, setDescription] = useState(rows[0]?.description ?? '')
@@ -28,30 +30,30 @@ export function MoveDialog({ rows, headers, saving, onApply, onClose }: {
     if (!headerId) return
     const batch = editBatch(rows, 'header_id', headerId)
     if (!target) batch.new_headers = [{ id: headerId, date, description: description.toUpperCase() }]
-    onApply(batch, `Moved ${rows.length} line${rows.length === 1 ? '' : 's'} to ${headerId}`)
+    onApply(batch, t('ledger.movedLinesTo', { count: rows.length, id: headerId }))
   }
   return (
-    <Modal title={`Move ${rows.length} line${rows.length === 1 ? '' : 's'}`} onClose={onClose} size="sm">
+    <Modal title={t('ledger.moveLinesTitle', { count: rows.length })} onClose={onClose} size="sm">
       <div className="space-y-3">
         <label className="block">
-          <span className="field-label">To Kas Bon</span>
+          <span className="field-label">{t('ledger.toKasBon')}</span>
           <input autoFocus className="field font-mono" list="move-kasbon" value={id} placeholder={suggestNextKasBonId(headers)}
             onChange={e => setId(e.target.value.toUpperCase())} onKeyDown={e => e.key === 'Enter' && apply()} />
           <datalist id="move-kasbon">{headers.slice(-300).reverse().map(h => <option key={h.id} value={h.id}>{h.description}</option>)}</datalist>
         </label>
         {id.trim() && !target && (
           <div className="rounded-lg bg-amber-50 p-3 space-y-2 dark:bg-amber-500/10">
-            <p className="text-xs text-amber-700 dark:text-amber-400">{id.trim()} is new: it will be created.</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400">{t('ledger.isNewWillBeCreated', { id: id.trim() })}</p>
             <input type="date" className="field" value={date} onChange={e => setDate(e.target.value)} />
-            <input className="field" placeholder="Description" value={description} onChange={e => setDescription(e.target.value.toUpperCase())} />
+            <input className="field" placeholder={t('ledger.columns.description')} value={description} onChange={e => setDescription(e.target.value.toUpperCase())} />
           </div>
         )}
         <button className="text-xs text-navy-600 hover:underline dark:text-navy-300" onClick={() => setId(suggestNextKasBonId(headers))}>
-          Use the next new number
+          {t('ledger.useNextNumber')}
         </button>
         <div className="flex justify-end gap-2">
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={apply} disabled={!id.trim() || saving}>Move</button>
+          <button className="btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
+          <button className="btn-primary" onClick={apply} disabled={!id.trim() || saving}>{t('ledger.move')}</button>
         </div>
       </div>
     </Modal>
@@ -69,34 +71,35 @@ export function SetFieldDialog({ rows, field, suppliers, orders, categories, sav
   onApply: (batch: FinanceBatch, label: string) => void
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [value, setValue] = useState('')
   const [error, setError] = useState('')
-  const what = { supplier_id: 'supplier', category: 'category', order_id: 'order' }[field]
+  const titleKey = { supplier_id: 'ledger.setSupplierTitle', category: 'ledger.setCategoryTitle', order_id: 'ledger.setOrderTitle' }[field]
   const apply = () => {
     const v = value.trim().toUpperCase()
     if (field === 'supplier_id') {
-      if (!value) return setError('Pick a supplier')
-      return onApply(editBatch(rows, field, Number(value)), `Set the supplier of ${rows.length} lines`)
+      if (!value) return setError(t('ledger.pickSupplier'))
+      return onApply(editBatch(rows, field, Number(value)), t('ledger.setSupplierOf', { n: rows.length }))
     }
     if (field === 'order_id') {
-      if (v && !orders.some(o => o.id === v)) return setError(`There's no order ${v}`)
-      return onApply(editBatch(rows, field, v || null), v ? `Linked ${rows.length} lines to ${v}` : `Unlinked ${rows.length} lines`)
+      if (v && !orders.some(o => o.id === v)) return setError(t('ledger.noOrder', { id: v }))
+      return onApply(editBatch(rows, field, v || null), v ? t('ledger.linkedLinesTo', { n: rows.length, id: v }) : t('ledger.unlinkedLines', { n: rows.length }))
     }
-    if (!v) return setError('Type a category')
-    onApply(editBatch(rows, field, v), `Set the category of ${rows.length} lines to ${v}`)
+    if (!v) return setError(t('ledger.typeCategory'))
+    onApply(editBatch(rows, field, v), t('ledger.setCategoryOf', { n: rows.length, value: v }))
   }
   return (
-    <Modal title={`Set the ${what} of ${rows.length} line${rows.length === 1 ? '' : 's'}`} onClose={onClose} size="sm">
+    <Modal title={t(titleKey, { count: rows.length })} onClose={onClose} size="sm">
       <div className="space-y-3">
         {field === 'supplier_id' ? (
           <select autoFocus className="field" value={value} onChange={e => setValue(e.target.value)}>
-            <option value="">Supplier…</option>
+            <option value="">{t('ledger.supplierPlaceholder')}</option>
             {suppliers.map(s => <option key={s.id} value={s.id}>{supplierWithCategory(s)}</option>)}
           </select>
         ) : (
           <>
             <input autoFocus className="field font-mono" list="set-field-options" value={value}
-              placeholder={field === 'order_id' ? 'Order ID, empty to unlink' : 'e.g. TRANSPORT'}
+              placeholder={field === 'order_id' ? t('ledger.orderIdPlaceholder') : t('ledger.categoryPlaceholder')}
               onChange={e => { setValue(e.target.value.toUpperCase()); setError('') }} onKeyDown={e => e.key === 'Enter' && apply()} />
             <datalist id="set-field-options">
               {field === 'order_id'
@@ -107,8 +110,8 @@ export function SetFieldDialog({ rows, field, suppliers, orders, categories, sav
         )}
         {error && <p className="text-xs text-red-500 dark:text-red-400">{error}</p>}
         <div className="flex justify-end gap-2">
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={apply} disabled={saving}>Apply</button>
+          <button className="btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
+          <button className="btn-primary" onClick={apply} disabled={saving}>{t('ledger.apply')}</button>
         </div>
       </div>
     </Modal>
@@ -126,6 +129,7 @@ export function LineEditor({ row, suppliers, orders, categories, saving, onApply
   onDelete: () => void
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [v, setV] = useState({
     date: row.date.slice(0, 10), description: row.description, name: row.name, supplier_id: row.supplier_id,
     category: row.category, qty: String(row.qty), unit: row.unit, price: String(row.price), order_id: row.order_id ?? '',
@@ -148,7 +152,7 @@ export function LineEditor({ row, suppliers, orders, categories, saving, onApply
 
   const save = () => {
     const order = v.order_id.trim().toUpperCase()
-    if (order && !orders.some(o => o.id === order)) return setError(`There's no order ${order}`)
+    if (order && !orders.some(o => o.id === order)) return setError(t('ledger.noOrder', { id: order }))
     const changes: [EditField, unknown][] = []
     const add = (f: EditField, now: unknown, was: unknown) => { if (now !== was) changes.push([f, now]) }
     add('name', v.name.trim().toUpperCase(), row.name)
@@ -173,28 +177,28 @@ export function LineEditor({ row, suppliers, orders, categories, saving, onApply
       batch.header_update = [{ id: row.header_id, date: v.date, description: v.description.toUpperCase() }]
     }
     if (!changes.length && !batch.header_update) return onClose()
-    onApply(batch, `Changed ${row.name || row.category}`)
+    onApply(batch, t('ledger.changedLine', { name: row.name || row.category }))
   }
 
   const total = prod ? Math.round((Number(v.price) || 0) * (Number(v.qty.replace(',', '.')) || 0)) : Number(v.price) || 0
   return (
-    <Modal title={`${row.header_id} · ${prod ? 'bahan' : 'cost'}`} onClose={onClose}>
+    <Modal title={t(prod ? 'ledger.lineEditorTitleBahan' : 'ledger.lineEditorTitleCost', { id: row.header_id })} onClose={onClose}>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <label><span className="field-label">Kas Bon date</span><input type="date" className="field" value={v.date} onChange={e => set({ date: e.target.value })} /></label>
-          <label><span className="field-label">Kas Bon description</span><input className="field" value={v.description} onChange={e => set({ description: e.target.value.toUpperCase() })} /></label>
+          <label><span className="field-label">{t('ledger.kasBonDate')}</span><input type="date" className="field" value={v.date} onChange={e => set({ date: e.target.value })} /></label>
+          <label><span className="field-label">{t('ledger.kasBonDescription')}</span><input className="field" value={v.description} onChange={e => set({ description: e.target.value.toUpperCase() })} /></label>
         </div>
         {prod ? (
           <>
-            <label className="block"><span className="field-label">Bahan</span><input className="field" value={v.name} onChange={e => set({ name: e.target.value.toUpperCase() })} /></label>
+            <label className="block"><span className="field-label">{t('ledger.columns.bahan')}</span><input className="field" value={v.name} onChange={e => set({ name: e.target.value.toUpperCase() })} /></label>
             {catalogue && catMatch && (
               <div className="-mt-1.5">
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
                   {catMatch.composition}
-                  {catMatch.widthCm != null && catMatch.rollYards != null && <> · roll {catMatch.widthCm} cm × {catMatch.rollYards} yd</>}
+                  {catMatch.widthCm != null && catMatch.rollYards != null && <> {t('ledger.rollInfo', { width: catMatch.widthCm, yards: catMatch.rollYards })}</>}
                 </p>
                 {catColors.length === 0 ? (
-                  <p className="mt-1 text-[11px] text-slate-400 italic dark:text-navy-600">No colour list recorded for this fabric yet — type the colour/code after the name if you know it.</p>
+                  <p className="mt-1 text-[11px] text-slate-400 italic dark:text-navy-600">{t('ledger.noColourList')}</p>
                 ) : (
                   <MaterialColorPicker
                     material={catMatch}
@@ -205,43 +209,43 @@ export function LineEditor({ row, suppliers, orders, categories, saving, onApply
                 )}
               </div>
             )}
-            <label className="block"><span className="field-label">Supplier</span>
+            <label className="block"><span className="field-label">{t('ledger.columns.supplier')}</span>
               <select className="field" value={v.supplier_id || ''} onChange={e => set({ supplier_id: Number(e.target.value) })}>
-                <option value="">Supplier…</option>
+                <option value="">{t('ledger.supplierPlaceholder')}</option>
                 {suppliers.map(s => <option key={s.id} value={s.id}>{supplierWithCategory(s)}</option>)}
               </select>
             </label>
             <div className="grid grid-cols-3 gap-3">
-              <label><span className="field-label">Qty</span><input className="field" inputMode="decimal" value={v.qty} onChange={e => set({ qty: e.target.value.replace(/[^\d.,]/g, '') })} /></label>
-              <label><span className="field-label">Unit</span>
+              <label><span className="field-label">{t('ledger.columns.qty')}</span><input className="field" inputMode="decimal" value={v.qty} onChange={e => set({ qty: e.target.value.replace(/[^\d.,]/g, '') })} /></label>
+              <label><span className="field-label">{t('ledger.columns.unit')}</span>
                 <select className="field" value={v.unit} onChange={e => set({ unit: e.target.value })}>
                   {[...new Set([...SI_UNITS, v.unit])].map(u => <option key={u}>{u}</option>)}
                 </select>
               </label>
-              <label><span className="field-label">Price</span><input className="field" inputMode="numeric" value={v.price} onChange={e => set({ price: e.target.value.replace(/\D/g, '') })} /></label>
+              <label><span className="field-label">{t('ledger.columns.price')}</span><input className="field" inputMode="numeric" value={v.price} onChange={e => set({ price: e.target.value.replace(/\D/g, '') })} /></label>
             </div>
           </>
         ) : (
           <>
-            <label className="block"><span className="field-label">Category</span>
+            <label className="block"><span className="field-label">{t('ledger.columns.category')}</span>
               <input className="field" list="line-categories" value={v.category} onChange={e => set({ category: e.target.value.toUpperCase() })} />
               <datalist id="line-categories">{categories.map(c => <option key={c} value={c} />)}</datalist>
             </label>
-            <label className="block"><span className="field-label">Item</span><input className="field" value={v.name} onChange={e => set({ name: e.target.value.toUpperCase() })} /></label>
-            <label className="block"><span className="field-label">Price</span><input className="field" inputMode="numeric" value={v.price} onChange={e => set({ price: e.target.value.replace(/\D/g, '') })} /></label>
+            <label className="block"><span className="field-label">{t('ledger.columns.item')}</span><input className="field" value={v.name} onChange={e => set({ name: e.target.value.toUpperCase() })} /></label>
+            <label className="block"><span className="field-label">{t('ledger.columns.price')}</span><input className="field" inputMode="numeric" value={v.price} onChange={e => set({ price: e.target.value.replace(/\D/g, '') })} /></label>
           </>
         )}
-        <label className="block"><span className="field-label">Order (optional)</span>
+        <label className="block"><span className="field-label">{t('ledger.orderOptional')}</span>
           <input className="field font-mono" list="line-orders" value={v.order_id} onChange={e => set({ order_id: e.target.value.toUpperCase() })} />
           <datalist id="line-orders">{orders.slice(-300).reverse().map(o => <option key={o.id} value={o.id}>{o.company ?? ''}</option>)}</datalist>
         </label>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Total <span className="font-mono font-semibold text-navy-900 dark:text-slate-50">{formatRp(total)}</span></p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{t('ledger.columns.total')} <span className="font-mono font-semibold text-navy-900 dark:text-slate-50">{formatRp(total)}</span></p>
         {error && <p className="text-xs text-red-500 dark:text-red-400">{error}</p>}
         <div className="flex items-center gap-2 pt-1">
-          <button className="btn-ghost text-red-600 dark:text-red-400" onClick={onDelete}><Trash2 size={14} /> Delete</button>
+          <button className="btn-ghost text-red-600 dark:text-red-400" onClick={onDelete}><Trash2 size={14} /> {t('common.delete')}</button>
           <span className="flex-1" />
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={save} disabled={saving}>Save</button>
+          <button className="btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
+          <button className="btn-primary" onClick={save} disabled={saving}>{t('common.save')}</button>
         </div>
       </div>
     </Modal>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, UppercaseField } from '@/components/ui'
 import { useCatalogueBatch } from '@/hooks/catalogue'
@@ -18,6 +19,7 @@ export function AddItemsDialog({ clientId, catalogue, year, initialName = '', in
   initialNotes?: string | null
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const save = useCatalogueBatch()
   const [name, setName] = useState(initialName)
   const [notes, setNotes] = useState<string | null>(initialNotes)
@@ -42,7 +44,7 @@ export function AddItemsDialog({ clientId, catalogue, year, initialName = '', in
   const priceOf = (s: string) => own[s] ?? allPrice
 
   const submit = () => save.mutate({
-    label: `Added ${name.trim()}${sizes.length ? ` in ${sizes.length} size${sizes.length === 1 ? '' : 's'}` : ''}`,
+    label: sizes.length ? t('catalogue.add.addedSizes', { name: name.trim(), count: sizes.length }) : t('catalogue.add.added', { name: name.trim() }),
     batch: {
       client_id: clientId,
       upsert_items: rows.map(size => ({
@@ -53,19 +55,19 @@ export function AddItemsDialog({ clientId, catalogue, year, initialName = '', in
   }, { onSuccess: onClose })
 
   return (
-    <Modal title={initialName ? `Add sizes: ${initialName}` : 'Add item'} onClose={onClose} size="md">
+    <Modal title={initialName ? t('catalogue.add.addSizesTitle', { name: initialName }) : t('catalogue.addItem')} onClose={onClose} size="md">
       <div className="space-y-4">
-        <FormField label="Item name" required>
-          <UppercaseField className="field" placeholder="e.g. Kemeja PDH lengan panjang" value={name} onChange={setName} />
+        <FormField label={t('catalogue.add.itemName')} required>
+          <UppercaseField className="field" placeholder={t('catalogue.add.itemNamePlaceholder')} value={name} onChange={setName} />
         </FormField>
         {!initialName && (
-          <FormField label="Notes">
-            <UppercaseField className="field" placeholder="Fabric, colour…" value={notes ?? ''} onChange={v => setNotes(v || null)} />
+          <FormField label={t('catalogue.item.notes')}>
+            <UppercaseField className="field" placeholder={t('catalogue.add.notesPlaceholder')} value={notes ?? ''} onChange={v => setNotes(v || null)} />
           </FormField>
         )}
 
         <div>
-          <span className="field-label">Sizes</span>
+          <span className="field-label">{t('catalogue.add.sizes')}</span>
           <div className="flex flex-wrap gap-1.5 mt-1">
             {[...new Set([...PRESET_SIZES, ...sizes])].map(s => (
               <button key={s} type="button" onClick={() => toggle(s)}
@@ -73,20 +75,20 @@ export function AddItemsDialog({ clientId, catalogue, year, initialName = '', in
                 {s}
               </button>
             ))}
-            <input className="field !w-32 !py-1 text-sm" placeholder="Other: 4XL, 15…" value={custom}
+            <input className="field !w-32 !py-1 text-sm" placeholder={t('catalogue.add.otherSizes')} value={custom}
               onChange={e => setCustom(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustom() } }}
               onBlur={addCustom} />
           </div>
-          {!sizes.length && <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">No size picked: one item without a size.</p>}
+          {!sizes.length && <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">{t('catalogue.add.noSizePicked')}</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <FormField label={sizes.length > 1 ? 'Price for every size' : 'Price'}>
-            <input className="field font-mono" inputMode="numeric" placeholder="optional"
+          <FormField label={sizes.length > 1 ? t('catalogue.add.priceEverySize') : t('orders.detail.price')}>
+            <input className="field font-mono" inputMode="numeric" placeholder={t('catalogue.add.optional')}
               value={formatThousands(allPrice)} onChange={e => setAllPrice(stripCommas(e.target.value))} />
           </FormField>
-          <FormField label="For year">
+          <FormField label={t('catalogue.add.forYear')}>
             <input className="field" type="number" value={priceYear} onChange={e => setPriceYear(Number(e.target.value) || priceYear)} />
           </FormField>
         </div>
@@ -96,25 +98,25 @@ export function AddItemsDialog({ clientId, catalogue, year, initialName = '', in
             {sizes.map(s => (
               <div key={s} className="flex items-center gap-3 px-3 py-1.5 text-sm">
                 <span className="w-14 font-medium text-navy-900 dark:text-slate-100">{s}</span>
-                <input className="field !py-1 font-mono flex-1" inputMode="numeric" placeholder={allPrice ? formatThousands(allPrice) : 'price'}
+                <input className="field !py-1 font-mono flex-1" inputMode="numeric" placeholder={allPrice ? formatThousands(allPrice) : t('catalogue.item.pricePlaceholder')}
                   value={own[s] != null ? formatThousands(own[s]) : ''}
                   onChange={e => { const v = stripCommas(e.target.value); setOwn(p => ({ ...p, [s]: v })) }}
                   onBlur={() => setOwn(p => { const n = { ...p }; if (!n[s]) delete n[s]; return n })} />
-                {existing.has(exact(name, s)) && <span className="badge-amber text-[10px]">already there: price updated</span>}
-                <button className="btn-ghost !p-1" title="Leave out" onClick={() => toggle(s)}><X size={13} /></button>
+                {existing.has(exact(name, s)) && <span className="badge-amber text-[10px]">{t('catalogue.add.alreadyThere')}</span>}
+                <button className="btn-ghost !p-1" title={t('catalogue.add.leaveOut')} aria-label={t('catalogue.add.leaveOut')} onClick={() => toggle(s)}><X size={13} /></button>
               </div>
             ))}
           </div>
         )}
         {sizes.length <= 1 && name && existing.has(exact(name, sizes[0] ?? '')) && (
-          <p className="text-xs text-amber-700 dark:text-amber-400">This item is already in the catalogue: saving sets its {priceYear} price.</p>
+          <p className="text-xs text-amber-700 dark:text-amber-400">{t('catalogue.add.alreadyInCatalogue', { year: priceYear })}</p>
         )}
 
         <div className="flex gap-2 pt-1">
           <button className="btn-primary" disabled={!name.trim() || save.isPending} onClick={submit}>
-            {save.isPending ? 'Saving…' : sizes.length > 1 ? `Add ${sizes.length} sizes` : 'Add item'}
+            {save.isPending ? t('common.saving') : sizes.length > 1 ? t('catalogue.add.addSizesButton', { count: sizes.length }) : t('catalogue.addItem')}
           </button>
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
         </div>
       </div>
     </Modal>
