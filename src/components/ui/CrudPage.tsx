@@ -1,17 +1,19 @@
-import { PageHeader, ErrorState } from './Page'
-import { useEffect, useRef, useState } from 'react'
+import { ErrorState } from './Page'
+import { useDeferredValue, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Pencil, Trash2, Search, ChevronDown, ChevronRight } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Modal } from '@/components/ui/Modal'
-import { ConfirmDialog, EditableCell, Spinner, EmptyState } from '@/components/ui'
+import { ConfirmDialog, EditableCell, EmptyState, TableSkeleton } from '@/components/ui'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useCreateOnArrival } from '@/hooks/useCreateOnArrival'
 import { undoLastDelete } from '@/hooks/crud'
 import { isTyping } from '@/utils/isTyping'
 import { useRovingCells } from '@/hooks/useRovingCells'
+
+const PAGE_ROWS = 100
 import { ScrollX } from './ScrollX'
 
 interface Column<T> {
@@ -73,6 +75,8 @@ interface CrudPageProps<T extends { id: string | number }> {
   // Same, for Add New.
   // Extra controls next to the search box (e.g. Invoices' Paid/Unpaid toggle).
   onAddClick?: () => void
+  /** Inside another page (a client's contacts tab): no page padding of its own. */
+  embedded?: boolean
   filterBar?: React.ReactNode
   /** Commits an inline edit from a column's `edit` config (see Column.edit)
    *  — e.g. `(row, key, value) => update.mutate({ id: row.id, body: { [key]: value } })`.
@@ -81,7 +85,7 @@ interface CrudPageProps<T extends { id: string | number }> {
 }
 
 export function CrudPage<T extends { id: string | number }>({
-  title, icon: Icon, data = [], isLoading, isError = false, onRetry,
+  title, icon: Icon, data = [], isLoading, isError = false, onRetry, embedded = false,
   columns, formTitle, renderForm, onDelete,
   deleteMessage, searchKeys = [], rowActions, rowHref, undoDeletes = false, onEditClick, onAddClick, filterBar, onCellEdit,
 }: CrudPageProps<T>) {
@@ -94,16 +98,23 @@ export function CrudPage<T extends { id: string | number }>({
   const [search, setSearchState] = useState(() => {
     try { return sessionStorage.getItem(searchStorageKey) ?? '' } catch { return '' }
   })
+  // Long lists show a page at a time (with "Show more"), like the Ledger:
+  // drawing 500 orders at once froze slower laptops for half a second.
+  const [limit, setLimit] = useState(PAGE_ROWS)
   const setSearch = (value: string) => {
     setSearchState(value)
+    setLimit(PAGE_ROWS)
     try { sessionStorage.setItem(searchStorageKey, value) } catch { /* private mode / quota — search just won't persist */ }
   }
+  // The box shows each keystroke at once; the list filters a beat behind.
+  const query = useDeferredValue(search)
 
-  const filtered = search
+  const filtered = query
     ? data.filter(row =>
-        searchKeys.some(k => String(row[k] ?? '').toLowerCase().includes(search.toLowerCase()))
+        searchKeys.some(k => String(row[k] ?? '').toLowerCase().includes(query.toLowerCase()))
       )
     : data
+  const pageRows = filtered.length > limit ? filtered.slice(0, limit) : filtered
 
   const openCreate = () => {
     if (onAddClick) { onAddClick(); return }
@@ -144,9 +155,9 @@ export function CrudPage<T extends { id: string | number }>({
     else cellRefs.current.delete(key)
   }
   const moveFocus = (rowId: string | number, col: number, dRow: number, dCol: number) => {
-    const i = filtered.findIndex(r => r.id === rowId)
+    const i = pageRows.findIndex(r => r.id === rowId)
     if (i < 0) return
-    const row = filtered[Math.min(Math.max(i + dRow, 0), filtered.length - 1)]
+    const row = pageRows[Math.min(Math.max(i + dRow, 0), pageRows.length - 1)]
     const c = Math.min(Math.max(col + dCol, 0), tableColumns.length - 1)
     if (row) cellRefs.current.get(`${row.id}:${c}`)?.focus()
   }
@@ -155,46 +166,45 @@ export function CrudPage<T extends { id: string | number }>({
   }
 
   return (
-    <div className="p-4 md:p-6">
-      <PageHeader
-        icon={Icon}
-        title={title}
-        subtitle={`${t('common.record', { count: filtered.length })}${search ? ` ${t('common.matchingSearch', { search })}` : ''}`}
-        actions={
+    <div className={embedded ? 'pt-4' : 'p-4 md:p-6'}>
+      {/* One toolbar instead of a second title block: the top bar already
+          names the page. The heading stays for screen readers. */}
+      <h2 className="sr-only">{title}</h2>
+      <div className="flex flex-wrap items-center gap-3 mb-4 fade-up">
+        {searchKeys.length > 0 && (
+          <div className="relative flex-1 min-w-[12rem] sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" aria-hidden />
+            <input
+              className="field !pl-9 !py-2 text-sm"
+              placeholder={t('common.searchPlaceholder', { what: title.toLowerCase() })}
+              aria-label={t('common.searchPlaceholder', { what: title.toLowerCase() })}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+        )}
+        {filterBar}
+        <div className="ml-auto flex items-center gap-3 shrink-0">
+          <span className="hidden sm:inline text-xs text-slate-500 tabular-nums dark:text-slate-400" aria-live="polite">
+            {t('common.record', { count: filtered.length })}
+          </span>
           <button className="btn-primary" onClick={openCreate}>
             <Plus className="w-4 h-4" />
             {t('common.addNew')}
           </button>
-        }
-      />
-
-      {/* Search + optional filter bar */}
-      {(searchKeys.length > 0 || filterBar) && (
-        <div className="flex items-center gap-3 mb-4 fade-up delay-1">
-          {searchKeys.length > 0 && (
-            <div className="relative w-full sm:max-w-xs flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-              <input
-                className="field !pl-9 !py-2 text-sm"
-                placeholder={t('common.searchPlaceholder', { what: title.toLowerCase() })}
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
-          )}
-          {filterBar}
         </div>
-      )}
+      </div>
 
       {/* Table */}
       <div className="card fade-up delay-2 overflow-hidden">
         {isLoading ? (
-          <Spinner />
+          <TableSkeleton columns={isMobile ? 2 : columns.filter(c => !c.mobileOnly).length + 1} />
         ) : isError ? (
           <ErrorState what={title.toLowerCase()} onRetry={onRetry} />
         ) : filtered.length === 0 ? (
           search
-            ? <EmptyState icon={Icon} title={t('common.nothingMatches', { search })} subtitle={t('common.tryAnotherSearch')} />
+            ? <EmptyState icon={Icon} title={t('common.nothingMatches', { search })} subtitle={t('common.tryAnotherSearch')}
+                action={<button className="btn-secondary btn-sm" onClick={() => setSearch('')}>{t('common.clearSearch')}</button>} />
             : <EmptyState icon={Icon} title={t('common.noItemsYet', { items: title.toLowerCase() })} subtitle={t('common.clickAddNew')} />
         ) : isMobile ? (
           // Phone width: one card per row (title column first, the rest as
@@ -203,7 +213,7 @@ export function CrudPage<T extends { id: string | number }>({
           // printing on every card — the desktop table still shows all of
           // them unconditionally, since it isn't the one doing the scrolling.
           <div className="divide-y divide-slate-100 dark:divide-navy-800">
-            {filtered.map(row => {
+            {pageRows.map(row => {
               const renderLine = (c: Column<typeof row>) => {
                 const rendered = c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—')
                 return (
@@ -284,7 +294,7 @@ export function CrudPage<T extends { id: string | number }>({
             </tr>
           </thead>
           <tbody onFocus={onGridFocus}>
-            {filtered.map(row => (
+            {pageRows.map(row => (
               <tr key={row.id}>
                 {tableColumns.map((c, ci) => (
                   <td key={String(c.key)} className={onCellEdit ? 'px-1 py-0.5' : undefined}>
@@ -338,6 +348,13 @@ export function CrudPage<T extends { id: string | number }>({
           </tbody>
         </table>
           </ScrollX>
+        )}
+        {!isLoading && !isError && filtered.length > pageRows.length && (
+          <div className="flex justify-center px-4 py-3 border-t border-slate-100 dark:border-navy-800">
+            <button className="btn-secondary btn-sm" onClick={() => setLimit(l => l + PAGE_ROWS)}>
+              {t('common.showMoreLeft', { n: filtered.length - pageRows.length })}
+            </button>
+          </div>
         )}
         {onCellEdit && !isMobile && filtered.length > 0 && (
           <div className="px-4 py-2 border-t border-slate-100 bg-slate-50/60 text-xs text-slate-500 dark:border-navy-800 dark:bg-navy-950/60 dark:text-slate-400">

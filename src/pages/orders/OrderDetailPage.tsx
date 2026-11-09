@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, Fragment } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Plus, FileText, Copy, Pencil, Building2, PackageSearch, ChevronDown, ChevronRight } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, differenceInCalendarDays } from 'date-fns'
 import { useTranslation } from 'react-i18next'
 import { ConfirmDialog, FormField, formatRp, UppercaseField } from '@/components/ui'
 import { LoadingState, ErrorState } from '@/components/ui/Page'
@@ -10,7 +10,9 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 import { orderHooks, itemHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
 import { itemsApi, invoicesApi } from '@/api'
 import { useDateLocale } from '@/i18n/dateLocale'
-import type { Item, CreateItemRequest } from '@/types'
+import type { Item, CreateItemRequest, Invoice } from '@/types'
+import { invoiceAmount } from '@/utils/invoiceAmount'
+import { orderPaymentStatus, isPastDue } from '@/utils/orderStatus'
 import { GenerateInvoiceForm } from './GenerateInvoiceForm'
 import { Modal } from '@/components/ui/Modal'
 import { OrderCosts } from '@/components/finance/OrderCosts'
@@ -188,6 +190,128 @@ function ItemForm({
   )
 }
 
+// ─── Payment panel ────────────────────────────────────────────────────────────
+// Where the order's money stands, one tile per invoice (DP and Pelunasan, or
+// the single full invoice), each with its own make/update button, so the
+// items card above only deals with items.
+function InvoiceTile({ label, invoice, allInvoices, actionLabel, onAction }: {
+  label: string
+  invoice: Invoice | null
+  allInvoices: Invoice[]
+  actionLabel: string
+  onAction: () => void
+}) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const dateLocale = useDateLocale()
+  const fmt = (d: string) => format(new Date(d), 'dd MMM yyyy', { locale: dateLocale })
+
+  let state: { text: string; className: string } | null = null
+  if (invoice) {
+    if (invoice.status === 'paid') {
+      state = { text: invoice.paid_date ? t('orders.detail.payment.paidOn', { date: fmt(invoice.paid_date) }) : t('common.paid'), className: 'text-green-700 dark:text-green-400' }
+    } else if (isPastDue(invoice)) {
+      const days = differenceInCalendarDays(new Date(), new Date(invoice.due_date!))
+      state = { text: `${t('dashboard.overdueBy', { count: days })} · ${fmt(invoice.due_date!)}`, className: 'text-red-600 font-semibold dark:text-red-400' }
+    } else {
+      state = { text: invoice.due_date ? t('orders.detail.payment.dueOn', { date: fmt(invoice.due_date) }) : t('orders.detail.payment.noDueDate'), className: 'text-slate-500 dark:text-slate-400' }
+    }
+  }
+
+  return (
+    <div className={`rounded-xl border p-3 sm:p-4 flex flex-col gap-2 sm:gap-3 min-w-0 ${invoice ? 'border-slate-200 dark:border-navy-700' : 'border-dashed border-slate-300 dark:border-navy-700'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
+          {invoice ? (
+            <button
+              type="button"
+              onClick={() => navigate(`/invoice/${encodeURIComponent(invoice.id)}`)}
+              className="font-mono text-sm text-navy-700 hover:underline dark:text-navy-200"
+              title={t('orders.detail.payment.open')}
+            >
+              {invoice.id}
+            </button>
+          ) : (
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('orders.detail.payment.notYet')}</p>
+          )}
+        </div>
+        {invoice && (
+          <span className={invoice.status === 'paid' ? 'badge-green' : isPastDue(invoice) ? 'badge-red' : 'badge-blue'}>
+            {invoice.status === 'paid' ? t('common.paid') : t('common.unpaid')}
+          </span>
+        )}
+      </div>
+      {/* Amount on the left, its button on the right; they stack only when
+          the tile is too narrow for both. */}
+      <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
+        {invoice && (
+          <div className="min-w-0">
+            <p className="currency text-lg font-semibold whitespace-nowrap text-navy-900 dark:text-slate-50">{formatRp(invoiceAmount(invoice, allInvoices))}</p>
+            {state && <p className={`text-xs ${state.className}`}>{state.text}</p>}
+          </div>
+        )}
+        <button type="button" className={`${invoice ? 'btn-secondary' : 'btn-primary'} btn-sm`} onClick={onAction}>
+          <FileText size={14} aria-hidden /> {actionLabel}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function OrderPayment({ orderId, dpInvoice, pelunasanInvoice, allInvoices, onOpenForm }: {
+  orderId: string
+  dpInvoice: Invoice | null
+  pelunasanInvoice: Invoice | null
+  allInvoices: Invoice[]
+  onOpenForm: (type: 'dp' | 'pelunasan' | 'cod') => void
+}) {
+  const { t } = useTranslation()
+  const status = orderPaymentStatus(orderId, allInvoices)
+  const full = !!dpInvoice && (dpInvoice.down_payment ?? 0) === 0
+
+  return (
+    <section className="card p-4 sm:p-5 fade-up">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h2 className="font-semibold text-navy-900 dark:text-slate-50">{t('orders.detail.payment.title')}</h2>
+        <span className={status.className}>{status.label}</span>
+      </div>
+      {!dpInvoice ? (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <p className="text-sm text-slate-500 flex-1 dark:text-slate-400">{t('orders.detail.payment.noInvoice')}</p>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn-primary" onClick={() => onOpenForm('dp')}>
+              <FileText size={14} aria-hidden /> {t('orders.detail.generateDpInvoice')}
+            </button>
+            <button className="btn-secondary" onClick={() => onOpenForm('cod')}>
+              <FileText size={14} aria-hidden /> {t('orders.detail.generateCodInvoice')}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className={`grid gap-3 ${full ? '' : 'sm:grid-cols-2'}`}>
+          <InvoiceTile
+            label={full ? t('orders.detail.payment.fullInvoice') : 'DP'}
+            invoice={dpInvoice}
+            allInvoices={allInvoices}
+            actionLabel={full ? t('orders.detail.updateInvoice') : t('orders.detail.updateDpInvoice')}
+            onAction={() => onOpenForm('dp')}
+          />
+          {!full && (
+            <InvoiceTile
+              label="Pelunasan"
+              invoice={pelunasanInvoice}
+              allInvoices={allInvoices}
+              actionLabel={pelunasanInvoice ? t('orders.detail.updatePelunasanInvoice') : t('orders.detail.generatePelunasanInvoice')}
+              onAction={() => onOpenForm('pelunasan')}
+            />
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
 export function OrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -315,6 +439,7 @@ export function OrderDetailPage() {
           <h1 className="font-display font-semibold text-navy-900 leading-tight dark:text-slate-50">{order.id}</h1>
           <p className="text-slate-400 text-xs truncate dark:text-slate-500">
             {order.company} · {order.date ? format(new Date(order.date), 'dd MMM yyyy', { locale: dateLocale }) : '—'}
+            {order.po_number && <> · PO <span className="font-mono">{order.po_number}</span></>}
             {order.client_id && (
               <>
                 {' · '}
@@ -330,31 +455,20 @@ export function OrderDetailPage() {
         </div>
       </div>
 
+      <OrderPayment
+        orderId={order.id}
+        dpInvoice={dpInvoice}
+        pelunasanInvoice={pelunasanInvoice}
+        allInvoices={allInvoices}
+        onOpenForm={setInvoiceFormType}
+      />
+
       <div className="card">
-        {/* Wraps so the up to four buttons fit at phone width. */}
         <div className="flex items-center justify-between gap-2 p-4 border-b border-slate-100 flex-wrap dark:border-navy-800">
           <h2 className="font-semibold text-navy-900 dark:text-slate-50">{t('orders.detail.orderItems', { count: orderItems.length })}</h2>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button className="btn-primary flex items-center gap-1" onClick={openAdd}>
-              <Plus size={14} /> {t('orders.detail.addItem')}
-            </button>
-            {/* COD is a starting choice that makes a 0% DP invoice; after that there's only
-               Update Invoice. */}
-            {!dpInvoice && (
-              <button className="btn-secondary flex items-center gap-1" onClick={() => setInvoiceFormType('cod')}>
-                <FileText size={14} /> {t('orders.detail.generateCodInvoice')}
-              </button>
-            )}
-            <button className="btn-secondary flex items-center gap-1" onClick={() => setInvoiceFormType('dp')}>
-              <FileText size={14} />
-              {!dpInvoice ? t('orders.detail.generateDpInvoice') : dpIsFullPayment ? t('orders.detail.updateInvoice') : t('orders.detail.updateDpInvoice')}
-            </button>
-            {dpInvoice && !dpIsFullPayment && (
-              <button className="btn-secondary flex items-center gap-1" onClick={() => setInvoiceFormType('pelunasan')}>
-                <FileText size={14} /> {pelunasanInvoice ? t('orders.detail.updatePelunasanInvoice') : t('orders.detail.generatePelunasanInvoice')}
-              </button>
-            )}
-          </div>
+          <button className="btn-primary flex items-center gap-1" onClick={openAdd}>
+            <Plus size={14} /> {t('orders.detail.addItem')}
+          </button>
         </div>
 
         {/* On phones the item form opens as a popup instead of pushing the list down. */}

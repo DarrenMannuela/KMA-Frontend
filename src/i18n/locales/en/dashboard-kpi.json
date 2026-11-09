@@ -1,0 +1,25 @@
+{
+  "dashboardKpi": {
+    "paymentStatus": {
+      "notInvoiced": "Not invoiced",
+      "awaitingPayment": "Awaiting payment",
+      "awaitingDp": "Awaiting DP",
+      "awaitingPelunasan": "Awaiting pelunasan",
+      "fullyPaid": "Fully paid",
+      "paymentOverdue": "Payment overdue",
+      "dpOverdue": "DP overdue",
+      "pelunasanOverdue": "Pelunasan overdue",
+      "overdue": "Overdue"
+    },
+    "vsMonth": "{{arrow}} {{percent}}% vs {{month}}",
+    "unchanged": "Same as {{month}}",
+    "noComparison": "Nothing in {{month}} to compare",
+    "sameDays": "Compared with the same days of {{month}}",
+    "arVsEnd": "{{arrow}} {{percent}}% vs end of {{month}}",
+    "arVsEndTitle": "Owed now, compared with what was owed at the end of {{month}}",
+    "unpaidInvoices_one": "{{count}} unpaid invoice",
+    "unpaidInvoices_other": "{{count}} unpaid invoices",
+    "overdueAmount": "{{amount}} overdue",
+    "noneOverdue": "none overdue"
+  }
+}

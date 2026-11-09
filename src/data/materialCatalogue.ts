@@ -75,11 +75,21 @@ export function supplierCatalogueFromDb(
     price: m.price,
   })
   const toColor = (c: SupplierMaterialColor): CatalogueColor => ({ code: c.code, category: c.category, hex: c.hex })
+  // Built once per material, not on every call: the sheet asks for a line's
+  // colours each time that line renders, and SAI alone has over a thousand.
+  const colorCache = new Map<string, CatalogueColor[]>()
   return {
     id: `supplier-${supplier.id}`,
     matchesSupplier: name => name === supplier.supplier_name,
     materials: materials.map(toMaterial),
-    colorsFor: material => (colorsByMaterial[material.slug] ?? []).map(toColor),
+    colorsFor: material => {
+      let colors = colorCache.get(material.slug)
+      if (!colors) {
+        colors = (colorsByMaterial[material.slug] ?? []).map(toColor)
+        colorCache.set(material.slug, colors)
+      }
+      return colors
+    },
   }
 }
 

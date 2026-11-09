@@ -131,6 +131,12 @@
   }
 }
 
+/* Ledger "Compact" rows: ~30px lines instead of ~40px. Kas Bon header rows
+   (tr.group/gh) stay roomier so each voucher still reads as a block. */
+table[data-density='compact'] tr.group > td { padding-top: 0; padding-bottom: 0; }
+table[data-density='compact'] tr.group > td > div[tabindex] { min-height: 1.75rem; padding-top: 0.1875rem; padding-bottom: 0.1875rem; }
+table[data-density='compact'] tr.group\/gh > td { padding-top: 0.375rem; padding-bottom: 0.375rem; }
+
 /* ScrollX: fade the edge(s) that have more content past them. */
 .scroll-fade[data-fade-left][data-fade-right] {
   mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);

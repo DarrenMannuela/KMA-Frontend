@@ -170,6 +170,7 @@ export function ClientDetailPage() {
       {tab === 'contacts' && (
         <CrudPage<ClientContact>
           title={t('clientsArea.contactsTitle')}
+          embedded
           icon={Users}
           data={contacts}
           isLoading={contactsLoading}

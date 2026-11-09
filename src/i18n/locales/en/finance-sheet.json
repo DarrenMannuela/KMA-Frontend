@@ -131,7 +131,10 @@
       "countOf": "{{shown}} of {{total}} colours",
       "noMatch": "No colour matches \"{{query}}\"."
     },
-    "colourChip": "Colour"
+    "colourChip": "Colour",
+    "density": "Row height",
+    "densityCompact": "Compact rows",
+    "densityComfortable": "Comfortable rows"
   },
   "kasBon": {
     "restoreDraft": "Restore the Kas Bon you were entering before?",

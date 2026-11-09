@@ -1,4 +1,4 @@
-import { useId, useRef, useLayoutEffect } from 'react'
+import { useEffect, useId, useRef, useLayoutEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2, AlertTriangle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -16,16 +16,52 @@ export function Spinner({ className = '' }: { className?: string }) {
 }
 
 // ─── EmptyState ───────────────────────────────────────────────────────────────
-export function EmptyState({ icon: Icon, title, subtitle }: {
+export function EmptyState({ icon: Icon, title, subtitle, action }: {
   icon: LucideIcon
   title: string
   subtitle?: string
+  /** The way out, e.g. "Clear search": an empty result should say how to fix it. */
+  action?: React.ReactNode
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-slate-300 dark:text-navy-700">
       <Icon className="w-12 h-12 mb-3 opacity-40" />
       <p className="font-medium text-slate-600 text-sm dark:text-slate-300">{title}</p>
       {subtitle && <p className="text-xs text-slate-500 mt-1 dark:text-slate-400">{subtitle}</p>}
+      {action && <div className="mt-4">{action}</div>}
+    </div>
+  )
+}
+
+// ─── TableSkeleton ────────────────────────────────────────────────────────────
+/** Placeholder rows shaped like the table while it loads. Shown only after a
+ *  short delay, so a fast load doesn't flash it (NN/g: no indicator under a
+ *  second; a skeleton for a full-page load). */
+export function TableSkeleton({ rows = 8, columns = 5, delay = 250, label }: { rows?: number; columns?: number; delay?: number; label?: string }) {
+  const { t } = useTranslation()
+  const [show, setShow] = useState(false)
+  useEffect(() => {
+    const id = window.setTimeout(() => setShow(true), delay)
+    return () => window.clearTimeout(id)
+  }, [delay])
+  return (
+    <div role="status" aria-live="polite" className="min-h-[24rem]">
+      <span className="sr-only">{label ?? t('common.loading')}</span>
+      {show && (
+        <div aria-hidden className="divide-y divide-slate-100 dark:divide-navy-800">
+          {Array.from({ length: rows }, (_, r) => (
+            <div key={r} className="flex items-center gap-4 px-4 py-4">
+              {Array.from({ length: columns }, (_, c) => (
+                <span
+                  key={c}
+                  className="h-3 rounded bg-slate-100 motion-safe:animate-pulse dark:bg-white/10"
+                  style={{ flex: c === 0 ? '0 0 5.5rem' : `1 1 ${[40, 28, 22, 34, 18][(r + c) % 5]}%` }}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

@@ -57,7 +57,10 @@
     "couldntUndo": "Couldn't undo: {{message}}",
     "nothingToUndo": "Nothing to undo",
     "canUndoAfter": "You can undo this right after.",
-    "undoDeleteFailed": "Couldn't put it back: {{message}}"
+    "undoDeleteFailed": "Couldn't put it back: {{message}}",
+    "showMoreLeft": "Show more ({{n}} left)",
+    "clearSearch": "Clear search",
+    "clearFilters": "Clear filters"
   },
   "sidebar": {
     "dashboard": "Dashboard",
@@ -131,7 +134,10 @@
     "addSupplier": "Add Supplier",
     "finance": "Finance",
     "soFar": "{{month}} so far",
-    "soFarVsLastMonth": "{{month}} so far · {{arrow}}{{percent}}% vs last month"
+    "soFarVsLastMonth": "{{month}} so far · {{arrow}}{{percent}}% vs last month",
+    "unpaidTitle": "Unpaid invoices",
+    "overdueCount_one": "{{count}} overdue",
+    "overdueCount_other": "{{count}} overdue"
   },
   "orders": {
     "title": "Orders",
@@ -198,7 +204,17 @@
       "editTooltip": "Edit item",
       "delete": "Delete",
       "deleteConfirm": "Delete \"{{name}}\" from this order?",
-      "errorWhat": "this order"
+      "errorWhat": "this order",
+      "payment": {
+        "title": "Payment",
+        "noInvoice": "No invoice yet. Make a DP invoice, or a COD invoice for the full amount.",
+        "fullInvoice": "Invoice",
+        "notYet": "Not made yet",
+        "paidOn": "Paid {{date}}",
+        "dueOn": "Due {{date}}",
+        "noDueDate": "No due date",
+        "open": "Open the invoice"
+      }
     },
     "itemForm": {
       "duplicatedFrom": "Duplicated from {{name}} ({{size}}) — modify as needed.",

@@ -56,7 +56,10 @@
     "couldntUndo": "Gagal mengurungkan: {{message}}",
     "nothingToUndo": "Tidak ada yang bisa diurungkan",
     "canUndoAfter": "Anda bisa mengurungkannya sesaat setelahnya.",
-    "undoDeleteFailed": "Gagal mengembalikan: {{message}}"
+    "undoDeleteFailed": "Gagal mengembalikan: {{message}}",
+    "showMoreLeft": "Tampilkan lebih banyak (sisa {{n}})",
+    "clearSearch": "Hapus pencarian",
+    "clearFilters": "Hapus filter"
   },
   "sidebar": {
     "dashboard": "Dasbor",
@@ -129,7 +132,9 @@
     "addSupplier": "Tambah Pemasok",
     "finance": "Keuangan",
     "soFar": "{{month}} sejauh ini",
-    "soFarVsLastMonth": "{{month}} sejauh ini · {{arrow}}{{percent}}% dari bulan lalu"
+    "soFarVsLastMonth": "{{month}} sejauh ini · {{arrow}}{{percent}}% dari bulan lalu",
+    "unpaidTitle": "Invoice belum dibayar",
+    "overdueCount_other": "{{count}} terlambat"
   },
   "orders": {
     "title": "Pesanan",
@@ -196,7 +201,17 @@
       "editTooltip": "Ubah barang",
       "delete": "Hapus",
       "deleteConfirm": "Hapus \"{{name}}\" dari pesanan ini?",
-      "errorWhat": "pesanan ini"
+      "errorWhat": "pesanan ini",
+      "payment": {
+        "title": "Pembayaran",
+        "noInvoice": "Belum ada invoice. Buat invoice DP, atau invoice COD untuk jumlah penuh.",
+        "fullInvoice": "Invoice",
+        "notYet": "Belum dibuat",
+        "paidOn": "Dibayar {{date}}",
+        "dueOn": "Jatuh tempo {{date}}",
+        "noDueDate": "Tanpa jatuh tempo",
+        "open": "Buka invoice"
+      }
     },
     "itemForm": {
       "duplicatedFrom": "Diduplikasi dari {{name}} ({{size}}) — ubah sesuai kebutuhan.",

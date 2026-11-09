@@ -350,7 +350,9 @@ export function FinancePage() {
         )}
       </Card>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
+      {/* Side by side only where both fit whole: at laptop widths the two
+          tables cut off their last columns (Owed, Profit). */}
+      <div className="grid grid-cols-1 min-[1760px]:grid-cols-2 gap-5 items-start">
         <Card title={t('financeOverview.clientsInPeriod', { period: periodLabel(period) })} bodyClassName="p-5">
           {!byClient.length ? <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">{t('financeOverview.noOrdersInPeriod')}</p> : (
             <>
@@ -360,7 +362,7 @@ export function FinancePage() {
                 <tbody>
                   {(showAllClients ? byClient : byClient.slice(0, ROW_PREVIEW)).map(c => (
                     <tr key={c.key} className={c.clientId != null ? 'cursor-pointer' : ''} onClick={() => c.clientId != null && navigate(`/clients/${c.clientId}`)}>
-                      <td className="font-medium truncate max-w-[12rem]">{c.name}</td>
+                      <td className="font-medium truncate max-w-[20rem]">{c.name}</td>
                       <td className="!text-right">{c.orders}</td>
                       <td className="!text-right font-mono tabular-nums">{shortRp(c.value)}</td>
                       <td className="!text-right font-mono tabular-nums text-slate-500 dark:text-slate-400">{shortRp(c.costs)}</td>

@@ -71,19 +71,19 @@ Start the three stacks in order: KMA (it creates `kma_network`), KMA-Auth, then 
 
 ## Features
 
-- **Dashboard** — AR receivable; this month's orders, deliveries and costs (against last month); recent orders, overdue invoices, this-month orders vs. costs.
+- **Dashboard** — AR receivable; this month's orders, deliveries and costs (against last month); unpaid invoices, overdue first, with a WhatsApp reminder for overdue ones; recent orders; this month's orders vs. costs.
 - **Clients** — company records, contacts, and a per-client catalogue:
   - Items grouped by name with their sizes, each size's price for a year next to the year before (edited in place), and what the client has ordered of it.
   - Raise prices for a year in one go (by % or Rp, rounded up), add an item in all its sizes, copy another client's items, add items that were ordered but never listed, and Excel export/import in the same layout. Every change can be undone (toast or Ctrl+Z).
   - Each item's page has its prices by year and every order of it next to that year's catalogue price; the printed price list is for a chosen year.
   - Orders pick the catalogue price for the order's year, so prices already set for next year don't leak in.
-- **Orders** — order + item management, linked to a client or freeform company info; the list shows each order's value and payment status, newest first.
+- **Orders** — order + item management, linked to a client or freeform company info; the list shows each order's value and payment status (blue while waiting for payment, red once overdue, green when paid), newest first. An order's page starts with its payment: the DP and Pelunasan invoices (or the one full invoice), each with its amount, due or paid date, and its own button to make or update it. Long lists on every list page show 100 rows at a time with "Show more".
 - **Invoices** — DP/Pelunasan generation off an order, a print-ready invoice layout with manual/predicted page breaks, and a matching Kwitansi (receipt) print view.
 - **Delivery** — Delivery Order (DO) and Surat Jalan (SJ) tracking with per-box item packing, and a print view for both document types.
 - **Finance section** — one area with tabs: Overview · Production · Operations · Budgets & recurring · Suppliers.
 - **Production / Operations** — Kas Bon–based spend tracking (materials by supplier, operating costs by category). Each opens straight on its sheet, with the month's total, the comparison and budget on top, and spend per supplier/category as bars that filter the sheet:
   - search across all months, filter by supplier/category/order, group by Kas Bon, supplier/category or order, sort any column;
-  - edit cells in place (arrow keys move, typing replaces; the whole sheet is one Tab stop), select rows (Shift+Space, or shift-click for a range) to move them to another Kas Bon, set a supplier/category/order, copy, export or delete them;
+  - edit cells in place (arrow keys move, typing replaces; the whole sheet is one Tab stop), switch between Comfortable and Compact rows (remembered in the browser), select rows (Shift+Space, or shift-click for a range) to move them to another Kas Bon, set a supplier/category/order, copy, export or delete them;
   - every change can be undone (the toast's Undo, or Ctrl+Z);
   - **New Kas Bon** enters a whole Kas Bon at once, production and operation lines together; Enter adds the next line;
   - copy rows in Excel and press Ctrl+V on the sheet (or into a line of the form) to bring them in;

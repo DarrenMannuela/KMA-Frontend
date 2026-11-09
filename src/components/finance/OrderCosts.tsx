@@ -34,12 +34,14 @@ export function OrderCosts({ orderId, value }: { orderId: string; value: number 
           <button className="btn-ghost btn-sm" onClick={() => open('operations')}>{t('orderCosts.operationLines')}</button>
         </span>
       </div>
-      <div className="grid grid-cols-3 gap-3 mb-3">
-        <div><div className="text-xs text-slate-500 dark:text-slate-400">{t('orderCosts.orderValue')}</div><div className="font-mono text-navy-900 dark:text-slate-50">{formatRp(value)}</div></div>
-        <div><div className="text-xs text-slate-500 dark:text-slate-400">{t('orderCosts.linkedCosts')}</div><div className="font-mono text-slate-700 dark:text-slate-300">{formatRp(costs)}</div></div>
-        <div>
+      {/* Label beside its amount on a phone, where three columns squeezed
+          the amounts onto two lines; three columns from sm up. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 sm:gap-3 mb-3">
+        <div className="flex items-baseline justify-between gap-3 sm:block"><div className="text-xs text-slate-500 dark:text-slate-400">{t('orderCosts.orderValue')}</div><div className="font-mono whitespace-nowrap text-navy-900 dark:text-slate-50">{formatRp(value)}</div></div>
+        <div className="flex items-baseline justify-between gap-3 sm:block"><div className="text-xs text-slate-500 dark:text-slate-400">{t('orderCosts.linkedCosts')}</div><div className="font-mono whitespace-nowrap text-slate-700 dark:text-slate-300">{formatRp(costs)}</div></div>
+        <div className="flex items-baseline justify-between gap-3 sm:block">
           <div className="text-xs text-slate-500 dark:text-slate-400">{t('common.profit')}</div>
-          <div className={`font-mono font-semibold ${profit < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
+          <div className={`font-mono font-semibold whitespace-nowrap ${profit < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
             {formatRp(profit)} {value > 0 && <span className="text-xs font-normal text-slate-500 dark:text-slate-400">{Math.round((profit / value) * 100)}%</span>}
           </div>
         </div>

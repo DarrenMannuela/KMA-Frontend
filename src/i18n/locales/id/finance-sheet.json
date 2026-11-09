@@ -122,7 +122,10 @@
       "countOf": "{{shown}} dari {{total}} warna",
       "noMatch": "Tidak ada warna yang cocok dengan \"{{query}}\"."
     },
-    "colourChip": "Warna"
+    "colourChip": "Warna",
+    "density": "Tinggi baris",
+    "densityCompact": "Baris rapat",
+    "densityComfortable": "Baris lega"
   },
   "kasBon": {
     "restoreDraft": "Pulihkan Kas Bon yang sedang Anda isi sebelumnya?",

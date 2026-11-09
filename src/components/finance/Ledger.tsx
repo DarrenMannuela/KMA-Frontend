@@ -1,14 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { Trans, useTranslation } from 'react-i18next'
 import {
-  ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, FileUp, Link2, Plus, Printer, Search, Trash2, X,
+  ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, FileUp, Link2, Plus, Printer, Rows2, Rows3, Search, Trash2, X,
   ArrowRightLeft, Tag, Copy, CheckSquare,
 } from 'lucide-react'
-import { EditableCell, formatRp } from '@/components/ui'
-import { LoadingState, ErrorState } from '@/components/ui/Page'
+import { EditableCell, TableSkeleton, formatRp } from '@/components/ui'
+import { ErrorState } from '@/components/ui/Page'
 import { ScrollX } from '@/components/ui/ScrollX'
 import { ConfirmDialog } from '@/components/ui'
 import {
@@ -42,6 +42,97 @@ import { useRovingCells } from '@/hooks/useRovingCells'
 
 type GroupBy = 'kasbon' | 'group' | 'order' | 'none'
 type SortKey = 'header_id' | 'date' | 'name' | 'group' | 'qty' | 'price' | 'total' | 'order_id'
+
+interface LedgerCol {
+  key: string
+  header: string
+  width: string
+  sortKey?: SortKey
+  align?: 'right'
+  field?: EditField
+  type?: 'text' | 'number' | 'select' | 'date'
+  options?: { value: string | number; label: string }[]
+  suggestions?: string[]
+  value: (r: LedgerRow) => string | number
+  render?: (r: LedgerRow) => React.ReactNode
+}
+
+// Plain numbers in the sheet's cells: the column header says "(Rp)" once,
+// the way their Excel sheet does, instead of every cell repeating it.
+const amount = (v: number) => v.toLocaleString('id-ID')
+const money = (v: number) => <span className="font-mono tabular-nums">{amount(v)}</span>
+
+/** Everything a sheet line shows, so an unchanged line can be recognised. */
+const rowSignature = (r: LedgerRow) =>
+  [r.header_id, r.date, r.description, r.name, r.supplier_id, r.category, r.qty, r.unit, r.price, r.total, r.order_id ?? ''].join('\u0000')
+
+interface LineActions {
+  toggle: (id: number, shift: boolean) => void
+  edit: (r: LedgerRow, field: EditField, value: unknown) => void
+  move: (rowId: number, col: number, dRow: number, dCol: number) => void
+  confirmDelete: (r: LedgerRow) => void
+  cellRef: (key: string) => (el: HTMLElement | null) => void
+}
+
+const ARROWS: Record<string, [number, number]> = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }
+
+/** One sheet line. Memoised: a save, a keystroke in the search box or a
+ *  selection elsewhere re-renders only the lines whose data, columns or
+ *  selection actually changed, not every line of the month. */
+const LedgerLine = React.memo(function LedgerLine({ r, columns, isSelected, actions }: {
+  r: LedgerRow
+  columns: LedgerCol[]
+  isSelected: boolean
+  actions: LineActions
+}) {
+  const { t } = useTranslation()
+  return (
+    <tr className={`group ${isSelected ? 'bg-navy-50' : 'bg-white hover:bg-slate-50 dark:bg-transparent dark:hover:bg-white/5'}`}>
+      <td className="border border-slate-200 px-2 py-2 dark:border-navy-800">
+        <input
+          type="checkbox" tabIndex={-1} aria-label={t('ledger.selectLine')} checked={isSelected} onChange={() => undefined} onClick={e => actions.toggle(r.id, e.shiftKey)}
+          className={`block transition-opacity ${isSelected ? '' : 'can-hover:opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
+        />
+      </td>
+      {columns.map((c, ci) => (
+        <td key={c.key} className={`border border-slate-200 px-1 py-0.5 truncate dark:border-navy-800 ${c.align === 'right' ? 'text-right' : ''}`}>
+          {c.field ? (
+            <EditableCell
+              value={c.value(r)}
+              type={c.type}
+              options={c.options}
+              suggestions={c.suggestions}
+              allowDecimal={c.field === 'qty'}
+              uppercase={c.type === 'text'}
+              placeholder="—"
+              format={() => (c.render ? c.render(r) : c.value(r))}
+              onSave={v => actions.edit(r, c.field!, v)}
+              cellRef={actions.cellRef(`${r.id}:${ci}`)}
+              tabIndex={-1}
+              onNavigate={(dr, dc) => actions.move(r.id, ci, dr, dc)}
+            />
+          ) : (
+            <div ref={actions.cellRef(`${r.id}:${ci}`)} tabIndex={-1} className="px-2.5 py-1.5 min-h-[2rem] flex items-center focus:outline-none focus:bg-navy-50/50 rounded-sm"
+              onKeyDown={e => {
+                const d = ARROWS[e.key]
+                if (d) { e.preventDefault(); actions.move(r.id, ci, d[0], d[1]) }
+              }}>
+              {c.render ? c.render(r) : c.value(r)}
+            </div>
+          )}
+        </td>
+      ))}
+      <td className="border border-slate-200 px-1 text-center dark:border-navy-800">
+        {/* Every field in this row, including the Kas Bon's own date and
+           description above, is a direct click away in its own cell; delete
+           is the one action left with no cell of its own. */}
+        <button onClick={() => actions.confirmDelete(r)} tabIndex={-1} className="text-slate-400 hover:text-red-500 can-hover:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 dark:text-slate-500" title={t('ledger.deleteLine')} aria-label={t('ledger.deleteLine')}>
+          <Trash2 size={14} />
+        </button>
+      </td>
+    </tr>
+  )
+})
 interface Sort { key: SortKey; dir: 'asc' | 'desc' }
 
 export interface LedgerFilters {
@@ -55,6 +146,7 @@ export interface LedgerFilters {
 }
 
 const PAGE = 400
+const DENSITY_KEY = 'kma.ledger.density'
 
 /** "05/KB/26" sorts after "04/KB/26" and after "99/KB/25". */
 function kasBonOrder(id: string): number {
@@ -97,6 +189,7 @@ export function Ledger({ kind, initial, title }: {
   const { data: budgets = [] } = useBudgets()
   const batch = useFinanceBatch()
 
+  const [limit, setLimit] = useState(PAGE)
   const [filters, setFilters] = useState<LedgerFilters>(() => {
     const saved = loadPrefs(kind)
     return {
@@ -106,7 +199,7 @@ export function Ledger({ kind, initial, title }: {
       ...initial,
     }
   })
-  const setFilter = <K extends keyof LedgerFilters>(k: K, v: LedgerFilters[K]) => setFilters(f => ({ ...f, [k]: v }))
+  const setFilter = <K extends keyof LedgerFilters>(k: K, v: LedgerFilters[K]) => { setFilters(f => ({ ...f, [k]: v })); setLimit(PAGE) }
   useEffect(() => {
     try {
       localStorage.setItem(prefKey(kind), JSON.stringify({ groupBy: filters.groupBy, period: { mode: filters.period.mode } }))
@@ -116,7 +209,6 @@ export function Ledger({ kind, initial, title }: {
   const [sort, setSort] = useState<Sort>({ key: 'date', dir: 'desc' })
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-  const [limit, setLimit] = useState(PAGE)
   const [form, setForm] = useState<{ headerId?: string; lines?: DraftLine[] } | null>(null)
   useCreateOnArrival(() => setForm({}))
   const [importGrid, setImportGrid] = useState<Grid | null | undefined>(undefined)
@@ -132,13 +224,38 @@ export function Ledger({ kind, initial, title }: {
   // mis-click, just the one small icon.
   const [confirmDeleteRow, setConfirmDeleteRow] = useState<LedgerRow | null>(null)
   const [selectMode, setSelectMode] = useState(false)
+  // Row height for the desktop sheet, remembered in this browser: Compact
+  // (~30px lines) fits a month on screen, Comfortable is easier to aim at.
+  const [density, setDensityState] = useState<'comfortable' | 'compact'>(() => {
+    try { return localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable' } catch { return 'comfortable' }
+  })
+  const setDensity = (d: 'comfortable' | 'compact') => {
+    setDensityState(d)
+    try { localStorage.setItem(DENSITY_KEY, d) } catch { /* private mode: just not remembered */ }
+  }
+  const filtersActive = !!filters.q || !!filters.group || filters.order !== 'any'
+  const clearFilters = () => { setFilters(f => ({ ...f, q: '', group: '', order: 'any' })); setLimit(PAGE) }
   const searchRef = useRef<HTMLInputElement>(null)
   const lastClicked = useRef<number | null>(null)
 
-  const allRows = useMemo<LedgerRow[]>(
-    () => (kind === 'production' ? production.data.map(fromProduction) : operations.data.map(fromOperation)),
-    [kind, production.data, operations.data],
-  )
+  // A refetch rebuilds every line object (items are joined to their Kas Bon
+  // header), so a line whose data hasn't changed keeps its previous object:
+  // the memoised LedgerLine then skips it, and a save re-renders only what
+  // actually changed instead of the whole month.
+  const rowCache = useRef(new Map<number, { sig: string; row: LedgerRow }>())
+  const allRows = useMemo<LedgerRow[]>(() => {
+    const built = kind === 'production' ? production.data.map(fromProduction) : operations.data.map(fromOperation)
+    const next = new Map<number, { sig: string; row: LedgerRow }>()
+    const out = built.map(row => {
+      const sig = rowSignature(row)
+      const hit = rowCache.current.get(row.id)
+      const keep = hit && hit.sig === sig ? hit.row : row
+      next.set(row.id, { sig, row: keep })
+      return keep
+    })
+    rowCache.current = next
+    return out
+  }, [kind, production.data, operations.data])
   const otherCount = useMemo(() => {
     const counts = new Map<string, number>()
     for (const r of kind === 'production' ? operations.data : production.data) counts.set(r.header_id, (counts.get(r.header_id) ?? 0) + 1)
@@ -154,18 +271,21 @@ export function Ledger({ kind, initial, title }: {
   // ── Filtering ──────────────────────────────────────────────────────────────
   const texts = useMemo(() => new Map(allRows.map(r => [r.id, searchText(r, suppliers, orders)])), [allRows, suppliers, orders])
   const groupOf = useCallback((r: LedgerRow) => (kind === 'production' ? String(r.supplier_id) : r.category), [kind])
+  // The search box shows each keystroke at once; filtering the sheet uses the
+  // deferred copy, so typing never waits on a year of lines being re-filtered.
+  const q = useDeferredValue(filters.q)
   const passesBase = useCallback((r: LedgerRow, period: Period) => {
     if (!inPeriod(r.date, period)) return false
     if (filters.order === 'none' && r.order_id) return false
     if (filters.order === 'linked' && !r.order_id) return false
     if (!['any', 'none', 'linked'].includes(filters.order) && r.order_id !== filters.order) return false
-    return !filters.q || matchesSearch(texts.get(r.id) ?? '', filters.q)
-  }, [filters, texts])
+    return !q || matchesSearch(texts.get(r.id) ?? '', q)
+  }, [filters.order, q, texts])
   const passes = useCallback((r: LedgerRow, period: Period) =>
     passesBase(r, period) && (!filters.group || groupOf(r) === filters.group), [passesBase, filters.group, groupOf])
 
   // A search looks through every month; the period still applies otherwise.
-  const searching = !!filters.q.trim() && filters.period.mode === 'month'
+  const searching = !!q.trim() && filters.period.mode === 'month'
   const searchPeriod = useMemo<Period>(() => (searching ? { ...filters.period, mode: 'all' } : filters.period), [searching, filters.period])
   const visible = useMemo(() => allRows.filter(r => passes(r, searchPeriod)), [allRows, passes, searchPeriod])
   // Spend per supplier (or category) for everything else in the filters, to
@@ -213,7 +333,12 @@ export function Ledger({ kind, initial, title }: {
     const keyOf = (r: LedgerRow) =>
       filters.groupBy === 'kasbon' ? r.header_id : filters.groupBy === 'order' ? r.order_id ?? '' : kind === 'production' ? String(r.supplier_id) : r.category
     const map = new Map<string, LedgerRow[]>()
-    for (const r of sorted) map.set(keyOf(r), [...(map.get(keyOf(r)) ?? []), r])
+    for (const r of sorted) {
+      const k = keyOf(r)
+      const list = map.get(k)
+      if (list) list.push(r)
+      else map.set(k, [r])
+    }
     const list = [...map.entries()].map(([key, rows]) => ({ key, rows }))
     // Kas Bons keep the rows' order; other groupings put the biggest first.
     if (filters.groupBy !== 'kasbon') list.sort((a, b) => b.rows.reduce((n, r) => n + r.total, 0) - a.rows.reduce((n, r) => n + r.total, 0))
@@ -284,16 +409,15 @@ export function Ledger({ kind, initial, title }: {
       return next.size === s.size ? s : next
     })
   }, [allRows])
-  useEffect(() => setLimit(PAGE), [filters])
 
   // The budget for what's shown, when there is one for exactly that.
   const budget = useMemo(() => {
-    if (filters.period.mode !== 'month' || filters.q || filters.order !== 'any') return null
+    if (filters.period.mode !== 'month' || q || filters.order !== 'any') return null
     const scopeBudgets = budgets.filter(b => b.scope === kind)
     if (kind === 'operation') return scopeBudgets.find(b => b.category === (filters.group || ''))?.amount ?? null
     if (filters.group) return null
     return scopeBudgets.find(b => b.category === '')?.amount ?? null
-  }, [budgets, kind, filters])
+  }, [budgets, kind, filters, q])
 
   // ── Changes ────────────────────────────────────────────────────────────────
   const apply = (b: FinanceBatch, label: string, after?: () => void) =>
@@ -418,36 +542,32 @@ export function Ledger({ kind, initial, title }: {
       return
     }
   }
-  const cellRef = (key: string) => (el: HTMLElement | null) => {
-    if (el) cellRefs.current.set(key, el)
-    else cellRefs.current.delete(key)
+  // The same callback for a cell on every render: a fresh one each time made
+  // React detach and re-attach every cell's ref (thousands) on each render.
+  const refCallbacks = useRef(new Map<string, (el: HTMLElement | null) => void>())
+  const cellRef = (key: string) => {
+    let cb = refCallbacks.current.get(key)
+    if (!cb) {
+      cb = (el: HTMLElement | null) => {
+        if (el) cellRefs.current.set(key, el)
+        else cellRefs.current.delete(key)
+      }
+      refCallbacks.current.set(key, cb)
+    }
+    return cb
   }
 
   // ── Columns ────────────────────────────────────────────────────────────────
-  const supplierOptions = suppliers.map(s => ({ value: s.id, label: supplierWithCategory(s) }))
-  const unitOptions = [...new Set([...SI_UNITS, ...allRows.map(r => r.unit).filter(Boolean)])].map(u => ({ value: u, label: u }))
+  const supplierOptions = useMemo(() => suppliers.map(s => ({ value: s.id, label: supplierWithCategory(s) })), [suppliers])
+  // Keyed on the unit names themselves, so a save that doesn't add a new unit
+  // keeps the same options (and the same columns) as before.
+  const unitKey = [...new Set([...SI_UNITS, ...allRows.map(r => r.unit).filter(Boolean)])].join('\u0000')
+  const unitOptions = useMemo(() => unitKey.split('\u0000').map(u => ({ value: u, label: u })), [unitKey])
   const orderSuggestions = useMemo(() => orders.slice(-300).map(o => o.id).reverse(), [orders])
   const headerSuggestions = useMemo(() => headers.slice(-300).map(h => h.id).reverse(), [headers])
   const byKasBon = filters.groupBy === 'kasbon'
 
-  interface Col {
-    key: string
-    header: string
-    width: string
-    sortKey?: SortKey
-    align?: 'right'
-    field?: EditField
-    type?: 'text' | 'number' | 'select' | 'date'
-    options?: { value: string | number; label: string }[]
-    suggestions?: string[]
-    value: (r: LedgerRow) => string | number
-    render?: (r: LedgerRow) => React.ReactNode
-  }
-  // Plain numbers in the sheet's cells: the column header says "(Rp)" once,
-  // the way their Excel sheet does, instead of every cell repeating it.
-  const amount = (v: number) => v.toLocaleString('id-ID')
-  const money = (v: number) => <span className="font-mono tabular-nums">{amount(v)}</span>
-  const columns: Col[] = [
+  const columns = useMemo<LedgerCol[]>(() => [
     ...(!byKasBon ? [
       { key: 'header_id', header: t('ledger.columns.kasBon'), width: '6.5rem', sortKey: 'header_id' as SortKey, field: 'header_id' as EditField, type: 'text' as const, suggestions: headerSuggestions, value: (r: LedgerRow) => r.header_id, render: (r: LedgerRow) => <span className="font-mono text-xs">{r.header_id}</span> },
       { key: 'date', header: t('common.date'), width: '6.5rem', sortKey: 'date' as SortKey, field: 'date' as EditField, type: 'date' as const, value: (r: LedgerRow) => r.date.slice(0, 10), render: (r: LedgerRow) => <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{formatDateShort(r.date)}</span> },
@@ -514,7 +634,7 @@ export function Ledger({ kind, initial, title }: {
     ...(kind === 'production' ? [{ key: 'total', header: `${t('ledger.columns.total')} (Rp)`, width: '8rem', sortKey: 'total' as SortKey, align: 'right' as const, value: (r: LedgerRow) => r.total, render: (r: LedgerRow) => <span className="font-mono tabular-nums font-semibold">{amount(r.total)}</span> }] : []),
     { key: 'order', header: t('ledger.columns.order'), width: '8rem', sortKey: 'order_id', field: 'order_id', type: 'text', suggestions: orderSuggestions, value: r => r.order_id ?? '',
       render: r => (r.order_id ? <span className="font-mono text-xs text-navy-700 dark:text-slate-200" title={orderLabel(orders, r.order_id)}>{r.order_id}</span> : <span className="text-slate-300 dark:text-navy-700">—</span>) },
-  ]
+  ], [byKasBon, kind, t, headerSuggestions, suppliers, catalogues, supplierOptions, unitOptions, categories, orderSuggestions, orders])
   // The checkbox and actions columns (2.25rem each) plus every fixed-width column.
   const fixedRem = 4.5 + columns.reduce((n, c) => n + (c.width.endsWith('rem') ? parseFloat(c.width) : 0), 0)
 
@@ -525,10 +645,22 @@ export function Ledger({ kind, initial, title }: {
     if (row) cellRefs.current.get(`${row.id}:${c}`)?.focus()
   }
 
+  // Stable handlers for the memoised lines: the same object every render,
+  // always calling the latest closures (which see the current rows/filters).
+  const lineActionsRef = useRef<LineActions | null>(null)
+  lineActionsRef.current = { toggle, edit: editRow, move: moveFocus, confirmDelete: setConfirmDeleteRow, cellRef }
+  const lineActions = useMemo<LineActions>(() => ({
+    toggle: (id, shift) => lineActionsRef.current!.toggle(id, shift),
+    edit: (r, field, value) => lineActionsRef.current!.edit(r, field, value),
+    move: (rowId, col, dRow, dCol) => lineActionsRef.current!.move(rowId, col, dRow, dCol),
+    confirmDelete: r => lineActionsRef.current!.confirmDelete(r),
+    cellRef: key => lineActionsRef.current!.cellRef(key),
+  }), [])
+
   const sortBy = (key?: SortKey) => key && setSort(s => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'date' || key === 'total' || key === 'price' ? 'desc' : 'asc' }))
 
   // ── Rendering ──────────────────────────────────────────────────────────────
-  if (source.isLoading) return <LoadingState label={kind === 'production' ? t('ledger.loadingProduction') : t('ledger.loadingOperation')} />
+  if (source.isLoading) return <div className="p-4 md:p-6"><div className="card"><TableSkeleton rows={12} columns={7} label={kind === 'production' ? t('ledger.loadingProduction') : t('ledger.loadingOperation')} /></div></div>
   if (source.isError) return <div className="p-4 md:p-6"><div className="card"><ErrorState what={kind === 'production' ? t('ledger.errorProduction') : t('ledger.errorOperation')} onRetry={() => source.refetch()} /></div></div>
 
   // The group's running sum: a separate value from the label content below,
@@ -751,6 +883,9 @@ export function Ledger({ kind, initial, title }: {
         <div className="card p-10 text-center text-sm text-slate-500 dark:text-slate-400">
           {allRows.length ? t('ledger.nothingMatches') : t('ledger.noLinesYet')}
           <div className="mt-3 flex justify-center gap-2">
+            {allRows.length > 0 && filtersActive && (
+              <button className="btn-secondary btn-sm" onClick={clearFilters}><X size={14} /> {t('common.clearFilters')}</button>
+            )}
             <button className="btn-primary btn-sm" onClick={() => setForm({})}><Plus size={14} /> {t('ledger.newKasBon')}</button>
             <button className="btn-secondary btn-sm" onClick={() => setImportGrid(null)}><FileUp size={14} /> {t('ledger.import')}</button>
           </div>
@@ -823,7 +958,7 @@ export function Ledger({ kind, initial, title }: {
                width, but never narrower than the fixed columns plus Bahan's
                12rem floor, below which it scrolls instead. The 2px leaves room
                for the collapsed outer gridlines, which otherwise add a scrollbar. */}
-            <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: `max(calc(100% - 2px), ${fixedRem + 12}rem)` }}>
+            <table data-density={density} className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: `max(calc(100% - 2px), ${fixedRem + 12}rem)` }}>
               <colgroup>
                 <col style={{ width: '2.25rem' }} />
                 {/* 'auto' (Bahan/Item) gets a floor, not left unconstrained: with
@@ -935,54 +1070,7 @@ export function Ledger({ kind, initial, title }: {
                          own default look; the grid lines alone carry row/column
                          separation, the way they do in an actual sheet. */}
                       {rows.map(r => (
-                        <tr key={r.id} className={`group ${selected.has(r.id) ? 'bg-navy-50' : 'bg-white hover:bg-slate-50 dark:bg-transparent dark:hover:bg-white/5'}`}>
-                          <td className="border border-slate-200 px-2 py-2 dark:border-navy-800">
-                            <input
-                              type="checkbox" tabIndex={-1} aria-label={t('ledger.selectLine')} checked={selected.has(r.id)} onChange={() => undefined} onClick={e => toggle(r.id, e.shiftKey)}
-                              className={`block transition-opacity ${selected.has(r.id) ? '' : 'can-hover:opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
-                            />
-                          </td>
-                          {columns.map((c, ci) => (
-                            <td key={c.key} className={`border border-slate-200 px-1 py-0.5 truncate dark:border-navy-800 ${c.align === 'right' ? 'text-right' : ''}`}>
-                              {c.field ? (
-                                <EditableCell
-                                  value={c.value(r)}
-                                  type={c.type}
-                                  options={c.options}
-                                  suggestions={c.suggestions}
-                                  allowDecimal={c.field === 'qty'}
-                                  uppercase={c.type === 'text'}
-                                  placeholder="—"
-                                  format={() => (c.render ? c.render(r) : c.value(r))}
-                                  onSave={v => editRow(r, c.field!, v)}
-                                  cellRef={cellRef(`${r.id}:${ci}`)}
-                                  tabIndex={-1}
-                                  onNavigate={(dr, dc) => moveFocus(r.id, ci, dr, dc)}
-                                />
-                              ) : (
-                                <div ref={cellRef(`${r.id}:${ci}`)} tabIndex={-1} className="px-2.5 py-1.5 min-h-[2rem] flex items-center focus:outline-none focus:bg-navy-50/50 rounded-sm"
-                                  onKeyDown={e => {
-                                    const d = ({ ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] } as Record<string, [number, number]>)[e.key]
-                                    if (d) { e.preventDefault(); moveFocus(r.id, ci, d[0], d[1]) }
-                                  }}>
-                                  {c.render ? c.render(r) : c.value(r)}
-                                </div>
-                              )}
-                            </td>
-                          ))}
-                          <td className="border border-slate-200 px-1 text-center dark:border-navy-800">
-                            {/* Every field in this row, including the Kas
-                               Bon's own date/description above, is already
-                               a direct click away (its own cell, or the
-                               Bahan swatch for colour) — a separate Edit-line
-                               button only duplicated whichever one of those
-                               was fastest, so delete is the one action left
-                               that has no cell of its own to live in. */}
-                            <button onClick={() => setConfirmDeleteRow(r)} tabIndex={-1} className="text-slate-400 hover:text-red-500 can-hover:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 dark:text-slate-500" title={t('ledger.deleteLine')} aria-label={t('ledger.deleteLine')}>
-                              <Trash2 size={14} />
-                            </button>
-                          </td>
-                        </tr>
+                        <LedgerLine key={r.id} r={r} columns={columns} isSelected={selected.has(r.id)} actions={lineActions} />
                       ))}
                     </React.Fragment>
                   )
@@ -997,7 +1085,22 @@ export function Ledger({ kind, initial, title }: {
           </div>
           <div className="flex items-center gap-4 px-4 py-2 border-t-2 border-slate-300 bg-slate-100 text-xs text-slate-500 dark:border-navy-600 dark:bg-navy-900 dark:text-slate-400">
             <span>{t('ledger.tableHint')}</span>
-            <span className="ml-auto font-mono text-sm text-navy-900 font-semibold tabular-nums dark:text-slate-50">{formatRp(total)}</span>
+            <div role="group" aria-label={t('ledger.density')} className="ml-auto inline-flex shrink-0 rounded-md border border-slate-300 bg-white p-0.5 dark:border-navy-600 dark:bg-navy-950">
+              {(['comfortable', 'compact'] as const).map(d => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setDensity(d)}
+                  aria-pressed={density === d}
+                  title={d === 'compact' ? t('ledger.densityCompact') : t('ledger.densityComfortable')}
+                  aria-label={d === 'compact' ? t('ledger.densityCompact') : t('ledger.densityComfortable')}
+                  className={`rounded px-1.5 py-1 ${density === d ? 'bg-navy-900 text-white dark:bg-slate-200 dark:text-navy-950' : 'text-slate-500 hover:text-navy-800 dark:text-slate-400 dark:hover:text-slate-100'}`}
+                >
+                  {d === 'compact' ? <Rows3 size={14} /> : <Rows2 size={14} />}
+                </button>
+              ))}
+            </div>
+            <span className="font-mono text-sm text-navy-900 font-semibold tabular-nums dark:text-slate-50">{formatRp(total)}</span>
           </div>
         </div>
       )}

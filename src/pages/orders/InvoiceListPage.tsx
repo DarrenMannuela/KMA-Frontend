@@ -10,11 +10,11 @@ import { formatRp } from '@/components/ui'
 import { invoiceHooks } from '@/hooks'
 import { useDateLocale } from '@/i18n/dateLocale'
 import type { Invoice } from '@/types'
+import { isPastDue } from '@/utils/orderStatus'
 
-const STATUS_BADGE: Record<string, string> = {
-  unpaid: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
-  paid:   'bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400',
-}
+// Colour by meaning: unpaid is in progress (blue), red only once it's past
+// its due date, paid is done (green).
+const statusBadge = (r: Invoice) => r.status === 'paid' ? 'badge-green' : isPastDue(r) ? 'badge-red' : 'badge-blue'
 
 const TYPE_BADGE: Record<string, string> = {
   dp:         'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400',
@@ -134,12 +134,12 @@ export function InvoiceListPage() {
           render: r => (
             <button
               type="button"
-              className={`badge ${STATUS_BADGE[r.status] ?? 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'} cursor-pointer hover:opacity-75 transition-opacity min-w-16 justify-center`}
+              className={`badge ${statusBadge(r)} cursor-pointer hover:opacity-75 transition-opacity min-w-16 justify-center`}
               onClick={() => toggleStatus(r)}
               disabled={update.isPending}
               title={r.status === 'paid' ? t('invoiceList.markUnpaid') : t('invoiceList.markPaid')}
             >
-              {r.status === 'paid' ? t('common.paid') : t('common.unpaid')}
+              {r.status === 'paid' ? t('common.paid') : isPastDue(r) ? t('dashboardKpi.paymentStatus.overdue') : t('common.unpaid')}
             </button>
           )},
       ]}
