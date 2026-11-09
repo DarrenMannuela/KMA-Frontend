@@ -49,11 +49,12 @@ export function MaterialColorPicker({ material, colors, selectedCode, onPick }: 
             <span className={`rounded-full ring-1 ring-black/10 shrink-0 ${isMobile ? 'w-5 h-5' : 'w-3.5 h-3.5'}`} style={{ background: selected.hex }} />
             <span className={`font-mono ${isMobile ? 'font-semibold text-navy-900 dark:text-slate-50' : 'text-slate-700 dark:text-slate-300'}`}>{selected.code}</span>
             {selected.category && <span className={isMobile ? 'text-navy-600 dark:text-slate-300' : 'text-slate-500 dark:text-slate-400'}>· {selected.category}</span>}
+            {selected.unavailable && <span className="text-red-600 dark:text-red-400">· {t('ledger.colourPicker.notAvailable')}</span>}
           </>
         ) : (
           <>
             <Palette size={isMobile ? 16 : 11} className={isMobile ? 'text-navy-700 dark:text-navy-200' : 'text-slate-500 dark:text-slate-400'} />
-            <span className={isMobile ? 'font-medium text-navy-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}>{t('ledger.colourPicker.pickColourCount', { n: colors.length })}</span>
+            <span className={isMobile ? 'font-medium text-navy-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}>{t('ledger.colourPicker.pickColourCount', { n: colors.filter(c => !c.unavailable).length })}</span>
           </>
         )}
       </button>
@@ -88,7 +89,12 @@ export function MaterialColorPickerModal({ material, colors, selectedCode, onPic
   const isMobile = useIsMobile()
   const viewportHeight = useVisualViewportHeight()
   const q = query.trim().toLowerCase()
-  const filtered = q ? colors.filter(c => c.code.toLowerCase().includes(q) || (c.category ?? '').toLowerCase().includes(q)) : colors
+  // Colours the supplier no longer has stay listed (an old line may name
+  // one) but go to the end, greyed out and crossed through, and can't be
+  // picked for a line.
+  const matching = q ? colors.filter(c => c.code.toLowerCase().includes(q) || (c.category ?? '').toLowerCase().includes(q)) : colors
+  const filtered = [...matching.filter(c => !c.unavailable), ...matching.filter(c => c.unavailable)]
+  const availableCount = colors.filter(c => !c.unavailable).length
 
   return (
     <Modal title={t('ledger.colourPicker.modalTitle', { material: materialLabel(material) })} onClose={onClose} size="lg" guard={false}>
@@ -108,7 +114,10 @@ export function MaterialColorPickerModal({ material, colors, selectedCode, onPic
             className="field !pl-9"
           />
         </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400">{t('ledger.colourPicker.countOf', { shown: filtered.length, total: colors.length })}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {t('ledger.colourPicker.countOf', { shown: filtered.length, total: colors.length })}
+          {availableCount < colors.length && <> · {t('ledger.colourPicker.unavailableCount', { count: colors.length - availableCount })}</>}
+        </p>
         {filtered.length === 0 ? (
           <p className="text-sm text-slate-500 text-center py-10 dark:text-slate-400">{t('ledger.colourPicker.noMatch', { query })}</p>
         ) : (
@@ -117,7 +126,21 @@ export function MaterialColorPickerModal({ material, colors, selectedCode, onPic
           // (tapping search on purpose), the grid keeps fitting whatever
           // area is actually still visible instead of extending behind it.
           <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2.5 overflow-y-auto pr-1 -mr-1" style={{ maxHeight: Math.max(160, viewportHeight * 0.45) }}>
-            {filtered.map(c => (
+            {filtered.map(c => c.unavailable ? (
+              <div
+                key={c.code}
+                aria-disabled="true"
+                title={t('ledger.colourPicker.notAvailableTitle', { code: c.code })}
+                className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border cursor-not-allowed ${selectedCode === c.code ? 'border-red-300 dark:border-red-500/40' : 'border-transparent'}`}
+              >
+                <span className="relative w-10 h-10 shrink-0" aria-hidden>
+                  <span className="absolute inset-0 rounded-full ring-1 ring-black/10 opacity-35" style={{ background: c.hex }} />
+                  <svg viewBox="0 0 40 40" className="absolute inset-0 text-slate-700 dark:text-slate-200"><line x1="7" y1="33" x2="33" y2="7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /></svg>
+                </span>
+                <span className="font-mono text-xs text-slate-400 line-through dark:text-slate-500">{c.code}</span>
+                <span className="text-[10px] text-slate-500 text-center leading-tight dark:text-slate-400">{t('ledger.colourPicker.notAvailable')}</span>
+              </div>
+            ) : (
               <button
                 type="button"
                 key={c.code}

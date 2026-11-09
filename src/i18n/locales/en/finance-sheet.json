@@ -129,7 +129,11 @@
       "modalTitle": "{{material}} — colours",
       "searchPlaceholder": "Search by number or category…",
       "countOf": "{{shown}} of {{total}} colours",
-      "noMatch": "No colour matches \"{{query}}\"."
+      "noMatch": "No colour matches \"{{query}}\".",
+      "notAvailable": "Not available",
+      "notAvailableTitle": "{{code}} isn't available from the supplier any more",
+      "unavailableCount_one": "{{count}} not available",
+      "unavailableCount_other": "{{count}} not available"
     },
     "colourChip": "Colour",
     "density": "Row height",

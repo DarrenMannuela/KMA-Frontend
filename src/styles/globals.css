@@ -6,6 +6,27 @@
 :root {
   --sidebar-w: 240px;
   --topbar-h: 60px;
+  /* Chart colours, checked for colour-blind separation and contrast against
+     their surface in each mode (blue = invoiced, orange = production,
+     green-teal = operations). Dark mode has its own steps, not a flip. */
+  --chart-invoiced: #33479c;
+  --chart-production: #eb6834;
+  --chart-operations: #1baf7a;
+  --chart-grid: #f1f5f9;
+  --chart-zero: #cbd5e1;
+  --chart-text: #64748b;
+  --chart-band: #f8fafc;
+  --chart-surface: #ffffff;
+}
+.dark {
+  --chart-invoiced: #6680dd;
+  --chart-production: #d95926;
+  --chart-operations: #199e70;
+  --chart-grid: rgba(255, 255, 255, 0.06);
+  --chart-zero: rgba(255, 255, 255, 0.18);
+  --chart-text: #94a3b8;
+  --chart-band: rgba(255, 255, 255, 0.04);
+  --chart-surface: #131a32;
 }
 
 @layer base {

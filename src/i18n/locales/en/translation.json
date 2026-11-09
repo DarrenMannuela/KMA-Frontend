@@ -445,5 +445,13 @@
       "descriptionPlaceholder": "e.g. SEWA RUKO",
       "amountEachMonth": "Amount each month"
     }
+  },
+  "dashboardChart": {
+    "title": "Last 6 months",
+    "thisMonth": "{{month}} so far:",
+    "invoiced": "Invoiced",
+    "costs": "Costs",
+    "aria": "Invoiced and costs, month by month, for the last six months",
+    "hint": "Left bar invoiced, right bar costs; the figure under each month is its profit. Hover or tap a month for the breakdown."
   }
 }

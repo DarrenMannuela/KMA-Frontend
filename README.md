@@ -71,28 +71,125 @@ Start the three stacks in order: KMA (it creates `kma_network`), KMA-Auth, then 
 
 ## Features
 
-- **Dashboard** — AR receivable; this month's orders, deliveries and costs (against last month); unpaid invoices, overdue first, with a WhatsApp reminder for overdue ones; recent orders; this month's orders vs. costs.
-- **Clients** — company records, contacts, and a per-client catalogue:
-  - Items grouped by name with their sizes, each size's price for a year next to the year before (edited in place), and what the client has ordered of it.
-  - Raise prices for a year in one go (by % or Rp, rounded up), add an item in all its sizes, copy another client's items, add items that were ordered but never listed, and Excel export/import in the same layout. Every change can be undone (toast or Ctrl+Z).
-  - Each item's page has its prices by year and every order of it next to that year's catalogue price; the printed price list is for a chosen year.
-  - Orders pick the catalogue price for the order's year, so prices already set for next year don't leak in.
-- **Orders** — order + item management, linked to a client or freeform company info; the list shows each order's value and payment status (blue while waiting for payment, red once overdue, green when paid), newest first. An order's page starts with its payment: the DP and Pelunasan invoices (or the one full invoice), each with its amount, due or paid date, and its own button to make or update it. Long lists on every list page show 100 rows at a time with "Show more".
-- **Invoices** — DP/Pelunasan generation off an order, a print-ready invoice layout with manual/predicted page breaks, and a matching Kwitansi (receipt) print view.
-- **Delivery** — Delivery Order (DO) and Surat Jalan (SJ) tracking with per-box item packing, and a print view for both document types.
-- **Finance section** — one area with tabs: Overview · Production · Operations · Budgets & recurring · Suppliers.
-- **Production / Operations** — Kas Bon–based spend tracking (materials by supplier, operating costs by category). Each opens straight on its sheet, with the month's total, the comparison and budget on top, and spend per supplier/category as bars that filter the sheet:
-  - search across all months, filter by supplier/category/order, group by Kas Bon, supplier/category or order, sort any column;
-  - edit cells in place (arrow keys move, typing replaces; the whole sheet is one Tab stop), switch between Comfortable and Compact rows (remembered in the browser), select rows (Shift+Space, or shift-click for a range) to move them to another Kas Bon, set a supplier/category/order, copy, export or delete them;
-  - every change can be undone (the toast's Undo, or Ctrl+Z);
-  - **New Kas Bon** enters a whole Kas Bon at once, production and operation lines together; Enter adds the next line;
-  - copy rows in Excel and press Ctrl+V on the sheet (or into a line of the form) to bring them in;
-  - **Import** reads .xlsx or .csv (Indonesian or English headings, "30.000", "2,5", 05/10/2026), lets you check the column mapping, adds unknown suppliers, and skips lines already saved; **Export** writes a real .xlsx of what's shown or selected.
-- **Finance overview** — what needs attention first (overdue invoices, budgets near their limit, recurring costs not added, bahan not linked to an order), then the year month by month against last year, where the money goes (suppliers, bahan, operation categories; click through to the lines), cash in vs out with a running balance, who owes what by age, profit per client and per order (costs are linked to orders in the sheet's Order column), monthly budgets with progress, and recurring costs added each month with one click. Downloads as one Excel workbook.
-- **Suppliers** — supplier records by category (Sablon, Embroidery, Merchandise, Uniform, General), each with its own catalogue: materials, their colours, and a current price per material, edited in place from a "Catalogue" button on the supplier's row. Each supplier can also hold its catalogue or price-list files (PDF, or photos for a supplier with nothing cleaner). Every supplier's catalogue, SAI's included, feeds the Kas Bon colour picker and swatch in Production, and picking a catalogued material auto-fills its price on a new line (a Kas Bon line starts with its supplier, so its catalogue is ready by the time you type the Bahan).
-- **Undo for deletes** — deleting an order, invoice, delivery, client or supplier can be undone from the toast, or with Ctrl+Z on its list, for 30 days; it comes back with everything the delete removed (an order's items, invoices and deliveries; a client's contacts and catalogue).
-- **English and Indonesian** — every screen except the print views follows the language setting. Strings live in `src/i18n/locales/{en,id}/`; besides `translation.json`, each screen area has its own file there, merged by `src/i18n/config.ts`. Kas Bon, Bahan, Kwitansi, Surat Jalan and similar terms stay as they are in both.
-- **Users (admin only)** — staff account provisioning, deactivation, and password resets. No self-signup — accounts are created by an admin and invited by email.
+What each part of KMA is for and how to use it. Every screen except the printed documents follows the language setting (English or Indonesian); Kas Bon, Bahan, Bukti Kas, Kwitansi, Surat Jalan, DO/SJ, DP, Pelunasan and PO stay as they are in both.
+
+### Things that work everywhere
+
+- **Edit in place.** On most tables, click a cell (or move to it with the arrow keys and start typing) to change it; Enter saves, Esc cancels. "click to fill" marks an empty cell that can take a value.
+- **Undo.** Edits, moves and deletes show a toast with **Undo**, and **Ctrl+Z** on the same screen undoes the last one. Deleting an order, invoice, delivery, client or supplier can be undone for 30 days, and it comes back with everything the delete removed (an order's items, invoices and deliveries; a client's contacts and catalogue).
+- **Lists.** Every list page has one toolbar: search on the left, the record count and **Add New** on the right. Long lists show 100 rows at a time with **Show more**; the Actions column stays pinned on the right when a table scrolls sideways.
+- **Light and dark mode** from the moon/sun button in the top bar. The badge beside it shows whether the server is reachable ("Backend live"), so "can't save" and "the server is down" don't look the same.
+- **Phones.** Tables turn into cards and pop-ups open as sheets from the bottom. The menu (☰) opens the sidebar.
+
+### Dashboard
+
+The first screen: what needs doing and how the month is going.
+
+- **Top row:** money owed to you (AR receivable, with how much of it is overdue), orders and deliveries this month, and production and operations spending. Each shows a six-month sparkline and a comparison with last month up to the same day, coloured by meaning (more orders is green, more cost is red).
+- **Unpaid invoices:** every unpaid invoice, overdue ones first, with how many days late. The WhatsApp button beside an overdue invoice opens a reminder message to the client's primary contact, ready to read over before sending. Click an invoice to open it.
+- **Recent orders:** the latest five with their payment status. Click one to open it.
+- **Last 6 months chart:** for each month, a bar for what was invoiced (solid = paid, striped = still unpaid) beside a bar for costs (production and operations), and that month's profit underneath. Hover, tap or keyboard-focus a month for the full breakdown. **Yearly** opens the Finance overview.
+- **Quick actions:** start a new order, delivery, Kas Bon or supplier in one click.
+
+### Clients
+
+Company records, their contacts, and what each client buys at what price.
+
+- **Clients** lists every company; open one for its page. Notes about the client show in a yellow strip at the top.
+- **Points of Contact** tab: names, roles, phones, emails and locations. Mark one as **Primary**: WhatsApp reminders go to that contact, and the delivery form labels it when you choose who receives a delivery.
+- **Catalogue & Pricing** tab: the client's items grouped by name with their sizes, and each size's price for a year next to the year before (edited in place).
+  - **Raise prices** for a year in one go, by % or by Rp, rounded up.
+  - **Add an item** in all its sizes at once, **copy** another client's items, or **add items that were ordered but never listed**.
+  - **Excel export and import** in the same layout.
+  - Every change can be undone. `/` jumps to the catalogue's search.
+- Open an item for its prices year by year and every order of it next to that year's catalogue price.
+- **Print Price List** prints the client's price list for a chosen year, with each item's price next to the one before (for handing out when prices go up).
+- Orders pick the catalogue price for the order's own year, so prices already set for next year don't leak into this year's orders.
+
+### Orders
+
+- **All Orders** lists orders newest first with their value and payment status: grey "Not invoiced", blue while waiting for a payment, red once a payment is overdue ("DP overdue", "Pelunasan overdue"), green "Fully paid". The building icon beside a company opens its client record.
+- **Add New** creates an order for a client (or a one-off company typed in), suggesting the next number in the `NNN/KMA/YY` sequence.
+- **An order's page:**
+  - **Payment** at the top: one tile for the DP invoice and one for the Pelunasan (or one tile for a single full invoice), each with its number (click to open it), amount, and whether it's paid, when it's due, or how many days late. Each tile has its own button to make or update that invoice. With no invoice yet, choose **Generate DP Invoice**, or **Generate COD Invoice** for one invoice covering the full amount.
+  - **Order Items:** what was ordered, by item and size. Items with several sizes fold into one row (expand it for the sizes). Prices come from the client's catalogue for the order's year. Copy, Edit and Delete sit on each row.
+  - **Costs & margin:** the order's value, the Kas Bon costs linked to it, and the profit. Costs count only once a production or operations line is linked to the order (the sheet's Order column); **Bahan lines** and **Operation lines** open those lines.
+- **Order Items** lists every item across all orders, for searching and editing in one place.
+
+### Invoices and Kwitansi
+
+- **Invoice** lists invoices, with Unpaid / Paid / All filters. Each row shows the amount due, the type (Down Payment or Pelunasan) and its status; overdue ones are red.
+- Invoices are made from an order's page (see Orders). The invoice number follows `NNN/KMA/YY`.
+- Opening an invoice shows the print-ready layout on the company letterhead. Page breaks are predicted (shown faint) and can be placed by hand before an item group; printing uses the real page count.
+- The receipt icon opens the matching **Kwitansi** for printing.
+
+### Delivery (DO and Surat Jalan)
+
+- **Delivery** lists Delivery Orders (DO, `NN/KMA/DO/YY`) and Surat Jalan (SJ, `NN/KMA/SJ/YY`); each type keeps its own numbering, restarting every year.
+- A delivery is tied to an order and one of the client's contacts; choosing the contact fills in the phone number.
+- On a delivery's page, items are packed **per box**: add items to a box, and the recap at the top totals every item and size across boxes.
+- A new SJ for an order suggests the documents travelling with it: the original Kwitansi and invoice for each invoice raised, plus **COPY PO** when the order has a PO.
+- **Print** prints the DO or SJ.
+
+### Finance
+
+One area with tabs: **Overview · Production · Operations · Bukti Kas · Budgets & recurring · Suppliers**.
+
+#### Overview
+
+Choose a month, a year, all time or a date range at the top; **Print Report** and **Excel** download the same figures.
+
+- **Needs attention:** overdue invoices, budgets near their limit, recurring costs not added this month, and Bahan not linked to an order (so missing from order profits). Each has a button that goes straight to fixing it.
+- **Totals:** invoiced, spent, profit and margin, cash in minus out, and what's owed.
+- **Month by month:** invoiced and spent per month as bars, profit as a line, last year's profit dashed behind it. Click a month to look at just that month.
+- **Where the money goes:** spending by supplier, by Bahan, or by operations category. Click a row to open those lines.
+- **Cash in and out:** money paid in against money spent, with the running balance.
+- **Owed to you:** unpaid invoices by how late they are, with a WhatsApp reminder on overdue ones.
+- **Clients** and **Orders:** value, linked costs, profit and what's still owed or paid, per client and per order. Click through to the client or order.
+
+#### Production and Operations (the Kas Bon sheet)
+
+Spending recorded the way the paper Kas Bon does it: Production holds Bahan (materials, by supplier); Operations holds operating costs (by category). Each opens straight on its sheet for the current month.
+
+- **Top bar:** the period's total, the comparison and the budget; the coloured pills below show spend per supplier or category and filter the sheet when clicked.
+- **Find things:** search across all months (`/` jumps to the search), filter by supplier, category or order, group by Kas Bon, supplier/category or order, and sort any column.
+- **Edit:** click a cell or use the arrow keys and type; the sheet is a single Tab stop, so Tab moves on to the next control instead of through every cell. **Comfortable / Compact** rows at the bottom changes the row height (remembered in this browser).
+- **Select lines:** Shift+Space, the checkboxes, or shift-click for a range. Then move them to another Kas Bon, set a supplier, category or order, copy, export or delete them.
+- **Colour chip:** a Bahan line from a supplier with a catalogue shows a chip ("● 01 ▾", or "+ Colour ▾"). Click it to pick from the material's colours; colours the supplier no longer has are greyed out and can't be picked.
+- **New Kas Bon** (or `n`) enters a whole Kas Bon at once, production and operation lines together. Each line starts with its supplier, so the supplier's catalogue is ready by the time you type the Bahan, and picking a catalogued material fills in its price. Enter adds the next line.
+- **From Excel:** copy rows in Excel and press Ctrl+V on the sheet (or into a line of the form). **Import** reads .xlsx or .csv with Indonesian or English headings and local number and date formats ("30.000", "2,5", 05/10/2026), lets you check how columns match up, adds unknown suppliers, and skips lines already saved. **Export** writes an .xlsx of what's shown or selected.
+- **Print** prints the Kas Bon.
+- Fill a line's **Order** column to count its cost against that order's profit.
+
+#### Bukti Kas
+
+Cash **received**, grouped by Bukti Kas the way Kas Bon groups spending: one card per Bukti Kas with its lines and total. Add a Bukti Kas, add lines to one, and link a line to an order.
+
+#### Budgets and recurring costs
+
+- **Budgets:** a monthly limit for all operations, all production, or one operations category, each with a bar showing how much is used. **Set budgets** changes them. The Overview warns when one gets close.
+- **Recurring costs:** costs that repeat every month (rent, electricity), added with **Add**. Tick the ones due and the button under the list ("Add November 2026's 1 cost") puts them into Operations for that month in one click; each shows when it was last added.
+
+#### Suppliers
+
+Supplier records by category (Sablon, Embroidery, Merchandise, Uniform, General). **Catalogue** on a supplier's row opens its catalogue:
+
+- **Catalogue and price-list documents:** upload the supplier's PDF, or photos for a supplier with nothing cleaner (PDF, JPG or PNG, up to 20 MB). The server checks what the file really contains: a file renamed to look like a PDF or photo, a PDF cut off while downloading, an empty file, or a damaged photo is refused with a message saying what to do.
+- **Materials:** name, brand, composition, what it's used for, width and roll length, and the current price (which fills in a new Kas Bon line's price).
+- **Colours** of each material (expand a material): a code, an optional category and the swatch colour.
+  - **Available** switch: turn it off when the supplier no longer has the colour. It stays in the catalogue (old Kas Bon lines still name it) but can't be picked for a new line.
+  - **Pick from photo** (pipette icon): take the colour from one of the supplier's photos, or a photo on the device, corrected for the light it was taken in. Tap something white in the photo first (the paper of a swatch card, a label), then the middle of the fabric; a small patch is averaged, and "as photographed" shows beside "corrected" before you save. For the closest colours, take the photo in daylight, without flash, with a white card in the frame. A screen still shows colours slightly differently from the fabric, so check the real thing before promising a colour to a client.
+- Every supplier's catalogue feeds the Kas Bon colour picker and swatch in Production.
+
+### Users (admins only)
+
+- **Invite** a staff member by email: they get a link to set their own password (the link expires after a couple of days). There's no self-signup.
+- Set each account's **role** (admin or staff), **reset** a password, **deactivate** an account (signed out everywhere at once, and can be turned back on), or **permanently delete** it.
+- Everyone can change their own password and turn on **two-factor sign-in** from the account menu (top right).
+
+### Language
+
+The account menu switches between English and Indonesian. Strings live in `src/i18n/locales/{en,id}/`; besides `translation.json`, each screen area has its own file there, merged by `src/i18n/config.ts`. Printed documents (invoice, kwitansi, delivery, price list, finance report, Kas Bon) stay in their paper-form wording.
 
 ## Supplier Category Enum (from kma.yaml)
 

@@ -36,6 +36,8 @@ export interface SupplierMaterialColor {
   code: string
   category: string | null
   hex: string
+  /** The supplier no longer has it: shown, but can't be picked for a new line. */
+  unavailable?: boolean
 }
 
 // ─── Matches dto/SupplierDocument.go ───────────────────────────────────────────

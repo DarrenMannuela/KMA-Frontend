@@ -297,3 +297,155 @@ export function Meter({ value, max }: { value: number; max: number }) {
     </div>
   )
 }
+
+export interface MonthMoney {
+  /** Short month label for the axis, e.g. "Okt". */
+  label: string
+  /** Full name for the hover card and the table, e.g. "Oktober 2026". */
+  name: string
+  paid: number
+  unpaid: number
+  production: number
+  operations: number
+}
+
+/** A bar with its top corners rounded and its foot square on the baseline. */
+function topRounded(x: number, y: number, w: number, h: number, r: number) {
+  if (h <= 0 || w <= 0) return ''
+  const rr = Math.min(r, w / 2, h)
+  return `M${x},${y + h}V${y + rr}Q${x},${y} ${x + rr},${y}H${x + w - rr}Q${x + w},${y} ${x + w},${y + rr}V${y + h}Z`
+}
+
+/** Several months side by side: what was invoiced (paid, and still unpaid
+ *  in stripes) next to what was spent (production, operations), with each
+ *  month's profit under it. Hover, tap or focus a month for the full
+ *  breakdown; the last month is the current one. One money axis only. */
+export function MonthsChart({ data }: { data: MonthMoney[] }) {
+  const { t } = useTranslation()
+  const [ref, width] = useWidth<HTMLDivElement>()
+  const [active, setActive] = useState<number | null>(null)
+  const height = 210
+  const pad = { l: 44, r: 6, t: 10, b: 40 }
+  const invoiced = data.map(d => d.paid + d.unpaid)
+  const costs = data.map(d => d.production + d.operations)
+  const ticks = niceTicks(0, Math.max(1, ...invoiced, ...costs), 3)
+  const hi = ticks[ticks.length - 1] || 1
+  const w = Math.max(0, width - pad.l - pad.r)
+  const h = height - pad.t - pad.b
+  const y = (v: number) => pad.t + h - (v / hi) * h
+  const slot = w / Math.max(1, data.length)
+  const bw = Math.max(4, Math.min(16, slot * 0.28))
+  const cx = (i: number) => pad.l + slot * i + slot / 2
+  const current = data.length - 1
+  const shown = active ?? null
+  const tip = shown != null ? data[shown] : null
+  const GAP = 2 // surface gap between stacked parts
+
+  // One stacked bar: the lower part solid, the upper part solid or striped.
+  const stack = (x: number, lower: number, upper: number, lowerFill: string, upperFill: string) => {
+    const base = y(0)
+    const lowerTop = y(lower)
+    const upperTop = y(lower + upper)
+    const parts: JSX.Element[] = []
+    if (lower > 0) parts.push(<path key="l" d={upper > 0 ? `M${x},${base}V${lowerTop}H${x + bw}V${base}Z` : topRounded(x, lowerTop, bw, base - lowerTop, 3)} fill={lowerFill} />)
+    if (upper > 0) {
+      const top = lower > 0 ? lowerTop - GAP : base
+      parts.push(<path key="u" d={topRounded(x, upperTop, bw, Math.max(1, top - upperTop), 3)} fill={upperFill} />)
+    }
+    return parts
+  }
+
+  const profit = (i: number) => invoiced[i] - costs[i]
+
+  return (
+    <div ref={ref} className="relative w-full select-none" style={{ height }}>
+      {width > 0 && (
+        <svg width={width} height={height} role="img" aria-label={t('dashboardChart.aria')} className="overflow-visible">
+          <defs>
+            {/* Unpaid: the invoiced blue in stripes, money not in yet. */}
+            <pattern id="unpaid-stripes" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect width="5" height="5" fill="var(--chart-invoiced)" opacity="0.18" />
+              <rect width="2.2" height="5" fill="var(--chart-invoiced)" />
+            </pattern>
+          </defs>
+          {ticks.map(v => (
+            <g key={v}>
+              <line x1={pad.l} x2={width - pad.r} y1={y(v)} y2={y(v)} stroke={v === 0 ? 'var(--chart-zero)' : 'var(--chart-grid)'} />
+              <text x={pad.l - 6} y={y(v) + 3.5} textAnchor="end" fontSize="10" fill="var(--chart-text)">{shortRp(v)}</text>
+            </g>
+          ))}
+          {data.map((d, i) => {
+            const p = profit(i)
+            const isCurrent = i === current
+            return (
+              <g
+                key={i}
+                tabIndex={0}
+                role="button"
+                aria-label={`${d.name}: ${t('dashboardChart.invoiced')} ${formatRp(invoiced[i])}, ${t('dashboardChart.costs')} ${formatRp(costs[i])}, ${t('common.profit')} ${formatRp(p)}`}
+                className="outline-none [&:focus-visible>rect:first-child]:stroke-navy-400"
+                onMouseEnter={() => setActive(i)}
+                onMouseLeave={() => setActive(null)}
+                onFocus={() => setActive(i)}
+                onBlur={() => setActive(null)}
+                onClick={() => setActive(a => (a === i ? null : i))}
+              >
+                {/* The hit target is the whole month, not just the bars. */}
+                <rect x={pad.l + slot * i + 1} y={pad.t} width={slot - 2} height={h + pad.b - 2} rx="6"
+                  fill={shown === i || (shown == null && isCurrent) ? 'var(--chart-band)' : 'transparent'} strokeWidth="1.5" />
+                {stack(cx(i) - bw - 1.5, d.paid, d.unpaid, 'var(--chart-invoiced)', 'url(#unpaid-stripes)')}
+                {stack(cx(i) + 1.5, d.production, d.operations, 'var(--chart-production)', 'var(--chart-operations)')}
+                <text x={cx(i)} y={height - 23} textAnchor="middle" fontSize="11" fill="var(--chart-text)" fontWeight={isCurrent ? 700 : 400}>{d.label}</text>
+                <text x={cx(i)} y={height - 8} textAnchor="middle" fontSize="10" fontFamily="DM Mono, monospace"
+                  className={p < 0 ? 'fill-red-600 dark:fill-red-400' : 'fill-slate-500 dark:fill-slate-400'}>
+                  {invoiced[i] || costs[i] ? `${p > 0 ? '+' : ''}${shortRp(p)}` : '–'}
+                </text>
+              </g>
+            )
+          })}
+        </svg>
+      )}
+      {tip && shown != null && (
+        <div
+          className="pointer-events-none absolute z-20 rounded-lg bg-navy-950 text-white text-xs px-3 py-2 shadow-xl whitespace-nowrap ring-1 ring-white/10"
+          style={{ top: 0, left: Math.min(Math.max(cx(shown) - 95, 0), Math.max(0, width - 190)) }}
+        >
+          <div className="font-semibold mb-1.5">{tip.name}</div>
+          <div className="grid grid-cols-[auto_auto] gap-x-5 gap-y-0.5">
+            <span className="font-medium">{t('dashboardChart.invoiced')}</span><span className="font-mono text-right">{formatRp(invoiced[shown])}</span>
+            <span className="text-navy-200 pl-2">{t('common.paid')}</span><span className="font-mono text-right text-navy-100">{formatRp(tip.paid)}</span>
+            <span className="text-navy-200 pl-2">{t('common.unpaid')}</span><span className="font-mono text-right text-navy-100">{formatRp(tip.unpaid)}</span>
+            <span className="font-medium mt-1">{t('dashboardChart.costs')}</span><span className="font-mono text-right mt-1">{formatRp(costs[shown])}</span>
+            <span className="text-navy-200 pl-2">{t('common.production')}</span><span className="font-mono text-right text-navy-100">{formatRp(tip.production)}</span>
+            <span className="text-navy-200 pl-2">{t('common.operations')}</span><span className="font-mono text-right text-navy-100">{formatRp(tip.operations)}</span>
+            <span className="font-semibold mt-1 pt-1 border-t border-white/15">{profit(shown) < 0 ? t('common.loss') : t('common.profit')}</span>
+            <span className={`font-mono font-semibold text-right mt-1 pt-1 border-t border-white/15 ${profit(shown) < 0 ? 'text-red-300' : 'text-green-300'}`}>{formatRp(Math.abs(profit(shown)))}</span>
+          </div>
+        </div>
+      )}
+      {/* The same numbers as a table, for screen readers. */}
+      <table className="sr-only">
+        <caption>{t('dashboardChart.aria')}</caption>
+        <thead><tr><th>{t('common.date')}</th><th>{t('common.paid')}</th><th>{t('common.unpaid')}</th><th>{t('common.production')}</th><th>{t('common.operations')}</th><th>{t('common.profit')}</th></tr></thead>
+        <tbody>{data.map((d, i) => <tr key={i}><td>{d.name}</td><td>{formatRp(d.paid)}</td><td>{formatRp(d.unpaid)}</td><td>{formatRp(d.production)}</td><td>{formatRp(d.operations)}</td><td>{formatRp(profit(i))}</td></tr>)}</tbody>
+      </table>
+    </div>
+  )
+}
+
+/** The key for MonthsChart: a swatch per part, the stripes included. */
+export function MonthsLegend() {
+  const { t } = useTranslation()
+  const item = (label: string, swatch: React.ReactNode) => (
+    <span className="inline-flex items-center gap-1.5">{swatch}{label}</span>
+  )
+  const box = (bg: string) => <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: bg }} aria-hidden />
+  return (
+    <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+      {item(t('common.paid'), box('var(--chart-invoiced)'))}
+      {item(t('common.unpaid'), box('repeating-linear-gradient(135deg, var(--chart-invoiced) 0 2px, transparent 2px 4px)'))}
+      {item(t('common.production'), box('var(--chart-production)'))}
+      {item(t('common.operations'), box('var(--chart-operations)'))}
+    </div>
+  )
+}

@@ -11,7 +11,7 @@ import { orderHooks, deliveryHooks, productionHooks, operationHooks, invoiceHook
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { format, differenceInCalendarDays } from 'date-fns'
 import { isInMonth } from '@/utils/MonthUtils'
-import { StackedBarChart } from '@/components/ui/Charts'
+import { MonthsChart, MonthsLegend } from '@/components/finance/FinanceCharts'
 import { useDateLocale } from '@/i18n/dateLocale'
 import type { Order, Invoice, ProductionRow, OperationRow } from '@/types'
 
@@ -159,19 +159,6 @@ export function DashboardPage() {
 
   const profitThisMonth = invoicedThisMonthTotal - costThisMonthTotal
 
-  // One segment list for both bars: orders fill paid/unpaid, costs fill
-  // production/operations.
-  const ORDERS_VS_COSTS_SEGMENTS = [
-    { key: 'paid',        label: t('common.paid'),        color: '#34d399' },
-    { key: 'unpaid',       label: t('common.unpaid'),       color: '#f87171' },
-    { key: 'production',  label: t('common.production'),  color: '#2dd4bf' },
-    { key: 'operations',  label: t('common.operations'),  color: '#fbbf24' },
-  ]
-  const ordersVsCostsData = [
-    { category: t('dashboard.ordersCategory'), values: { paid: paidThisMonth, unpaid: unpaidThisMonth } },
-    { category: t('dashboard.costsCategory'),  values: { production: prodCostThisMonth, operations: opsCostThisMonth } },
-  ]
-
   // Overdue first (oldest due date first), then upcoming, then no due date.
   const arBreakdown = [...unpaidInvoices].sort((a, b) => {
     if (!a.due_date && !b.due_date) return 0
@@ -229,6 +216,21 @@ export function DashboardPage() {
   const arEndOfLastMonth = arAt(new Date(now.getFullYear(), now.getMonth(), 0))
   const arTrend = months.map((m, i) => (i === months.length - 1 ? totalAR : arAt(new Date(m.getFullYear(), m.getMonth() + 1, 0))))
   const overdueAmount = overdueInvoices.reduce((n, i) => n + invoiceAmountDue(i), 0)
+
+  // The last six months for the chart: invoiced (paid / unpaid) beside
+  // spent (production / operations), on the same rules as the KPIs above.
+  const monthsMoney = months.map(m => {
+    const y = m.getFullYear(), mo = m.getMonth()
+    const inv = (safeInvoices as Invoice[]).filter(i => isInMonth(i.tanggal, y, mo))
+    return {
+      label: format(m, 'MMM', { locale: dateLocale }),
+      name: format(m, 'MMMM yyyy', { locale: dateLocale }),
+      paid: inv.filter(i => i.status === 'paid').reduce((n, i) => n + invoiceAmountDue(i), 0),
+      unpaid: inv.filter(i => i.status !== 'paid').reduce((n, i) => n + invoiceAmountDue(i), 0),
+      production: (safeProductions as ProductionRow[]).filter(p => isInMonth(p.date, y, mo)).reduce((n, p) => n + p.price * p.amount, 0),
+      operations: (safeOperations as OperationRow[]).filter(o => isInMonth(o.date, y, mo)).reduce((n, o) => n + o.price, 0),
+    }
+  })
 
   // When an invoice is due, and how late it is once it's overdue.
   const dueText = (inv: Invoice, stacked = false) => {
@@ -494,23 +496,20 @@ export function DashboardPage() {
           <section className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 fade-up delay-1 dark:bg-navy-900 dark:border-navy-800">
             <div className="flex items-center gap-2 mb-1">
               <BarChart3 className="w-4 h-4 text-navy-400 shrink-0" />
-              <h3 className="font-semibold text-navy-900 text-sm truncate dark:text-slate-50">{t('dashboard.ordersVsCosts', { month: format(now, 'MMMM', { locale: dateLocale }) })}</h3>
-            </div>
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <span className={`font-semibold text-xs tabular-nums ${profitThisMonth >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                {profitThisMonth >= 0 ? t('common.profit') : t('common.loss')}: {formatRp(Math.abs(profitThisMonth))}
-              </span>
-              <Link to="/finance" className="flex items-center gap-1 -my-2 py-2 text-xs text-navy-600 hover:text-navy-800 dark:text-navy-300 dark:hover:text-slate-100 transition-colors font-medium shrink-0">
+              <h3 className="font-semibold text-navy-900 text-sm truncate dark:text-slate-50">{t('dashboardChart.title')}</h3>
+              <Link to="/finance" className="ml-auto flex items-center gap-1 -my-2 py-2 text-xs text-navy-600 hover:text-navy-800 dark:text-navy-300 dark:hover:text-slate-100 transition-colors font-medium shrink-0">
                 {t('dashboard.yearly')} <ArrowUpRight className="w-3 h-3" />
               </Link>
             </div>
-            <StackedBarChart
-              data={ordersVsCostsData}
-              segments={ORDERS_VS_COSTS_SEGMENTS}
-              height={110}
-              maxBarWidth={80}
-              emptyLabel={t('dashboard.noActivityThisMonth')}
-            />
+            <p className="text-xs text-slate-500 mb-3 dark:text-slate-400">
+              {t('dashboardChart.thisMonth', { month: format(now, 'MMMM', { locale: dateLocale }) })}{' '}
+              <span className={`font-semibold tabular-nums ${profitThisMonth >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {profitThisMonth >= 0 ? t('common.profit') : t('common.loss')} {formatRp(Math.abs(profitThisMonth))}
+              </span>
+            </p>
+            <MonthsChart data={monthsMoney} />
+            <div className="mt-3"><MonthsLegend /></div>
+            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">{t('dashboardChart.hint')}</p>
           </section>
 
           <section className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 fade-up delay-2 dark:bg-navy-900 dark:border-navy-800">

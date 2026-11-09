@@ -2,7 +2,8 @@ import { useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
-import { Plus, Trash2, ChevronRight, Palette, FileText, Upload } from 'lucide-react'
+import { Plus, Trash2, ChevronRight, Palette, FileText, Upload, Pipette } from 'lucide-react'
+import { PhotoColorPicker } from './PhotoColorPicker'
 import { Modal } from '@/components/ui/Modal'
 import { EditableCell, ConfirmDialog, UppercaseField, formatRp } from '@/components/ui'
 import { supplierMaterialHooks, supplierMaterialColorHooks, supplierDocumentHooks } from '@/hooks'
@@ -103,6 +104,8 @@ function ColorList({ material }: { material: SupplierMaterial }) {
   const [confirmDelete, setConfirmDelete] = useState<SupplierMaterialColor | null>(null)
   const [newCode, setNewCode] = useState('')
   const [newHex, setNewHex] = useState('#888888')
+  // Which colour "Pick from photo" is for: an existing one, or the new row.
+  const [photoFor, setPhotoFor] = useState<SupplierMaterialColor | 'new' | null>(null)
   const { t } = useTranslation()
 
   const addColor = () => {
@@ -117,7 +120,7 @@ function ColorList({ material }: { material: SupplierMaterial }) {
     <div className="pl-6 pr-2 pb-2 space-y-1.5">
       {colors.length === 0 && <p className="text-xs text-slate-400 italic dark:text-navy-600">{t('supplierCatalogue.noColours')}</p>}
       {colors.map(c => (
-        <div key={c.id} className="grid grid-cols-[1.5rem_minmax(6rem,1.2fr)_minmax(0,1fr)_6rem_2rem] gap-2 items-center text-sm">
+        <div key={c.id} className={`grid grid-cols-[1.5rem_minmax(5rem,1.2fr)_minmax(0,1fr)_5.5rem_2rem_auto_2rem] gap-2 items-center text-sm ${c.unavailable ? '[&>*:nth-child(-n+4)]:opacity-45' : ''}`}>
           <input
             type="color"
             value={/^#[0-9a-f]{6}$/i.test(c.hex) ? c.hex : '#888888'}
@@ -137,20 +140,56 @@ function ColorList({ material }: { material: SupplierMaterial }) {
             value={c.hex} placeholder="#rrggbb"
             onSave={v => update.mutate({ id: c.id, body: { hex: String(v) } })}
           />
+          <button type="button" onClick={() => setPhotoFor(c)} className="w-8 h-8 -m-1 flex items-center justify-center rounded text-slate-400 hover:text-navy-700 hover:bg-slate-100 dark:hover:bg-white/5 dark:hover:text-slate-200" title={t('photoColour.pickFromPhoto')} aria-label={`${t('photoColour.pickFromPhoto')}: ${c.code}`}>
+            <Pipette size={14} />
+          </button>
+          {/* On = the supplier still has it. Off keeps it in the catalogue
+              (old lines name it) but it can't be picked for a new line. */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={!c.unavailable}
+            aria-label={t('supplierCatalogue.availableLabel', { code: c.code })}
+            onClick={() => update.mutate({ id: c.id, body: { unavailable: !c.unavailable } })}
+            className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap"
+          >
+            <span className={`relative w-8 h-[18px] rounded-full transition-colors ${c.unavailable ? 'bg-slate-300 dark:bg-navy-700' : 'bg-green-600 dark:bg-green-500'}`} aria-hidden>
+              <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow transition-[left] ${c.unavailable ? 'left-[2px]' : 'left-[16px]'}`} />
+            </span>
+            <span className={c.unavailable ? 'text-slate-500 dark:text-slate-400' : 'text-green-700 dark:text-green-400'}>
+              {c.unavailable ? t('supplierCatalogue.unavailable') : t('supplierCatalogue.available')}
+            </span>
+          </button>
           <button onClick={() => setConfirmDelete(c)} className="text-slate-300 hover:text-red-500 dark:text-navy-700" title={t('supplierCatalogue.deleteColour')} aria-label={t('supplierCatalogue.deleteColour')}>
             <Trash2 size={13} />
           </button>
         </div>
       ))}
-      <div className="grid grid-cols-[1.5rem_minmax(6rem,1.2fr)_minmax(0,1fr)_6rem_2rem] gap-2 items-center pt-1">
+      <div className="grid grid-cols-[1.5rem_minmax(5rem,1.2fr)_minmax(0,1fr)_5.5rem_2rem_auto_2rem] gap-2 items-center pt-1">
         <input type="color" value={newHex} onChange={e => setNewHex(e.target.value)} className="w-6 h-6 rounded-full border-0 p-0 cursor-pointer" />
         <UppercaseField className="field !py-1 !text-xs" placeholder={t('supplierCatalogue.code')} value={newCode} onChange={setNewCode} onKeyDown={e => e.key === 'Enter' && addColor()} />
         <span />
+        <span />
+        <button type="button" onClick={() => setPhotoFor('new')} className="w-8 h-8 -m-1 flex items-center justify-center rounded text-slate-400 hover:text-navy-700 hover:bg-slate-100 dark:hover:bg-white/5 dark:hover:text-slate-200" title={t('photoColour.pickFromPhoto')} aria-label={t('photoColour.pickFromPhoto')}>
+          <Pipette size={14} />
+        </button>
         <span />
         <button onClick={addColor} disabled={!newCode.trim() || create.isPending} className="text-navy-500 hover:text-navy-700 disabled:opacity-30 dark:text-navy-400" title={t('supplierCatalogue.addColour')} aria-label={t('supplierCatalogue.addColour')}>
           <Plus size={14} />
         </button>
       </div>
+      {photoFor && (
+        <PhotoColorPicker
+          supplierId={material.supplier_id}
+          colourLabel={photoFor === 'new' ? (newCode.trim() || undefined) : photoFor.code}
+          onPick={hex => {
+            if (photoFor === 'new') setNewHex(hex)
+            else update.mutate({ id: photoFor.id, body: { hex } })
+            setPhotoFor(null)
+          }}
+          onClose={() => setPhotoFor(null)}
+        />
+      )}
       {confirmDelete && (
         <ConfirmDialog
           message={t('supplierCatalogue.deleteColourConfirm', { code: confirmDelete.code })}

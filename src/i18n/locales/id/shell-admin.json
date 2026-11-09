@@ -88,7 +88,10 @@
     "brandOptional": "Merek (opsional)",
     "brandPlaceholder": "cth. VERLANDO",
     "add": "Tambah",
-    "noMaterials": "Belum ada bahan — tambahkan yang pertama di atas."
+    "noMaterials": "Belum ada bahan — tambahkan yang pertama di atas.",
+    "available": "Tersedia",
+    "unavailable": "Tidak tersedia",
+    "availableLabel": "{{code}} tersedia dari supplier"
   },
   "auth": {
     "couldNotReachServer": "Tidak dapat terhubung ke server autentikasi",
@@ -219,5 +222,26 @@
     "sessionExpired": "Sesi Anda telah berakhir — silakan masuk lagi.",
     "serverError": "Terjadi kesalahan di sistem kami — silakan coba lagi sebentar lagi, dan beri tahu kami jika terus terjadi.",
     "generic": "Terjadi kesalahan. Silakan coba lagi."
+  },
+  "photoColour": {
+    "title": "Ambil warna dari foto",
+    "titleFor": "Ambil warna {{code}} dari foto",
+    "why": "Warna di foto berubah mengikuti cahaya saat difoto. Ketuk dulu sesuatu yang putih di foto yang sama, seperti kertas kartu warna atau label, supaya warnanya dikoreksi sesuai cahaya itu.",
+    "otherPhoto": "Pakai foto lain",
+    "noPhotos": "Supplier ini belum punya foto. Unggah di atas, atau pakai foto dari perangkat ini.",
+    "loadError": "Foto ini tidak bisa dibuka.",
+    "steps": "Langkah",
+    "stepWhite": "1. Ketuk putih",
+    "stepColour": "2. Ketuk warnanya",
+    "skipWhite": "Tidak ada putih di foto ini",
+    "tapWhite": "Ketuk sesuatu yang putih atau abu-abu muda di foto: kertas, label, swatch putih.",
+    "tapColour": "Sekarang ketuk bagian tengah warnanya. Area kecil di sekitar ketukan dirata-rata.",
+    "whiteWarning": "Titik itu terlalu gelap atau berwarna untuk dianggap putih, jadi koreksinya bisa meleset. Coba area putih yang lebih terang.",
+    "asPhotographed": "Seperti di foto",
+    "corrected": "Dikoreksi untuk cahaya",
+    "uncorrected": "Dari foto (tidak dikoreksi)",
+    "useColour": "Pakai warna ini",
+    "pickFromPhoto": "Ambil dari foto",
+    "tips": "Supaya warnanya paling mendekati: cahaya siang dekat jendela, tanpa flash, swatch diletakkan rata, dan kartu putih di foto yang sama. Layar juga menampilkan warna berbeda, jadi cocokkan dengan kain aslinya sebelum memberi tahu klien."
   }
 }

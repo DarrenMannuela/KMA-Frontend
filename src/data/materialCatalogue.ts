@@ -12,6 +12,8 @@ export interface CatalogueColor {
   code: string
   category: string | null
   hex: string
+  /** Switched off in the supplier's catalogue: shown, but not pickable. */
+  unavailable?: boolean
 }
 
 export interface CatalogueMaterial {
@@ -74,7 +76,7 @@ export function supplierCatalogueFromDb(
     slug: String(m.id),
     price: m.price,
   })
-  const toColor = (c: SupplierMaterialColor): CatalogueColor => ({ code: c.code, category: c.category, hex: c.hex })
+  const toColor = (c: SupplierMaterialColor): CatalogueColor => ({ code: c.code, category: c.category, hex: c.hex, unavailable: !!c.unavailable })
   // Built once per material, not on every call: the sheet asks for a line's
   // colours each time that line renders, and SAI alone has over a thousand.
   const colorCache = new Map<string, CatalogueColor[]>()

@@ -88,7 +88,10 @@
     "brandOptional": "Brand (optional)",
     "brandPlaceholder": "e.g. VERLANDO",
     "add": "Add",
-    "noMaterials": "No materials yet — add the first one above."
+    "noMaterials": "No materials yet — add the first one above.",
+    "available": "Available",
+    "unavailable": "Not available",
+    "availableLabel": "{{code}} available from the supplier"
   },
   "auth": {
     "couldNotReachServer": "Could not reach the auth server",
@@ -220,5 +223,26 @@
     "sessionExpired": "Your session has expired — please sign in again.",
     "serverError": "Something went wrong on our end — please try again in a moment, and let us know if it keeps happening.",
     "generic": "Something went wrong. Please try again."
+  },
+  "photoColour": {
+    "title": "Pick a colour from a photo",
+    "titleFor": "Pick colour {{code}} from a photo",
+    "why": "Photos change colours with the light they're taken in. Tap something white in the same photo first, like the paper of a swatch card or a label, and the colour is corrected for that light.",
+    "otherPhoto": "Use another photo",
+    "noPhotos": "This supplier has no photos yet. Upload one above, or use a photo from this device.",
+    "loadError": "This photo couldn't be opened.",
+    "steps": "Steps",
+    "stepWhite": "1. Tap white",
+    "stepColour": "2. Tap the colour",
+    "skipWhite": "No white in this photo",
+    "tapWhite": "Tap something white or light grey in the photo: paper, a label, a white swatch.",
+    "tapColour": "Now tap the middle of the colour. A small patch around the tap is averaged.",
+    "whiteWarning": "That spot is too dark or too coloured to be white, so the correction may be off. Try a brighter white area.",
+    "asPhotographed": "As photographed",
+    "corrected": "Corrected for the light",
+    "uncorrected": "From the photo (not corrected)",
+    "useColour": "Use this colour",
+    "pickFromPhoto": "Pick from photo",
+    "tips": "For the closest colours: daylight near a window, no flash, swatches lying flat, and a white card in the same photo. Screens show colours differently too, so check against the real fabric before telling a client."
   }
 }

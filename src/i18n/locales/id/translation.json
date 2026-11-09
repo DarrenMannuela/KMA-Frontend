@@ -438,5 +438,13 @@
       "descriptionPlaceholder": "cth. SEWA RUKO",
       "amountEachMonth": "Jumlah per bulan"
     }
+  },
+  "dashboardChart": {
+    "title": "6 bulan terakhir",
+    "thisMonth": "{{month}} sejauh ini:",
+    "invoiced": "Invoice",
+    "costs": "Biaya",
+    "aria": "Invoice dan biaya per bulan, enam bulan terakhir",
+    "hint": "Batang kiri invoice, batang kanan biaya; angka di bawah tiap bulan adalah labanya. Arahkan atau ketuk bulan untuk rinciannya."
   }
 }
