@@ -1,3 +1,4 @@
+import { useId, useState } from 'react'
 import { invoiceAmount } from '@/utils/invoiceAmount'
 import { orderPaymentStatus } from '@/utils/orderStatus'
 import { waLink, overdueReminderMessage, primaryContactPhone } from '@/utils/whatsapp'
@@ -38,22 +39,115 @@ const TONE_TEXT: Record<Tone, string> = {
 }
 const TONE_TEXT_ON_NAVY: Record<Tone, string> = { good: 'text-green-300', bad: 'text-red-300', neutral: 'text-navy-200' }
 
-/** The last six months as a small trend line. Decorative: the card's own
- *  text carries the figures, so screen readers skip it. */
-function Sparkline({ values, className = '', width = 120, height = 28 }: { values: number[]; className?: string; width?: number; height?: number }) {
+/** The last six months, small: bars for monthly totals (orders, spending),
+ *  a filled line for a running balance (AR). Each month has its initial
+ *  under it, and hovering, tapping or focusing a month shows its figure.
+ *  The last month is the current one, still running: its bar is striped and
+ *  its point hollow, so an early-in-the-month dip doesn't read as a drop. */
+function MiniTrend({ values, months, kind, format: fmt, label, accent = false, width = 132, height = 44 }: {
+  values: number[]
+  months: Date[]
+  kind: 'bars' | 'line'
+  format: (n: number) => string
+  /** What the figures are, for the screen-reader summary. */
+  label: string
+  accent?: boolean
+  width?: number
+  height?: number
+}) {
+  const { t } = useTranslation()
+  const dateLocale = useDateLocale()
+  const [active, setActive] = useState<number | null>(null)
+  const patternId = useId()
   if (values.length < 2) return null
-  const pad = 2.5
-  const max = Math.max(...values)
-  const min = Math.min(...values, 0)
+  const n = values.length
+  const labelH = 11
+  const plotH = height - labelH - 2
+  const slot = width / n
+  const max = Math.max(...values, 0) || 1
+  const min = kind === 'line' ? Math.min(...values, 0) : 0
   const span = max - min || 1
-  const pts = values.map((v, i) => [pad + (i * (width - pad * 2)) / (values.length - 1), height - pad - ((v - min) / span) * (height - pad * 2)])
-  const d = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
-  const [lx, ly] = pts[pts.length - 1]
+  const y = (v: number) => 3 + (plotH - 3) - ((v - min) / span) * (plotH - 3)
+  const cx = (i: number) => slot * i + slot / 2
+  const last = n - 1
+  const monthFmt = slot >= 20 ? 'MMM' : 'MMMMM'
+  const name = (i: number) => format(months[i], 'MMMM yyyy', { locale: dateLocale })
+  const tip = active != null ? `${name(active)}${active === last ? ` (${t('dashboardKpi.soFar')})` : ''}: ${fmt(values[active])}` : null
+  const muted = accent ? 'text-navy-300' : 'text-slate-400 dark:text-slate-500'
+  const summary = t('dashboardKpi.trendAria', { label, values: values.map((v, i) => `${format(months[i], 'MMM', { locale: dateLocale })} ${fmt(v)}`).join(', ') })
+
+  const linePts = values.map((v, i) => [cx(i), y(v)] as const)
+  const linePath = linePts.map(([x, py], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${py.toFixed(1)}`).join(' ')
+  const areaPath = `${linePath} L${cx(last).toFixed(1)},${plotH} L${cx(0).toFixed(1)},${plotH} Z`
+
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden className={`shrink-0 overflow-visible ${className}`}>
-      <path d={d} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={lx} cy={ly} r={2.25} fill="currentColor" />
-    </svg>
+    <div className="relative shrink-0" onMouseLeave={() => setActive(null)}>
+      {tip && (
+        <div className={`pointer-events-none absolute bottom-full right-0 mb-1.5 z-20 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium shadow-lg ${accent ? 'bg-white text-navy-900' : 'bg-navy-900 text-white dark:bg-slate-100 dark:text-navy-900'}`}>
+          {tip}
+        </div>
+      )}
+      {/* Focusable: the arrow keys step through the months, and the figure
+          shows the same way it does on hover. */}
+      <svg
+        width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={summary}
+        tabIndex={0}
+        onFocus={() => setActive(last)}
+        onBlur={() => setActive(null)}
+        onKeyDown={e => {
+          if (e.key === 'ArrowLeft') { e.preventDefault(); setActive(a => Math.max(0, (a ?? last) - 1)) }
+          else if (e.key === 'ArrowRight') { e.preventDefault(); setActive(a => Math.min(last, (a ?? last) + 1)) }
+          else if (e.key === 'Escape') setActive(null)
+        }}
+        className="overflow-visible block rounded outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-current"
+      >
+        <defs>
+          <linearGradient id={`${patternId}-fade`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="currentColor" stopOpacity={0.3} />
+            <stop offset="1" stopColor="currentColor" stopOpacity={0} />
+          </linearGradient>
+          <pattern id={patternId} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width="4" height="4" fill="currentColor" opacity="0.25" />
+            <rect width="1.6" height="4" fill="currentColor" />
+          </pattern>
+        </defs>
+        {/* Baseline */}
+        <line x1={0} x2={width} y1={plotH + 0.5} y2={plotH + 0.5} stroke="currentColor" strokeOpacity={0.18} />
+        {kind === 'bars' ? values.map((v, i) => {
+          const bw = Math.min(14, slot * 0.58)
+          const top = y(v)
+          const h = Math.max(v > 0 ? 2 : 0, plotH - top)
+          const isActive = active === i
+          return (
+            <rect key={i} x={cx(i) - bw / 2} y={plotH - h} width={bw} height={h} rx={Math.min(2, bw / 2)}
+              fill={i === last ? `url(#${patternId})` : 'currentColor'}
+              opacity={isActive || active == null ? (i === last ? 1 : 0.85) : 0.35} />
+          )
+        }) : (
+          <>
+            <path d={areaPath} fill={`url(#${patternId}-fade)`} />
+            <path d={linePath} fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinejoin="round" strokeLinecap="round" />
+            {linePts.map(([x, py], i) => (
+              <circle key={i} cx={x} cy={py} r={active === i ? 3.5 : i === last ? 3 : 1.75}
+                fill={i === last ? (accent ? '#131a32' : 'var(--chart-surface)') : 'currentColor'}
+                stroke="currentColor" strokeWidth={i === last ? 1.75 : 0} />
+            ))}
+          </>
+        )}
+        {active != null && kind === 'line' && <line x1={cx(active)} x2={cx(active)} y1={2} y2={plotH} stroke="currentColor" strokeOpacity={0.35} strokeDasharray="2 2" />}
+        {months.map((m, i) => (
+          <text key={i} x={cx(i)} y={height - 1} textAnchor="middle" fontSize="9" fill="currentColor"
+            className={i === last || active === i ? '' : muted} fontWeight={i === last ? 600 : 400}>
+            {format(m, monthFmt, { locale: dateLocale })}
+          </text>
+        ))}
+        {/* One hit target per month, the full height. */}
+        {values.map((_, i) => (
+          <rect key={`hit${i}`} x={slot * i} y={0} width={slot} height={height} fill="transparent"
+            onMouseEnter={() => setActive(i)} onClick={() => setActive(a => (a === i ? null : i))} />
+        ))}
+      </svg>
+    </div>
   )
 }
 
@@ -61,6 +155,9 @@ interface KpiProps {
   label: string
   value: string | number
   trend: number[]
+  months: Date[]
+  kind: 'bars' | 'line'
+  format: (n: number) => string
   delta: Delta
   sub?: React.ReactNode
   accent?: boolean
@@ -68,17 +165,21 @@ interface KpiProps {
 
 // A label, the figure, its last six months and how it compares with last
 // month, coloured by whether that's good news, not by its sign.
-function Kpi({ label, value, trend, delta, sub, accent }: KpiProps) {
+function Kpi({ label, value, trend, months, kind, format: fmt, delta, sub, accent }: KpiProps) {
   return (
     <div className={`h-full rounded-2xl p-5 flex flex-col gap-3 min-w-0 ${
       accent ? 'bg-navy-900 text-white' : 'bg-white border border-slate-100 shadow-card dark:bg-navy-900 dark:border-navy-800'
     }`}>
       <span className={`text-sm font-medium ${accent ? 'text-navy-200' : 'text-slate-600 dark:text-slate-300'}`}>{label}</span>
-      <div className="flex items-end justify-between gap-3 min-w-0">
-        <p className={`font-mono font-semibold tabular-nums leading-tight tracking-tight text-2xl min-w-0 ${accent ? 'text-white' : 'text-navy-900 dark:text-slate-50'}`}>
+      {/* The chart drops under the figure when both don't fit on one line,
+          rather than squeezing the figure onto two. */}
+      <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2 min-w-0">
+        <p className={`font-mono font-semibold tabular-nums leading-tight tracking-tight text-2xl whitespace-nowrap ${accent ? 'text-white' : 'text-navy-900 dark:text-slate-50'}`}>
           {value}
         </p>
-        <Sparkline values={trend} className={accent ? 'text-gold-400' : 'text-navy-500 dark:text-navy-300'} />
+        <span className={`ml-auto ${accent ? 'text-gold-400' : 'text-navy-500 dark:text-navy-300'}`}>
+          <MiniTrend values={trend} months={months} kind={kind} format={fmt} label={label} accent={accent} />
+        </span>
       </div>
       <div className="mt-auto text-xs space-y-0.5">
         <p className={`font-medium ${(accent ? TONE_TEXT_ON_NAVY : TONE_TEXT)[delta.tone]}`} title={delta.title}>{delta.text}</p>
@@ -94,13 +195,15 @@ function CostKpis({ rows }: { rows: Omit<KpiProps, 'accent' | 'sub'>[] }) {
     <div className="h-full rounded-2xl bg-white border border-slate-100 shadow-card min-w-0 flex flex-col divide-y divide-slate-100 dark:bg-navy-900 dark:border-navy-800 dark:divide-navy-800">
       {rows.map(r => (
         <div key={r.label} className="flex-1 px-4 py-3 min-w-0">
-          {/* The trend sits beside the label so the amount keeps the full
-             width: in this narrow card it used to push "Rp" onto its own line. */}
-          <div className="flex items-center justify-between gap-2 min-w-0">
-            <span className="text-sm font-medium text-slate-600 truncate dark:text-slate-300">{r.label}</span>
-            <Sparkline values={r.trend} width={64} height={18} className="text-navy-500 dark:text-navy-300" />
+          {/* The chart sits beside the label so the amount keeps the full
+              width: in this narrow card it pushed "Rp" onto its own line. */}
+          <div className="flex items-end justify-between gap-2 min-w-0">
+            <span className="text-sm font-medium text-slate-600 truncate pb-3 dark:text-slate-300">{r.label}</span>
+            <span className="text-navy-500 dark:text-navy-300">
+              <MiniTrend values={r.trend} months={r.months} kind={r.kind} format={r.format} label={r.label} width={66} height={32} />
+            </span>
           </div>
-          <p className="mt-1 font-mono font-semibold tabular-nums leading-tight text-lg text-navy-900 whitespace-nowrap dark:text-slate-50">{r.value}</p>
+          <p className="mt-0.5 font-mono font-semibold tabular-nums leading-tight text-lg text-navy-900 whitespace-nowrap dark:text-slate-50">{r.value}</p>
           <p className={`text-[11px] font-medium mt-0.5 ${TONE_TEXT[r.delta.tone]}`} title={r.delta.title}>{r.delta.text}</p>
         </div>
       ))}
@@ -281,6 +384,9 @@ export function DashboardPage() {
             label={t('dashboard.arReceivable')}
             value={formatRp(totalAR)}
             trend={arTrend}
+            months={months}
+            kind="line"
+            format={formatRp}
             delta={delta(totalAR, arEndOfLastMonth, 'bad', 'dashboardKpi.arVsEnd', t('dashboardKpi.arVsEndTitle', { month: format(lastMonth, 'MMMM', { locale: dateLocale }) }))}
             sub={<>
               {t('dashboardKpi.unpaidInvoices', { count: unpaidInvoices.length })}
@@ -295,6 +401,9 @@ export function DashboardPage() {
           label={t('dashboard.ordersThisMonth')}
           value={ordersThisMonth}
           trend={perMonth(safeOrders as Order[], o => o.date, () => 1)}
+          months={months}
+          kind="bars"
+          format={String}
           delta={delta(ordersThisMonth, ordersLastMonth, 'good')}
           sub={t('common.inAllCount', { count: orders.length })}
         />
@@ -302,14 +411,17 @@ export function DashboardPage() {
           label={t('dashboard.deliveriesThisMonth')}
           value={deliveriesThisMonth}
           trend={perMonth(deliveries, d => d.date, () => 1)}
+          months={months}
+          kind="bars"
+          format={String}
           delta={delta(deliveriesThisMonth, deliveriesLastMonth, 'good')}
           sub={t('common.inAllCount', { count: deliveries.length })}
         />
         {/* Two columns wide below xl, so it never sits alone beside an empty slot. */}
         <div className="col-span-2 xl:col-span-1 h-full">
           <CostKpis rows={[
-            { label: t('common.production'), value: formatRp(prodCostThisMonth), trend: perMonth(safeProductions as ProductionRow[], p => p.date, p => p.price * p.amount), delta: delta(prodCostThisMonth, prodLastMonth, 'bad') },
-            { label: t('common.operations'), value: formatRp(opsCostThisMonth), trend: perMonth(safeOperations as OperationRow[], o => o.date, o => o.price), delta: delta(opsCostThisMonth, opsLastMonth, 'bad') },
+            { label: t('common.production'), value: formatRp(prodCostThisMonth), trend: perMonth(safeProductions as ProductionRow[], p => p.date, p => p.price * p.amount), months, kind: 'bars', format: formatRp, delta: delta(prodCostThisMonth, prodLastMonth, 'bad') },
+            { label: t('common.operations'), value: formatRp(opsCostThisMonth), trend: perMonth(safeOperations as OperationRow[], o => o.date, o => o.price), months, kind: 'bars', format: formatRp, delta: delta(opsCostThisMonth, opsLastMonth, 'bad') },
           ]} />
         </div>
       </div>

@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { friendlyError } from '@/utils/friendlyError'
-import { suppliersApi, supplierMaterialApi, supplierMaterialColorApi, supplierDocumentApi } from '@/api'
+import { suppliersApi, supplierMaterialApi, supplierMaterialColorApi, supplierDocumentApi, supplierDesignApi } from '@/api'
 import { ALL_CATALOGUES, supplierCatalogueFromDb, type SupplierCatalogue } from '@/data/materialCatalogue'
 import { makeCrudHooks } from './crud'
 
@@ -63,6 +63,35 @@ export const supplierDocumentHooks = {
         qc.invalidateQueries({ queryKey: ['supplier-documents', 'by-supplier', supplierId] })
         toast.success('Document removed')
       },
+      onError: (e: Error) => toast.error(friendlyError(e)),
+    })
+  },
+}
+
+// A bordir/sablon supplier's designs (logos, slogans) and their photos.
+// useList() loads every supplier's at once for the Kas Bon pickers, the way
+// the colour catalogues are.
+export const supplierDesignHooks = {
+  ...makeCrudHooks('supplier-designs', supplierDesignApi, 'Design'),
+  useBySupplier: (supplierId: number | undefined) =>
+    useQuery({
+      queryKey: ['supplier-designs', 'by-supplier', supplierId],
+      queryFn: () => supplierDesignApi.getBySupplier(supplierId as number),
+      enabled: supplierId !== undefined,
+    }),
+  useUploadPhoto: () => {
+    const qc = useQueryClient()
+    return useMutation({
+      mutationFn: ({ id, file }: { id: number; file: File }) => supplierDesignApi.uploadPhoto(id, file),
+      onSuccess: () => { qc.invalidateQueries({ queryKey: ['supplier-designs'] }) },
+      onError: (e: Error) => toast.error(friendlyError(e)),
+    })
+  },
+  useDeletePhoto: () => {
+    const qc = useQueryClient()
+    return useMutation({
+      mutationFn: (id: number) => supplierDesignApi.deletePhoto(id),
+      onSuccess: () => { qc.invalidateQueries({ queryKey: ['supplier-designs'] }) },
       onError: (e: Error) => toast.error(friendlyError(e)),
     })
   },

@@ -138,7 +138,17 @@
     "colourChip": "Colour",
     "density": "Row height",
     "densityCompact": "Compact rows",
-    "densityComfortable": "Comfortable rows"
+    "densityComfortable": "Comfortable rows",
+    "catalogue": {
+      "chip": "Catalogue",
+      "chipTitle": "Pick this line's Bahan and colour from {{supplier}}'s catalogue",
+      "title": "{{supplier}}'s catalogue",
+      "intro": "Choose which material this line is; its colours come next. The Bahan is replaced with the catalogue's name and colour code.",
+      "search": "Search materials…",
+      "usePrice": "Also use the catalogue's price",
+      "currentPrice": "This line's price now: {{price}}",
+      "pickFrom": "Pick from {{supplier}}'s catalogue"
+    }
   },
   "kasBon": {
     "restoreDraft": "Restore the Kas Bon you were entering before?",

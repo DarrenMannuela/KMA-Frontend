@@ -446,5 +446,24 @@
     "costs": "Biaya",
     "aria": "Invoice dan biaya per bulan, enam bulan terakhir",
     "hint": "Batang kiri invoice, batang kanan biaya; angka di bawah tiap bulan adalah labanya. Arahkan atau ketuk bulan untuk rinciannya."
+  },
+  "invoiceSheet": {
+    "nameFirst": "Isi KETERANGAN dulu, lalu ukuran, qty dan harganya.",
+    "rowDeleted": "{{name}} dihapus",
+    "deleteRow": "Hapus baris ini",
+    "deleteRowNamed": "Hapus baris {{name}}",
+    "deleteConfirm": "Hapus {{name}} dari pesanan? Total invoice ikut berubah.",
+    "pasted_other": "{{count}} baris ditambahkan dari tempelan",
+    "pasteUndone": "Tempelan dibatalkan",
+    "badDate": "Tanggal itu tidak terbaca. Ketik seperti 25/02/2026.",
+    "needClient": "KEPADA YTH tidak boleh kosong.",
+    "newItem": "+ barang…",
+    "newSize": "+ ukuran",
+    "saving": "Menyimpan…",
+    "fit": "Muat 1 halaman",
+    "fitOnTitle": "Perkecil invoice secukupnya agar tercetak di satu halaman",
+    "fitOffTitle": "Cetak ukuran penuh (invoice panjang bisa lebih dari satu halaman)",
+    "fitOffBreaks": "(nonaktif selama ada pemisah halaman manual)",
+    "tooLong": "Terlalu panjang untuk satu halaman meski 70%: tercetak di beberapa halaman"
   }
 }

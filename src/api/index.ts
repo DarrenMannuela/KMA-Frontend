@@ -10,6 +10,7 @@ import type {
   CreateInvoiceRequest, UpdateInvoiceRequest,
   CreateSupplierRequest, UpdateSupplierRequest,
   SupplierMaterial, SupplierMaterialColor, SupplierDocument,
+  SupplierDesign, CreateSupplierDesignRequest, UpdateSupplierDesignRequest,
   CreateSupplierMaterialRequest, UpdateSupplierMaterialRequest,
   CreateSupplierMaterialColorRequest, UpdateSupplierMaterialColorRequest,
   CreateFinanceHeaderRequest, UpdateFinanceHeaderRequest,
@@ -117,6 +118,22 @@ export const supplierDocumentApi = {
   },
   delete: (id: number | string) =>
     http.delete<void>(`/supplier-document/${encodeURIComponent(id)}`).then(r => r.data),
+}
+
+// A bordir/sablon supplier's designs. The photo has its own endpoints
+// (multipart, field name "photo"), like a client item's.
+export const supplierDesignApi = {
+  ...crud<SupplierDesign, CreateSupplierDesignRequest, UpdateSupplierDesignRequest>('/supplier-design'),
+  getBySupplier: (supplierId: number | string) =>
+    http.get<SupplierDesign[]>(`/supplier-design/by-supplier?supplier_id=${encodeURIComponent(supplierId)}`).then(r => r.data),
+  uploadPhoto: (id: number | string, file: File) => {
+    const form = new FormData()
+    form.append('photo', file)
+    return http.post<SupplierDesign>(`/supplier-design/${encodeURIComponent(id)}/photo`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
+  deletePhoto: (id: number | string) => http.delete<void>(`/supplier-design/${encodeURIComponent(id)}/photo`).then(r => r.data),
 }
 
 // The Kas Bon headers. One header can hold production and operation lines.

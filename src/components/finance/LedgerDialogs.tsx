@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Trash2 } from 'lucide-react'
+import { Trash2, BookOpen, Images } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { formatRp } from '@/components/ui'
 import { SI_UNITS } from '@/utils/Units'
 import { todayISODate } from '@/utils/MonthUtils'
 import { suggestNextKasBonId } from '@/utils/KasBonId'
 import { catalogueForSupplier, materialFromText, materialLabel, colorCodeFromText } from '@/data/materialCatalogue'
-import { useSupplierCatalogues } from '@/hooks'
+import { useSupplierCatalogues, supplierDesignHooks } from '@/hooks'
 import type { FinanceBatch, FinanceHeader, Order, Supplier } from '@/types'
 import { editBatch, supplierLabel, supplierWithCategory, type EditField, type LedgerRow } from './ledgerModel'
-import { MaterialColorPicker } from './MaterialColorPicker'
+import { MaterialColorPicker, CatalogueMaterialPickerModal } from './MaterialColorPicker'
+import { DesignPickerModal, DesignThumb } from './DesignPicker'
+import { designFromText, designLabel, designsFor } from '@/data/designs'
 
 /** Moves lines to another Kas Bon, or to a new one. */
 export function MoveDialog({ rows, headers, saving, onApply, onClose }: {
@@ -135,6 +137,8 @@ export function LineEditor({ row, suppliers, orders, categories, saving, onApply
     category: row.category, qty: String(row.qty), unit: row.unit, price: String(row.price), order_id: row.order_id ?? '',
   })
   const [error, setError] = useState('')
+  const [pickMaterial, setPickMaterial] = useState(false)
+  const [pickDesign, setPickDesign] = useState(false)
   const prod = row.kind === 'production'
   const set = (patch: Partial<typeof v>) => { setV(x => ({ ...x, ...patch })); setError('') }
 
@@ -149,6 +153,10 @@ export function LineEditor({ row, suppliers, orders, categories, saving, onApply
   const catMatch = catalogue ? materialFromText(catalogue, v.name) : undefined
   const catCode = catalogue && catMatch ? colorCodeFromText(catMatch, v.name) : undefined
   const catColors = catalogue && catMatch ? catalogue.colorsFor(catMatch) : []
+  // A bordir/sablon supplier's designs.
+  const { data: allDesigns = [] } = supplierDesignHooks.useList()
+  const lineDesigns = prod ? designsFor(allDesigns, v.supplier_id) : []
+  const design = lineDesigns.length ? designFromText(lineDesigns, v.supplier_id, v.name) : undefined
 
   const save = () => {
     const order = v.order_id.trim().toUpperCase()
@@ -190,7 +198,52 @@ export function LineEditor({ row, suppliers, orders, categories, saving, onApply
         </div>
         {prod ? (
           <>
+            {/* Supplier first: it decides which catalogue the Bahan comes from. */}
+            <label className="block"><span className="field-label">{t('ledger.columns.supplier')}</span>
+              <select className="field" value={v.supplier_id || ''} onChange={e => set({ supplier_id: Number(e.target.value) })}>
+                <option value="">{t('ledger.supplierPlaceholder')}</option>
+                {suppliers.map(s => <option key={s.id} value={s.id}>{supplierWithCategory(s)}</option>)}
+              </select>
+            </label>
             <label className="block"><span className="field-label">{t('ledger.columns.bahan')}</span><input className="field" value={v.name} onChange={e => set({ name: e.target.value.toUpperCase() })} /></label>
+            {lineDesigns.length > 0 && !catMatch && (
+              <button type="button" className="btn-secondary btn-sm -mt-1.5" onClick={() => setPickDesign(true)}>
+                {design ? <DesignThumb design={design} className="w-5 h-5 rounded" /> : <Images size={14} aria-hidden />}
+                {design ? t('designs.changeDesign') : t('designs.pickDesign', { count: lineDesigns.length })}
+              </button>
+            )}
+            {pickDesign && (
+              <DesignPickerModal
+                supplierName={supplierLabel(suppliers, v.supplier_id) ?? ''}
+                designs={lineDesigns}
+                currentPrice={Number(v.price) || 0}
+                selectedId={design?.id}
+                onPick={(d, usePrice) => {
+                  set({ name: designLabel(d), unit: 'pcs', ...(usePrice && d.price ? { price: String(d.price) } : {}) })
+                  setPickDesign(false)
+                }}
+                onClose={() => setPickDesign(false)}
+              />
+            )}
+            {catalogue && !catMatch && catalogue.materials.length > 0 && lineDesigns.length === 0 && (
+              // Not one of this supplier's materials (typed by hand, or the
+              // supplier was just changed): pick it from the catalogue.
+              <button type="button" className="btn-secondary btn-sm -mt-1.5" onClick={() => setPickMaterial(true)}>
+                <BookOpen size={14} aria-hidden /> {t('ledger.catalogue.pickFrom', { supplier: supplierLabel(suppliers, v.supplier_id) ?? '' })}
+              </button>
+            )}
+            {pickMaterial && catalogue && (
+              <CatalogueMaterialPickerModal
+                supplierName={supplierLabel(suppliers, v.supplier_id) ?? ''}
+                materials={catalogue.materials}
+                currentPrice={Number(v.price) || 0}
+                onPick={(m, usePrice) => {
+                  set({ name: materialLabel(m), ...(usePrice && m.price ? { price: String(m.price) } : {}) })
+                  setPickMaterial(false)
+                }}
+                onClose={() => setPickMaterial(false)}
+              />
+            )}
             {catalogue && catMatch && (
               <div className="-mt-1.5">
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -209,12 +262,6 @@ export function LineEditor({ row, suppliers, orders, categories, saving, onApply
                 )}
               </div>
             )}
-            <label className="block"><span className="field-label">{t('ledger.columns.supplier')}</span>
-              <select className="field" value={v.supplier_id || ''} onChange={e => set({ supplier_id: Number(e.target.value) })}>
-                <option value="">{t('ledger.supplierPlaceholder')}</option>
-                {suppliers.map(s => <option key={s.id} value={s.id}>{supplierWithCategory(s)}</option>)}
-              </select>
-            </label>
             <div className="grid grid-cols-3 gap-3">
               <label><span className="field-label">{t('ledger.columns.qty')}</span><input className="field" inputMode="decimal" value={v.qty} onChange={e => set({ qty: e.target.value.replace(/[^\d.,]/g, '') })} /></label>
               <label><span className="field-label">{t('ledger.columns.unit')}</span>

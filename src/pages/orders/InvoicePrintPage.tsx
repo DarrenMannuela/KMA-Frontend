@@ -1,11 +1,17 @@
 import { liveDownPayment as resolveLiveDownPayment, balanceDue } from '@/utils/invoiceAmount'
 import { useRef, useLayoutEffect, useEffect, useState, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
+import { useTranslation } from 'react-i18next'
+import i18n from '@/i18n/config'
+import { friendlyError } from '@/utils/friendlyError'
+import { parseDate } from '@/utils/tableText'
+import type { Invoice, Item } from '@/types'
 import { ArrowLeft, Printer, Receipt, Plus, PackageSearch, X, Highlighter, Rows3 } from 'lucide-react'
 import { format } from 'date-fns'
 import { invoicesApi, ordersApi, itemsApi } from '@/api'
-import { formatRp, FormField } from '@/components/ui'
+import { formatRp, FormField, ConfirmDialog } from '@/components/ui'
 import { Modal } from '@/components/ui/Modal'
 import { useRekening } from '@/utils/RekeningStore'
 import { itemHooks, clientItemHooks, clientItemPriceHooks, invoiceHooks } from '@/hooks'
@@ -37,9 +43,9 @@ function escapeCssString(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
-const BASE_FONT_PX = 14
+const BASE_FONT_PX = 11.5
 // The item table's row height (a minimum: a wrapping name still grows its row).
-const ROW_HEIGHT_PX = 26
+const ROW_HEIGHT_PX = 14
 // The print-only running footer's band, taken out of #invoice's bottom padding
 // so the page size is unchanged. See the @page rule below.
 const FOOTER_MARGIN_MM = 14
@@ -77,10 +83,20 @@ const HIGHLIGHT_PALETTE = [
   { name: 'Warm Gray', value: '#dcdcd4' },
 ] as const
 
+// "11 APRIL 2019", as KMA's own invoices write it.
 function formatDate(date: string | Date | null | undefined) {
-  if (!date) return '—'
-  return format(new Date(date), 'd-MMM-yy')
+  if (!date) return '-'
+  return format(new Date(date), 'd MMMM yyyy').toUpperCase()
 }
+
+// The look of KMA's own Excel invoice: a serif for the title, notes and
+// signature labels, Arial for everything else, a dark blue title.
+const SERIF = "Cambria, Georgia, 'Times New Roman', serif"
+const TITLE_BLUE = '#1f4e79'
+const FRAME = '1.5px solid #000'
+const LINE = '1px solid #000'
+const ROW_LINE = '1px solid #c8c8c8'
+const num = (n: number) => n.toLocaleString('en-US')
 
 // An uppercasing input that keeps the caret where it was.
 function useUppercaseField(initial: string) {
@@ -130,6 +146,143 @@ function useFormattedNumberField(value: number, onValueChange: (n: number) => vo
   }
 
   return { ref, display, onChange }
+}
+
+// ─── Spreadsheet cell ──────────────────────────────────────────────────────
+// A cell of the invoice that works like one in Excel, while printing as
+// plain text: click (or arrow/Tab to it) to select; typing replaces what's
+// there, Enter or F2 (or a double-click) edits it; Enter saves and moves
+// down, Tab right, Esc cancels. On a touch screen a tap edits straight away.
+// Numbers show with thousands commas and are typed as plain digits.
+type SheetMove = (rowDelta: number, colDelta: number) => void
+
+function SheetCell({ value, onSave, numeric = false, align = 'left', placeholder, cellRef, onMove, bold = false, uppercase = true }: {
+  value: string | number
+  onSave: (value: string) => void
+  numeric?: boolean
+  align?: 'left' | 'center' | 'right'
+  /** Shown on screen only, in an empty cell (e.g. "+ size"). */
+  placeholder?: string
+  cellRef?: (el: HTMLElement | null) => void
+  onMove?: SheetMove
+  bold?: boolean
+  uppercase?: boolean
+}) {
+  const shown = numeric ? (value === '' || value == null ? '' : num(Number(value))) : String(value ?? '')
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const displayRef = useRef<HTMLDivElement | null>(null)
+  // Where focus goes once an edit ends: back to this cell, unless the edit
+  // ended by moving to another one (Enter, Tab, arrows) or clicking away.
+  const refocus = useRef(false)
+
+  // One edit saves once: Enter (or Tab, an arrow) saves and moves on, and the
+  // blur that moving causes must not save it a second time.
+  const settled = useRef(true)
+  const begin = (start: string) => { settled.current = false; setDraft(start); setEditing(true) }
+  const clean = (v: string) => (numeric ? v.replace(/[^\d]/g, '') : uppercase ? v.toUpperCase() : v)
+  const commit = () => {
+    if (settled.current) return
+    settled.current = true
+    setEditing(false)
+    const next = clean(draft).trim()
+    if (next !== String(value ?? '').trim()) onSave(next)
+  }
+
+  // Not typing: the cell is selected text that moves, starts an edit, or clears.
+  const onDisplayKey = (e: React.KeyboardEvent) => {
+    const moves: Record<string, [number, number]> = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }
+    if (moves[e.key]) { e.preventDefault(); onMove?.(...moves[e.key]); return }
+    if (e.key === 'Tab') { e.preventDefault(); onMove?.(0, e.shiftKey ? -1 : 1); return }
+    if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); refocus.current = true; begin(numeric ? String(value ?? '') : shown); return }
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); refocus.current = true; begin(''); return }
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); refocus.current = true; begin(e.key) }
+  }
+  // Typing: Enter saves and moves down, Tab right, Esc cancels.
+  const onInputKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault(); refocus.current = false; commit()
+      onMove?.(e.key === 'Tab' ? 0 : e.shiftKey ? -1 : 1, e.key === 'Tab' ? (e.shiftKey ? -1 : 1) : 0)
+    } else if (e.key === 'Escape') {
+      e.preventDefault(); refocus.current = true; settled.current = true; setEditing(false)
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault(); refocus.current = false; commit(); onMove?.(e.key === 'ArrowUp' ? -1 : 1, 0)
+    }
+  }
+
+  // Before paint, so the next keystrokes of fast typing land in the input.
+  useLayoutEffect(() => {
+    if (editing) {
+      const el = inputRef.current
+      if (el) { el.focus(); const n = el.value.length; el.setSelectionRange(n, n) }
+    } else if (refocus.current) {
+      refocus.current = false
+      displayRef.current?.focus()
+    }
+  }, [editing])
+
+  if (editing) {
+    return (
+      <input
+        ref={el => { inputRef.current = el }}
+        className="sheet-cell sheet-editing"
+        value={draft}
+        inputMode={numeric ? 'numeric' : undefined}
+        onChange={e => setDraft(clean(e.target.value))}
+        onKeyDown={onInputKey}
+        onClick={e => e.stopPropagation()}
+        onBlur={() => { if (editing) { refocus.current = false; commit() } }}
+        style={{ textAlign: align, fontWeight: bold ? 'bold' : undefined }}
+      />
+    )
+  }
+  // Shown as text, so a long KETERANGAN wraps onto a second line on paper
+  // the way it does in Excel (a one-line input would cut it off).
+  return (
+    <div
+      ref={el => { displayRef.current = el; cellRef?.(el) }}
+      className="sheet-cell"
+      tabIndex={0}
+      role="textbox"
+      aria-readonly="true"
+      onKeyDown={onDisplayKey}
+      onDoubleClick={() => begin(numeric ? String(value ?? '') : shown)}
+      onClick={e => {
+        e.stopPropagation()
+        // No keyboard on a phone to start typing with: a tap edits.
+        if (window.matchMedia('(pointer: coarse)').matches) begin(numeric ? String(value ?? '') : shown)
+      }}
+      style={{ textAlign: align, fontWeight: bold ? 'bold' : undefined, cursor: 'cell', whiteSpace: 'normal', wordBreak: 'break-word' }}
+    >
+      {shown || (placeholder ? <span className="sheet-ph">{placeholder}</span> : '\u00a0')}
+    </div>
+  )
+}
+
+/** Rows pasted from Excel: KETERANGAN, SIZE, QTY, HARGA (an ITEM number in
+ *  front and a JUMLAH after are allowed and ignored). A blank KETERANGAN
+ *  belongs to the item above, as on the invoice; "-" and empty rows are
+ *  skipped. */
+function parsePastedItems(text: string): { item_name: string; size: string; amount: number; price: number }[] {
+  const rows = text.replace(/\r/g, '').split('\n').map(l => l.split('\t').map(c => c.trim())).filter(r => r.some(c => c && c !== '-'))
+  const digits = (v: string | undefined) => Number((v ?? '').replace(/[^\d]/g, '')) || 0
+  const out: { item_name: string; size: string; amount: number; price: number }[] = []
+  let lastName = ''
+  for (const r0 of rows) {
+    let r = r0
+    // A leading item number (1, 2, 3…) when the row has room for one.
+    if (r.length >= 5 && /^\d{0,3}$/.test(r[0])) r = r.slice(1)
+    const [name, size, qty, price] = r
+    if (/^(ITEM|KETERANGAN|TOTAL|D\/P|PELUNASAN|LUNAS)/i.test(name ?? '')) continue
+    const itemName = (name || lastName).toUpperCase()
+    if (!itemName) continue
+    lastName = itemName
+    const amount = digits(qty), unitPrice = digits(price)
+    if (!amount && !unitPrice) continue
+    out.push({ item_name: itemName, size: (size ?? '').toUpperCase(), amount, price: unitPrice })
+  }
+  return out
 }
 
 // ─── Page-flag badge ───────────────────────────────────────────────────────
@@ -203,6 +356,7 @@ function PageBreakGap({
 
 export function InvoicePrintPage() {
   usePrintLightBody()
+  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const invoiceId = decodeURIComponent(id ?? '')
@@ -211,6 +365,8 @@ export function InvoicePrintPage() {
   const signatoryTitle = useUppercaseField('FOUNDER')
   // The D/P row's "paid" label on a Pelunasan invoice: free text, usually LUNAS.
   const dpPaidLabel = useUppercaseField('LUNAS')
+  // A free note beside TOTAL (the Excel's "* khusus"), for this print only.
+  const [totalNote, setTotalNote] = useState('')
   // J/T (due date): filled from invoice.due_date, editable for this printed copy
   // only (e.g. "J/T : SAAT PENGIRIMAN").
   const jatuhTempo = useUppercaseField('')
@@ -262,16 +418,39 @@ export function InvoicePrintPage() {
   // engine's own layout disagreeing); tightening a few fixed values is far
   // more predictable than solving for an exact scale factor, and the user
   // can see right away whether it was enough.
-  const [compact, setCompact] = useState(false)
-  const fontPx = compact ? 11 : BASE_FONT_PX
-  const rowPx = compact ? 18 : ROW_HEIGHT_PX
+  // Fixed tightening, superseded by "Fit to 1 page" below; kept as a
+  // constant so the spacing code keeps one place to change.
+  const compact = false
+  // Fit to 1 page: when the invoice is a little too tall for one page, the
+  // whole of it is scaled down evenly (CSS zoom, which prints the same as it
+  // shows) by exactly what it takes, rather than squeezing a few gaps by a
+  // fixed amount (which left an invoice that already fitted with a big gap
+  // after the signatures, and a long one still on two pages). Never below
+  // 70%: past that the text gets too small, and it prints on more pages.
+  const [fitOnePage, setFitOnePage] = useState(true)
+  const [fitZoom, setFitZoom] = useState(1)
+  const [tooLongForOnePage, setTooLongForOnePage] = useState(false)
+  // Whether it fits one page at full size (measured as printed, see measureFit).
+  const [fitsAtFullSize, setFitsAtFullSize] = useState<boolean | null>(null)
+  const fitBodyRef = useRef<HTMLDivElement>(null)
+  const [manualBreaks, setManualBreaks] = useState<Set<string>>(new Set())
+  // Fit to 1 page sets the real sizes (font, rows, gaps, logo, title,
+  // signing space) to this fraction rather than zooming the page: a zoom
+  // wasn't applied to typed-over text boxes on paper and measured
+  // differently from the printout, so the preview and the print disagreed.
+  // Real sizes lay out the same on screen and on paper.
+  const fitActive = fitOnePage && manualBreaks.size === 0
+  const fit = fitActive ? fitZoom : 1
+  const sz = (px: number) => Math.round(px * fit * 100) / 100
+  const fontPx = sz(compact ? 10 : BASE_FONT_PX)
+  const rowPx = sz(compact ? 14 : ROW_HEIGHT_PX)
   // Every table cell's own padding (6px 8px normally) sits on top of its
   // row's height in content-box sizing, so it's a real, separate lever —
   // left alone, it alone would cap how much a row could ever shrink.
-  const cellPad = compact ? '3px 6px' : '6px 8px'
+  const cellPad = `${sz(1)}px 6px`
   // Scales a block-spacing value (margins between sections — the biggest
   // source of "whitespace" on a near-miss page) to 40% when compact.
-  const tightMargin = (px: number) => (compact ? Math.round(px * 0.4) : px)
+  const tightMargin = (px: number) => sz(compact ? Math.round(px * 0.4) : px)
   // A blank gap row's +/- controls must fit inside the same height budget
   // as every other cell in that row (rowPx minus the cell's own vertical
   // padding) — a fixed 18px button no longer fit once compact mode shrank
@@ -280,7 +459,6 @@ export function InvoicePrintPage() {
 
   // Manual page breaks, by item group: "start a new page before this group".
   // Groups are never split, so a break can't land inside one.
-  const [manualBreaks, setManualBreaks] = useState<Set<string>>(new Set())
   const toggleManualBreak = (name: string) => {
     setManualBreaks(prev => {
       const next = new Set(prev)
@@ -376,6 +554,166 @@ export function InvoicePrintPage() {
   // pattern KwitansiPrintPage uses).
   const { data: allInvoices = [] } = invoiceHooks.useList()
 
+  // ─── The invoice as a spreadsheet ─────────────────────────────────────
+  // Typing into the table changes the order's real items (so the order
+  // page, kwitansi and finance agree with what's printed), and every invoice
+  // of the order is then brought in line with the new total: an unpaid DP
+  // keeps its percentage, a paid DP keeps its amount, and what's left is the
+  // total less the DP and any discount — the same sums the invoice form does.
+  const qc = useQueryClient()
+  const [sheetBusy, setSheetBusy] = useState(false)
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<Item | null>(null)
+  const sheetCells = useRef(new Map<string, HTMLElement>())
+  const sheetRef = (row: number, col: number) => (el: HTMLElement | null) => {
+    const key = `${row}:${col}`
+    if (el) sheetCells.current.set(key, el)
+    else sheetCells.current.delete(key)
+  }
+  // Moves to the nearest cell in that direction, skipping gaps (a row with
+  // fewer editable cells).
+  const sheetMove = (row: number, col: number): SheetMove => (dr, dc) => {
+    let r = row + dr, c = Math.min(3, Math.max(0, col + dc))
+    for (let i = 0; i < 400; i++) {
+      const el = sheetCells.current.get(`${r}:${c}`)
+      if (el) { el.focus(); return }
+      if (dr) r += dr
+      else if (dc) { c += dc; if (c < 0 || c > 3) return }
+      else return
+      if (r < 0 || r > 400) return
+    }
+  }
+
+  const syncInvoiceTotals = async (orderId: string) => {
+    const fresh = await itemsApi.getByOrder(orderId)
+    const total = fresh.reduce((n, i) => n + (i.sub_total ?? i.amount * i.price), 0)
+    // Fresh, not the list loaded with the page: an earlier edit may have changed them.
+    const own = (await invoicesApi.list()).filter((i: Invoice) => i.order_id === orderId)
+    const dpInv = own.find(i => i.type === 'dp')
+    const dpAmount = (() => {
+      if (!dpInv) return 0
+      const dp = dpInv.down_payment ?? 0
+      if (dp === 0) return 0
+      if (dpInv.status === 'paid' || !dpInv.total) return Math.min(dp, total)
+      return Math.round(total * (dp / dpInv.total))
+    })()
+    for (const inv of own) {
+      const dp = inv.type === 'dp' || dpInv ? dpAmount : (inv.down_payment ?? 0)
+      const remaining = total - dp
+      const ar = Math.max(0, remaining - (inv.discount ?? 0))
+      if (inv.total !== total || (inv.down_payment ?? 0) !== dp || inv.remaining !== remaining || inv.ar_receivable !== ar) {
+        await invoicesApi.update(inv.id, { total, down_payment: dp, remaining, ar_receivable: ar })
+      }
+    }
+  }
+
+  const sheetEdit = async (work: () => Promise<void>, done?: string, sync = true) => {
+    if (!invoice) return
+    setSheetBusy(true)
+    try {
+      await work()
+      if (sync) await syncInvoiceTotals(invoice.order_id)
+      await Promise.all([
+        refetchItems(),
+        qc.invalidateQueries({ queryKey: ['invoices'] }),
+        qc.invalidateQueries({ queryKey: ['invoice', invoice.id] }),
+        qc.invalidateQueries({ queryKey: ['items'] }),
+      ])
+      if (done) toast.success(done)
+    } catch (e) {
+      toast.error(friendlyError(e as Error))
+    } finally {
+      setSheetBusy(false)
+    }
+  }
+
+  // One cell of an item row. A name typed on a group's first row renames
+  // the whole group (all its sizes); typed on another row, just that row.
+  const saveItemCell = (item: Item, field: 'name' | 'size' | 'qty' | 'price', raw: string, wholeGroup: Item[] | null) =>
+    sheetEdit(async () => {
+      if (field === 'name') {
+        const name = raw.trim().toUpperCase()
+        if (!name) return
+        for (const it of wholeGroup ?? [item]) await itemsApi.update(it.id, { item_name: name })
+        return
+      }
+      if (field === 'size') { await itemsApi.update(item.id, { size: raw.trim().toUpperCase() }); return }
+      const amount = field === 'qty' ? Number(raw) || 0 : item.amount
+      const price = field === 'price' ? Number(raw) || 0 : item.price
+      await itemsApi.update(item.id, { amount, price, sub_total: amount * price })
+    })
+
+  // A blank row: what's typed into it becomes a new line, under the item
+  // above it (a new size) or, with a KETERANGAN typed, a new item.
+  const saveBlankCell = (groupName: string | null, field: 'name' | 'size' | 'qty' | 'price', raw: string) => {
+    if (!invoice) return
+    const v = raw.trim()
+    if (!v) return
+    const name = field === 'name' ? v.toUpperCase() : groupName
+    if (!name) return void toast.error(t('invoiceSheet.nameFirst'))
+    const amount = field === 'qty' ? Number(v) || 0 : 0
+    const price = field === 'price' ? Number(v) || 0 : 0
+    return sheetEdit(async () => {
+      await itemsApi.create({ order_id: invoice.order_id, item_name: name, size: field === 'size' ? v.toUpperCase() : '', amount, price, sub_total: amount * price })
+    })
+  }
+
+  const deleteItemRow = (item: Item) => sheetEdit(async () => { await itemsApi.delete(item.id) }, t('invoiceSheet.rowDeleted', { name: item.item_name }))
+
+  // Rows copied from Excel and pasted anywhere on the table (outside a cell
+  // being typed in) are added as new lines, with an Undo.
+  const onSheetPaste = (e: React.ClipboardEvent) => {
+    if (!invoice) return
+    // Pasting into a cell being typed in is ordinary text pasting.
+    if ((e.target as HTMLElement).tagName === 'INPUT') return
+    const text = e.clipboardData.getData('text/plain')
+    if (!/[\t\n]/.test(text)) return
+    const rows = parsePastedItems(text)
+    if (!rows.length) return
+    e.preventDefault()
+    const before = new Set(items.map(i => i.id))
+    const created: number[] = []
+    sheetEdit(async () => {
+      for (const r of rows) {
+        const it = await itemsApi.create({ order_id: invoice.order_id, ...r, sub_total: r.amount * r.price })
+        if (it && !before.has(it.id)) created.push(it.id)
+      }
+    }).then(() => {
+      toast.success(t => (
+        <span className="flex items-center gap-3">
+          {i18n.t('invoiceSheet.pasted', { count: rows.length })}
+          {created.length > 0 && (
+            <button className="font-semibold underline" onClick={() => {
+              toast.dismiss(t.id)
+              sheetEdit(async () => { for (const id of created) await itemsApi.delete(id) }, i18n.t('invoiceSheet.pasteUndone'))
+            }}>{i18n.t('common.undo')}</button>
+          )}
+        </span>
+      ), { duration: 8000 })
+    })
+  }
+
+  // The header, typed in place and saved to the invoice (PO No. to the order).
+  const saveInvoiceField = (field: 'kepada_yth' | 'untuk' | 'alamat' | 'telp' | 'email' | 'lama_produksi' | 'start_produksi' | 'tanggal', raw: string) => {
+    if (!invoice) return
+    let value: string | null = raw.trim()
+    if (field === 'tanggal') {
+      const iso = parseDate(value)
+      if (!iso) return void toast.error(t('invoiceSheet.badDate'))
+      value = iso
+    }
+    if (field === 'kepada_yth' && !value) return void toast.error(t('invoiceSheet.needClient'))
+    if (value === '' && field !== 'kepada_yth' && field !== 'untuk' && field !== 'alamat') value = null
+    // Header details don't change any amount, so no totals to bring in line.
+    sheetEdit(async () => { await invoicesApi.update(invoice.id, { [field]: value }) }, undefined, false)
+  }
+  const savePoNumber = (raw: string) => {
+    if (!order) return
+    sheetEdit(async () => {
+      await ordersApi.update(order.id, { po_number: raw.trim().toUpperCase() || null })
+      await qc.invalidateQueries({ queryKey: ['order', order.id] })
+    }, undefined, false)
+  }
+
   // Add Row creates a real item on the order, so it shows up everywhere. A quick
   // one-line form; editing stays on the order's pages.
   const createItem = itemHooks.useCreate()
@@ -441,9 +779,9 @@ export function InvoicePrintPage() {
   // Fixed overhead (masthead, notes, signature) plus a row per item and per gap.
   const groupCount = new Set(items.map(i => i.item_name)).size
   const extraGapRowCount = Object.values(extraGapRows).reduce((s, n) => s + n, 0)
-  const rowCount = items.length + groupCount /* gap row per group */ + extraGapRowCount /* user-added extra blank rows */ + 4 /* company + total + dp + pelunasan rows */
+  const rowCount = items.length + groupCount /* gap row per group */ + extraGapRowCount /* user-added extra blank rows */ + 3 /* total + dp + pelunasan rows */
   const approxRowPx = rowPx
-  const approxOverheadPx = compact ? 430 : 620 /* masthead + customer detail + notes + signature/footer, roughly */
+  const approxOverheadPx = compact ? 420 : 560 /* masthead + customer detail + notes + signature/footer, roughly */
   const likelyMultiPage = approxOverheadPx + rowCount * approxRowPx > pageHeightPx * 1.05
 
   // Measures the heights the break prediction needs. Nothing measured feeds
@@ -484,6 +822,47 @@ export function InvoicePrintPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, pageWidthMm, pageHeightMm, invoice?.id, compact])
 
+  // How much to scale for Fit to 1 page. Measured from the rendered page
+  // (undoing the preview's own shrink-to-screen and the current zoom), less
+  // what only shows on screen. Runs after every render but only stores a
+  // real change, so it settles.
+  // The invoice's height as it will print: for an instant, everything
+  // printing hides (screen-only buttons, empty header rows, page-break
+  // hints) is hidden the same way, the height is read, and it's put back
+  // before anything is drawn.
+  const availablePx = (pageHeightMm - HEADER_MARGIN_MM - FOOTER_MARGIN_MM - (20 - HEADER_MARGIN_MM) - (15 - FOOTER_MARGIN_MM)) * MM_TO_PX * 0.98
+  const measurePrinted = (): number | null => {
+    const el = fitBodyRef.current
+    if (!el) return null
+    const root = document.documentElement
+    root.classList.add('kma-print-measure')
+    const h = el.getBoundingClientRect().height / (scale || 1)
+    root.classList.remove('kma-print-measure')
+    return h
+  }
+  // No dependency list on purpose: it measures the rendered page, which any
+  // edit, note, paper size or font load can change; it only stores a real
+  // change, so it settles in a couple of passes (sizes and height move
+  // together, so each pass lands close).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const printed = measurePrinted()
+    if (printed == null) return
+    const fits = printed <= availablePx
+    if (fits !== fitsAtFullSize) setFitsAtFullSize(fits)
+    if (!fitActive) return
+    // Smaller by how much it's over; back up (never past full size) when
+    // there's room to spare.
+    let target = fit
+    if (printed > availablePx) target = fit * (availablePx / printed)
+    else if (fit < 1 && printed < availablePx * 0.97) target = Math.min(1, fit * (availablePx / printed))
+    // Below 70% the text is too small: full size, on more pages, instead.
+    const tooLong = target < 0.7
+    const next = tooLong ? 1 : Math.floor(target * 200) / 200
+    if (tooLong !== tooLongForOnePage) setTooLongForOnePage(tooLong)
+    if (Math.abs(next - fit) >= 0.005) setFitZoom(next)
+  })
+
   // One grouping for both the table and the page prediction.
   const groups: { name: string; rows: typeof items }[] = []
   items.forEach(item => {
@@ -512,7 +891,12 @@ export function InvoicePrintPage() {
   // a missed one prints wrong).
   const BASE_SLACK_PX = 24
   const DRIFT_FRACTION = 0.18
-  if (hasMeasurements) {
+  // When the true printed height says it's one page (as it is, or scaled by
+  // Fit to 1 page), there's nothing to predict: the cautious guess below
+  // (with its 18% safety margin) used to mark a page 2 on an invoice that
+  // prints on one.
+  const printsOnOnePage = manualBreaks.size === 0 && fitsAtFullSize === true
+  if (hasMeasurements && !printsOnOnePage) {
     let remaining = firstPageContentPx - measured.top - measured.thead
     let consumed = measured.top + measured.thead
     groups.forEach((g, i) => {
@@ -573,7 +957,7 @@ export function InvoicePrintPage() {
   const totalPredictedPages = pageSegments.length + (predictedTailNewPage ? 1 : 0)
   // One page count for the toolbar pill and every PageFlag: the measured
   // prediction once available, the heuristic before.
-  const previewTotalPages = Math.max(
+  const previewTotalPages = printsOnOnePage ? 1 : Math.max(
     hasMeasurements ? totalPredictedPages : pageSegments.length,
     likelyMultiPage ? 2 : 1,
   )
@@ -602,43 +986,35 @@ export function InvoicePrintPage() {
     ? Math.round((liveDownPayment / invoice.total) * 100)
     : 50
 
-  // Highlight the amount this invoice asks for: D/P on a DP invoice, Pelunasan
-  // otherwise. A 0% DP is a full invoice, with no D/P row.
-  const isFullInvoice = invoice.type === 'dp' && (invoice.down_payment ?? 0) === 0
-  const highlightDp = invoice.type === 'dp' && !isFullInvoice
-  const highlightColor = '#d4e6c3'
-  // The user-picked header highlight, separate from the automatic D/P vs
-  // Pelunasan one.
-  const highlightCellStyle = { background: highlightChoice }
-
   // Each fixed column's content this render, for auto-fit. KETERANGAN takes the
   // remaining width.
   const hasDp = liveDownPayment > 0
   const columnTexts: Record<ColumnKey, string[]> = {
-    no: ['NO.', ...groups.map((_, i) => String(i + 1))],
-    size: ['SIZE', ...items.map(i => i.size || '—')],
+    no: ['ITEM', ...groups.map((_, i) => String(i + 1))],
+    size: ['SIZE', ...items.map(i => i.size || '-')],
     qty: [
-      'QTY',
-      ...items.map(i => i.amount.toLocaleString('id-ID')),
-      items.reduce((s, i) => s + i.amount, 0).toLocaleString('id-ID'),
+      'QTY / SET',
+      ...items.map(i => num(i.amount)),
+      num(items.reduce((s, i) => s + i.amount, 0)),
       ...(invoice.type === 'pelunasan' ? [dpPaidLabel.value] : []),
     ],
     hargaNet: [
-      'HARGA NET',
-      ...items.map(i => i.price.toLocaleString('id-ID')),
+      'HARGA NET / PCS',
+      ...items.map(i => num(i.price)),
       'TOTAL',
-      ...(hasDp ? [`D/P ${dpPercent} %`] : []),
+      ...(hasDp ? [`D/P - ${dpPercent} %`] : []),
       'PELUNASAN',
     ],
     jumlah: [
       'JUMLAH (Rp)',
-      ...items.map(i => i.sub_total.toLocaleString('id-ID')),
-      invoice.total.toLocaleString('id-ID'),
-      ...(hasDp ? [liveDownPayment.toLocaleString('id-ID')] : []),
+      ...items.map(i => num(i.sub_total)),
+      num(invoice.total),
+      // A Pelunasan prints the paid D/P in brackets.
+      ...(hasDp ? [invoice.type === 'pelunasan' ? `(${num(liveDownPayment)})` : num(liveDownPayment)] : []),
       // Matches the PELUNASAN cell's actual rendered value below — must
       // stay in sync or a discounted invoice could size the JUMLAH column
       // to a number narrower than what's really printed in it.
-      liveBalanceDue.toLocaleString('id-ID'),
+      num(liveBalanceDue),
     ],
   }
   // Measured in bold, the heaviest weight any of these cells uses, at
@@ -653,6 +1029,18 @@ export function InvoicePrintPage() {
     hargaNet: fitWidthFor('hargaNet'),
     jumlah: fitWidthFor('jumlah'),
   }
+
+  // Cell styles for the item table, in the Excel invoice's look.
+  const headCell: React.CSSProperties = { borderLeft: LINE, borderRight: LINE, borderBottom: '3px double #e26b0a', padding: `${sz(8)}px 4px`, textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: `${fontPx - 1}px` }
+  const bodyCell: React.CSSProperties = { borderLeft: LINE, borderRight: LINE, borderTop: ROW_LINE, borderBottom: ROW_LINE, padding: cellPad, height: `${rowPx}px`, whiteSpace: 'nowrap' }
+  const sumCell: React.CSSProperties = { border: LINE, padding: cellPad, height: `${rowPx + 4}px`, fontWeight: 'bold', whiteSpace: 'nowrap' }
+  const openCell: React.CSSProperties = { padding: cellPad, height: `${rowPx + 4}px`, borderTop: 'none', borderBottom: 'none' }
+  const infoLabel: React.CSSProperties = { padding: '0 12px 3px 0', whiteSpace: 'nowrap', verticalAlign: 'top', width: '1%' }
+  const infoValue: React.CSSProperties = { padding: '0 0 3px', verticalAlign: 'top' }
+  const gapButton: React.CSSProperties = { border: '1px solid #cbd5e1', borderRadius: '4px', width: `${gapCtrlSize}px`, height: `${gapCtrlSize}px`, lineHeight: 1, fontSize: `${Math.max(9, gapCtrlSize - 3)}px`, color: '#64748b', background: 'white', cursor: 'pointer', padding: 0 }
+
+  // Running row number for the table's cells, counted as it renders.
+  const sheetRow = { n: 0 }
 
   // Plain native print; see the multi-page policy at the top.
   const handlePrint = () => {
@@ -673,6 +1061,7 @@ export function InvoicePrintPage() {
         </button>
         <span className="text-slate-400 text-sm flex-1 flex items-center gap-1.5">
           {invoice.id}
+          {sheetBusy && <span className="badge bg-amber-50 text-amber-700" role="status">{t('invoiceSheet.saving')}</span>}
           {/* "At least": natural overflow can add pages beyond the prediction. */}
           {previewTotalPages > 1 && (
             <span className="badge bg-slate-100 text-slate-600">
@@ -681,21 +1070,23 @@ export function InvoicePrintPage() {
           )}
         </span>
         <div className="flex items-center gap-1.5">
-          {/* Tightens row height, font size, and block gaps — a manual option
-             for a near-miss invoice (a little whitespace, not real overflow),
-             not an auto-computed exact-fit scale. See the `compact` comment. */}
+          {/* Fit to 1 page (on by default): scales the whole invoice down just
+             enough to fit one page, never below 70%. See fitOnePage. */}
           <button
             type="button"
-            onClick={() => setCompact(c => !c)}
-            title={compact ? 'Back to normal spacing' : 'Tighten spacing — may bring a near-miss invoice down to fewer pages'}
+            onClick={() => setFitOnePage(f => !f)}
+            title={fitOnePage ? t('invoiceSheet.fitOffTitle') : t('invoiceSheet.fitOnTitle')}
             className={`px-2 py-1 rounded text-xs font-medium border transition-colors flex items-center gap-1.5 ${
-              compact
+              fitOnePage
                 ? 'bg-navy-900 text-white border-navy-900'
                 : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
             }`}
           >
-            <Rows3 size={13} /> Compact
+            <Rows3 size={13} /> {t('invoiceSheet.fit')}
+            {fitActive && fitZoom < 1 && <span className="opacity-75">· {Math.round(fitZoom * 100)}%</span>}
           </button>
+          {fitOnePage && manualBreaks.size > 0 && <span className="text-xs text-slate-400">{t('invoiceSheet.fitOffBreaks')}</span>}
+          {fitOnePage && manualBreaks.size === 0 && tooLongForOnePage && <span className="text-xs text-amber-700">{t('invoiceSheet.tooLong')}</span>}
           {/* On/off like the page-break pills. */}
           <button
             type="button"
@@ -1008,138 +1399,92 @@ export function InvoicePrintPage() {
               color: '#000',
             }}
           >
-          {/* Everything above the item table, measured as one block for the prediction. */}
+          {/* The whole invoice body, scaled as one by Fit to 1 page. */}
+          <div ref={fitBodyRef}>
+          {/* Everything above the item table, measured as one block for the prediction.
+              The layout follows KMA's own Excel invoice: logo and name top left, a
+              serif INVOICE title, the client on the left and the invoice's details
+              on the right, everything in bold. */}
           <div ref={topBlockRef}>
-          {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: tightMargin(16) }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <img src="/Logo.png" alt="KMA Logo" style={{ width: '80px', height: 'auto', marginBottom: '6px' }} />
-              <div style={{ fontWeight: 'bold', fontSize: '13px', letterSpacing: '2px' }}>KREASI  MAKMUR  ABADI</div>
-            </div>
-            {/* The company's contact block, as in the footer. Fixed text; NPWP is left out
-               until there's a real number. */}
-            <div style={{ textAlign: 'right', fontSize: '11px', color: '#334155', lineHeight: '1.5', maxWidth: '220px' }}>
-              <div>MUARA KARANG BLOK 9 SELATAN NO. 52 - 55, JAKARTA UTARA 14450</div>
-              <div>TELP. 021.300.253.99 / Hp. 0811.857.372</div>
-              <div>Email : fifi67@yahoo.com</div>
-            </div>
+          {/* The logo centred over the company name, the pair at top left. */}
+          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', marginBottom: tightMargin(6) }}>
+            <img src="/Logo.png" alt="KMA Logo" style={{ width: `${sz(90)}px`, height: 'auto', display: 'block' }} />
+            <div style={{ fontWeight: 'bold', fontSize: `${fontPx}px`, letterSpacing: '1px', marginTop: tightMargin(8) }}>KREASI&nbsp; MAKMUR&nbsp; ABADI</div>
           </div>
 
-          {/* Title */}
-          <div style={{ textAlign: 'center', fontSize: compact ? '16px' : '22px', fontWeight: 'bold', margin: `${tightMargin(20)}px 0 ${tightMargin(24)}px` }}>
+          <div style={{ textAlign: 'center', fontFamily: SERIF, fontWeight: 'bold', color: TITLE_BLUE, fontSize: `${sz(27)}px`, letterSpacing: '0.5px', margin: `0 0 ${tightMargin(12)}px` }}>
             INVOICE
           </div>
 
-          {/* Client + Invoice Info grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px', marginBottom: tightMargin(24) }}>
-            {/* Left — client info */}
-            <table style={{ borderCollapse: 'collapse', fontSize: `${fontPx}px` }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '0 24px', marginBottom: tightMargin(14), fontSize: `${fontPx - 0.5}px`, fontWeight: 'bold', lineHeight: 1.3 }}>
+            <table style={{ borderCollapse: 'collapse' }}>
               <tbody>
                 <tr>
-                  <td style={{ fontWeight: 'bold', paddingRight: '12px', paddingBottom: '4px', whiteSpace: 'nowrap' }}>KEPADA YTH</td>
-                  <td style={{ paddingBottom: '4px' }}>{invoice.kepada_yth}</td>
+                  <td style={infoLabel}>KEPADA YTH</td>
+                  <td style={infoValue}><SheetCell value={invoice.kepada_yth} onSave={v => saveInvoiceField('kepada_yth', v)} /></td>
                 </tr>
                 <tr>
-                  <td style={{ fontWeight: 'bold', paddingRight: '12px', paddingBottom: '4px' }}>UNTUK</td>
-                  <td style={{ paddingBottom: '4px' }}>{invoice.untuk}</td>
+                  <td style={infoLabel}>UNTUK</td>
+                  <td style={infoValue}>
+                    <SheetCell value={invoice.untuk ?? ''} onSave={v => saveInvoiceField('untuk', v)} uppercase={false} placeholder="…" />
+                    <SheetCell value={invoice.alamat ?? ''} onSave={v => saveInvoiceField('alamat', v)} uppercase={false} placeholder="…" />
+                  </td>
                 </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold', paddingRight: '12px', paddingBottom: '4px', verticalAlign: 'top' }}>ALAMAT</td>
-                  <td style={{ paddingBottom: '4px' }}>{invoice.alamat}</td>
+                {/* Shown on paper only when filled; always editable on screen. */}
+                <tr className={invoice.telp ? undefined : 'print:hidden'}>
+                  <td style={{ ...infoLabel, paddingTop: tightMargin(8) }}>Telp</td>
+                  <td style={{ ...infoValue, paddingTop: tightMargin(8) }}><SheetCell value={invoice.telp ?? ''} onSave={v => saveInvoiceField('telp', v)} placeholder="…" /></td>
                 </tr>
-                {invoice.email && (
-                  <tr>
-                    <td style={{ fontWeight: 'bold', paddingRight: '12px', paddingBottom: '4px' }}>Email</td>
-                    <td style={{ paddingBottom: '4px', color: '#1a56db' }}>{invoice.email}</td>
-                  </tr>
-                )}
-                {invoice.telp && (
-                  <tr>
-                    <td style={{ fontWeight: 'bold', paddingRight: '12px' }}>Telp</td>
-                    <td>{invoice.telp}</td>
-                  </tr>
-                )}
+                <tr className={invoice.email ? undefined : 'print:hidden'}>
+                  <td style={infoLabel}>Email</td>
+                  <td style={{ ...infoValue, color: '#1a56db', textDecoration: 'underline', fontWeight: 'normal' }}><SheetCell value={invoice.email ?? ''} onSave={v => saveInvoiceField('email', v)} uppercase={false} placeholder="…" /></td>
+                </tr>
               </tbody>
             </table>
-
-            {/* Right — invoice meta */}
-            <table style={{ borderCollapse: 'collapse', fontSize: `${fontPx}px` }}>
+            <table style={{ borderCollapse: 'collapse' }}>
               <tbody>
                 <tr>
-                  <td style={{ fontWeight: 'bold', paddingRight: '12px', paddingBottom: '4px' }}>TANGGAL</td>
-                  <td style={{ paddingBottom: '4px' }}>{formatDate(invoice.tanggal)}</td>
+                  <td style={infoLabel}>TANGGAL</td>
+                  <td style={infoValue}><SheetCell value={formatDate(invoice.tanggal)} onSave={v => saveInvoiceField('tanggal', v)} /></td>
                 </tr>
                 <tr>
-                  <td style={{ fontWeight: 'bold', paddingRight: '12px', paddingBottom: '4px' }}>INVOICE No.</td>
-                  <td style={{ paddingBottom: '4px' }}>{invoice.id}</td>
+                  <td style={infoLabel}>INVOICE No.</td>
+                  <td style={infoValue}>{invoice.id}</td>
                 </tr>
                 <tr>
-                  <td style={{ fontWeight: 'bold', paddingRight: '12px', paddingBottom: '4px' }}>PO No.</td>
-                  <td style={{ paddingBottom: '4px' }}>{order?.po_number ?? '—'}</td>
+                  <td style={infoLabel}>PO No.</td>
+                  <td style={infoValue}><SheetCell value={order?.po_number || ''} onSave={savePoNumber} placeholder="-" /></td>
                 </tr>
-                {invoice.start_produksi && (
-                  <tr>
-                    <td style={{ fontWeight: 'bold', paddingRight: '12px', paddingBottom: '4px', whiteSpace: 'nowrap' }}>START PRODUKSI</td>
-                    <td style={{ paddingBottom: '4px' }}>{invoice.start_produksi}</td>
-                  </tr>
-                )}
-                {invoice.lama_produksi && (
-                  <tr>
-                    <td style={{ fontWeight: 'bold', paddingRight: '12px' }}>LAMA PRODUKSI</td>
-                    <td>{invoice.lama_produksi}</td>
-                  </tr>
-                )}
+                <tr className={invoice.lama_produksi ? undefined : 'print:hidden'}>
+                  <td style={infoLabel}>LAMA PRODUKSI</td>
+                  <td style={infoValue}><SheetCell value={(invoice.lama_produksi ?? '').toUpperCase()} onSave={v => saveInvoiceField('lama_produksi', v)} placeholder="…" /></td>
+                </tr>
+                <tr className={invoice.start_produksi ? undefined : 'print:hidden'}>
+                  <td style={infoLabel}>MULAI PRODUKSI</td>
+                  <td style={infoValue}><SheetCell value={invoice.start_produksi ? (/^\d{4}-\d{2}-\d{2}/.test(invoice.start_produksi) ? formatDate(invoice.start_produksi) : invoice.start_produksi.toUpperCase()) : ''} onSave={v => saveInvoiceField('start_produksi', v)} placeholder="…" /></td>
+                </tr>
               </tbody>
             </table>
           </div>
           </div>
-          {/* ↑ closes the topBlockRef wrapper opened just above "Header" */}
+          {/* ↑ closes the topBlockRef wrapper */}
 
-          {/* Items table */}
-          {/* table-layout fixed makes the auto-fit <th> widths authoritative. */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0', fontSize: `${fontPx}px`, tableLayout: 'fixed' }}>
+          {/* Items table: black outer frame and column lines, light row lines, an
+              orange double rule under the heading, a double line to close it.
+              table-layout fixed makes the auto-fit <th> widths authoritative. */}
+          <table onPaste={onSheetPaste} style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0', fontSize: `${fontPx}px`, lineHeight: 1.2, tableLayout: 'fixed', border: FRAME, borderBottom: '3px double #000' }}>
             <thead ref={theadRef}>
-              {/* Darker column dividers, visible on the highlight fill. */}
-              <tr style={highlightCellStyle}>
-                <th style={{ border: '1px solid #94a3b8', padding: cellPad, textAlign: 'center', width: `${columnWidths.no}px`, whiteSpace: 'nowrap' }}>
-                  NO.
-                </th>
+              <tr>
+                <th style={{ ...headCell, width: `${columnWidths.no}px` }}>ITEM</th>
                 {/* KETERANGAN takes the remaining width and may wrap (long item names). */}
-                <th style={{ border: '1px solid #94a3b8', padding: cellPad, textAlign: 'left' }}>KETERANGAN</th>
-                <th style={{ border: '1px solid #94a3b8', padding: cellPad, textAlign: 'center', width: `${columnWidths.size}px`, whiteSpace: 'nowrap' }}>
-                  SIZE
-                </th>
-                <th style={{ border: '1px solid #94a3b8', padding: cellPad, textAlign: 'center', width: `${columnWidths.qty}px`, whiteSpace: 'nowrap' }}>
-                  QTY
-                </th>
+                <th style={headCell}>KETERANGAN</th>
+                <th style={{ ...headCell, width: `${columnWidths.size}px` }}>SIZE</th>
+                <th style={{ ...headCell, width: `${columnWidths.qty}px` }}>QTY / SET</th>
                 {/* Fitted to the longest amount; no ellipsis, so a sizing bug would show. */}
-                <th style={{ border: '1px solid #94a3b8', padding: cellPad, textAlign: 'right', width: `${columnWidths.hargaNet}px`, whiteSpace: 'nowrap' }}>
-                  HARGA NET
-                </th>
-                <th style={{ border: '1px solid #94a3b8', padding: cellPad, textAlign: 'right', width: `${columnWidths.jumlah}px`, whiteSpace: 'nowrap' }}>
-                  JUMLAH (Rp)
-                </th>
+                <th style={{ ...headCell, width: `${columnWidths.hargaNet}px` }}>HARGA NET / PCS</th>
+                <th style={{ ...headCell, width: `${columnWidths.jumlah}px` }}>JUMLAH (Rp)</th>
               </tr>
             </thead>
-            <tbody>
-              {/* Company name row: a label row, unnumbered, highlightable. */}
-              <tr
-                {...highlightRowHandlers('company')}
-                style={{ background: rowHighlights['company'] }}
-              >
-                {/* A minimum height, so rows of empty cells match rows with text. */}
-                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px` }} />
-                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, fontWeight: 'bold', fontStyle: 'italic' }}>
-                  {invoice.kepada_yth.toUpperCase()}
-                </td>
-                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px` }} />
-                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px` }} />
-                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px` }} />
-                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px` }} />
-              </tr>
-
-              {/* Item rows, grouped by name (sizes together), numbered on each group's first row. */}
-            </tbody>
 
             {/* Each group is its own <tbody> so pageBreakInside: avoid keeps its rows
                together (unless the group is taller than a page). */}
@@ -1156,42 +1501,28 @@ export function InvoicePrintPage() {
               const nextGroup = groups[groupIdx + 1]
               // The last group's page ends early if the tail is predicted to spill.
               const isLastGroup = groupIdx === groups.length - 1
-              const endsPageHere = nextGroup
-                ? (manualBreaks.has(nextGroup.name) || predictedBreaks.has(nextGroup.name))
-                : (isLastGroup && tailSpillsAt === 'totals')
+              // Printed only where a break is certain (one placed by hand). A
+              // predicted break is a cautious guess, and printing "(continued on
+              // next page)" mid-page when the guess was early read as an error;
+              // the repeated headings and "Page x of y" already show a real break.
+              const endsPageHere = !isLastGroup && !!nextGroup && manualBreaks.has(nextGroup.name)
 
               return (
                 <Fragment key={group.name}>
                   {/* Screen-only markers live in their own tbody so they're never measured as content. */}
                   {(showBreakMarker || predictedBreakHere) && (
                     <tbody>
-                      {/* A manual break, drawn as a real page edge with page labels (screen only). */}
                       {showBreakMarker && (
                         <tr className="print:hidden">
                           <td colSpan={6} style={{ padding: 0 }}>
-                            <PageBreakGap
-                              endPage={endOfPageLabel}
-                              startPage={startOfPageLabel!}
-                              total={previewTotalPages}
-                              invoiceId={invoice.id}
-                              client={invoice.kepada_yth}
-                              strong
-                            />
+                            <PageBreakGap endPage={endOfPageLabel} startPage={startOfPageLabel!} total={previewTotalPages} invoiceId={invoice.id} client={invoice.kepada_yth} strong />
                           </td>
                         </tr>
                       )}
-                      {/* A predicted break: a lighter dashed hint (screen only). */}
                       {predictedBreakHere && (
                         <tr className="print:hidden">
                           <td colSpan={6} style={{ padding: '4px 0' }}>
-                            <PageBreakGap
-                              endPage={endOfPageLabel}
-                              startPage={startOfPageLabel!}
-                              total={previewTotalPages}
-                              invoiceId={invoice.id}
-                              client={invoice.kepada_yth}
-                              strong={false}
-                            />
+                            <PageBreakGap endPage={endOfPageLabel} startPage={startOfPageLabel!} total={previewTotalPages} invoiceId={invoice.id} client={invoice.kepada_yth} strong={false} />
                           </td>
                         </tr>
                       )}
@@ -1201,340 +1532,231 @@ export function InvoicePrintPage() {
                     ref={el => { groupRefs.current[group.name] = el }}
                     style={{
                       pageBreakInside: 'avoid',
-                      // On the whole tbody, the same unit pageBreakInside protects; never before the
-                      // first group.
-                      ...(manualBreakHere
-                        ? { pageBreakBefore: 'always', breakBefore: 'page' }
-                        : {}),
+                      ...(manualBreakHere ? { pageBreakBefore: 'always', breakBefore: 'page' } : {}),
                     }}
                   >
-                    {/* No "continued from previous page": the note at the bottom of the previous
-                       page already says so. */}
                     {group.rows.map((item, rowIdx) => {
-                    const key = `item-${item.id}`
-                    return (
-                      <tr
-                        key={key}
-                        {...highlightRowHandlers(key)}
-                        style={{ background: rowHighlights[key] }}
-                      >
-                        {/* A minimum height here too. */}
-                        <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          {rowIdx === 0 ? groupIdx + 1 : ''}
-                        </td>
-                        <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px` }}>{rowIdx === 0 ? item.item_name.toUpperCase() : ''}</td>
-                        <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{item.size ?? '—'}</td>
-                        <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'center', whiteSpace: 'nowrap' }}>{item.amount.toLocaleString('id-ID')}</td>
-                        <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', whiteSpace: 'nowrap' }}>{item.price.toLocaleString('id-ID')}</td>
-                        <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', whiteSpace: 'nowrap' }}>{item.sub_total.toLocaleString('id-ID')}</td>
-                      </tr>
-                    )
-                  })}
-                  {/* A gap row after every group, as tall as an item row and highlightable. */}
-                  {(() => {
-                    const extra = extraGapRows[group.name] ?? 0
-                    const totalGapRows = 1 + extra
-                    return Array.from({ length: totalGapRows }, (_, gapIdx) => {
-                      const key = `gap-${group.name}-${gapIdx}`
-                      const isLastGapRow = gapIdx === totalGapRows - 1
-                      const cellStyle = { border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, background: rowHighlights[key] }
+                      const key = `item-${item.id}`
+                      const bg = rowHighlights[key]
+                      const r = sheetRow.n++
                       return (
-                        <tr key={key} {...highlightRowHandlers(key)}>
-                          <td style={cellStyle} />
-                          <td style={cellStyle} />
-                          <td style={cellStyle} />
-                          <td style={cellStyle} />
-                          <td style={cellStyle} />
-                          {/* +/- for extra gap rows, in the group's last gap row (screen only). */}
-                          <td style={cellStyle}>
-                            {isLastGapRow && (
-                              <div
-                                className="print:hidden"
-                                onClick={e => e.stopPropagation()}
-                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}
-                              >
-                                {extra > 0 && (
-                                  <button
-                                    type="button"
-                                    title="Remove blank row"
-                                    onClick={() => removeGapRow(group.name)}
-                                    style={{ border: '1px solid #cbd5e1', borderRadius: '4px', width: `${gapCtrlSize}px`, height: `${gapCtrlSize}px`, lineHeight: 1, fontSize: `${Math.max(9, gapCtrlSize - 3)}px`, color: '#64748b', background: 'white', cursor: 'pointer' }}
-                                  >
-                                    −
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  title="Add blank row"
-                                  onClick={() => addGapRow(group.name)}
-                                  style={{ border: '1px solid #cbd5e1', borderRadius: '4px', width: `${gapCtrlSize}px`, height: `${gapCtrlSize}px`, lineHeight: 1, fontSize: `${Math.max(9, gapCtrlSize - 3)}px`, color: '#64748b', background: 'white', cursor: 'pointer' }}
-                                >
-                                  +
-                                </button>
-                              </div>
-                            )}
+                        <tr key={key} {...highlightRowHandlers(key)} style={{ background: bg }} className="sheet-row">
+                          <td style={{ ...bodyCell, textAlign: 'center', position: 'relative' }}>
+                            {rowIdx === 0 ? groupIdx + 1 : ''}
+                            {/* Delete this line (screen only, shows on hover or focus). */}
+                            <button type="button" className="sheet-del print:hidden" title={t('invoiceSheet.deleteRow')} aria-label={t('invoiceSheet.deleteRowNamed', { name: `${item.item_name} ${item.size ?? ''}`.trim() })}
+                              onClick={e => { e.stopPropagation(); setConfirmDeleteItem(item) }}>×</button>
                           </td>
+                          <td style={{ ...bodyCell, whiteSpace: 'normal' }}>
+                            <SheetCell value={rowIdx === 0 ? item.item_name.toUpperCase() : ''} onSave={v => saveItemCell(item, 'name', v, rowIdx === 0 ? group.rows : null)} align="center" bold cellRef={sheetRef(r, 0)} onMove={sheetMove(r, 0)} />
+                          </td>
+                          <td style={{ ...bodyCell, textAlign: 'center' }}><SheetCell value={item.size ?? ''} onSave={v => saveItemCell(item, 'size', v, null)} align="center" placeholder="-" cellRef={sheetRef(r, 1)} onMove={sheetMove(r, 1)} /></td>
+                          <td style={{ ...bodyCell, textAlign: 'right' }}><SheetCell value={item.amount} numeric onSave={v => saveItemCell(item, 'qty', v, null)} align="right" cellRef={sheetRef(r, 2)} onMove={sheetMove(r, 2)} /></td>
+                          <td style={{ ...bodyCell, textAlign: 'right' }}><SheetCell value={item.price} numeric onSave={v => saveItemCell(item, 'price', v, null)} align="right" cellRef={sheetRef(r, 3)} onMove={sheetMove(r, 3)} /></td>
+                          <td style={{ ...bodyCell, textAlign: 'right' }}>{num(item.sub_total)}</td>
                         </tr>
                       )
-                    })
-                  })()}
-                  {/* Printed at the bottom of a page that ends early, so the reader knows more
-                     follows. */}
-                  {endsPageHere && (
-                    <tr className="continuation-note">
-                      <td colSpan={6} style={{ padding: '10px 8px 0', textAlign: 'right', fontSize: '10px', fontStyle: 'italic', color: '#64748b', borderLeft: '1px solid #ccc', borderRight: '1px solid #ccc', borderTop: 'none', borderBottom: 'none' }}>
-                        (continued on next page)
-                      </td>
-                    </tr>
-                  )}
+                    })}
+                    {/* A blank row after every group with a dash under JUMLAH, as in the
+                        Excel; + adds more blank rows (screen only). */}
+                    {(() => {
+                      const extra = extraGapRows[group.name] ?? 0
+                      const totalGapRows = 1 + extra
+                      return Array.from({ length: totalGapRows }, (_, gapIdx) => {
+                        const key = `gap-${group.name}-${gapIdx}`
+                        const isLastGapRow = gapIdx === totalGapRows - 1
+                        const cellStyle = { ...bodyCell, background: rowHighlights[key] }
+                        const r = sheetRow.n++
+                        // Typing here adds a line: a new size of the item above,
+                        // or a new item when a KETERANGAN is typed.
+                        return (
+                          <tr key={key} {...highlightRowHandlers(key)}>
+                            <td style={cellStyle} />
+                            <td style={cellStyle}><SheetCell value="" onSave={v => saveBlankCell(null, 'name', v)} align="center" bold placeholder={gapIdx === 0 ? t('invoiceSheet.newItem') : ''} cellRef={sheetRef(r, 0)} onMove={sheetMove(r, 0)} /></td>
+                            <td style={{ ...cellStyle, textAlign: 'center' }}><SheetCell value="" onSave={v => saveBlankCell(group.name, 'size', v)} align="center" placeholder={gapIdx === 0 ? t('invoiceSheet.newSize') : ''} cellRef={sheetRef(r, 1)} onMove={sheetMove(r, 1)} /></td>
+                            <td style={cellStyle}><SheetCell value="" numeric onSave={v => saveBlankCell(group.name, 'qty', v)} align="right" cellRef={sheetRef(r, 2)} onMove={sheetMove(r, 2)} /></td>
+                            <td style={cellStyle}><SheetCell value="" numeric onSave={v => saveBlankCell(group.name, 'price', v)} align="right" cellRef={sheetRef(r, 3)} onMove={sheetMove(r, 3)} /></td>
+                            <td style={{ ...cellStyle, textAlign: 'right' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                                {isLastGapRow && (
+                                  <span className="print:hidden" onClick={e => e.stopPropagation()} style={{ display: 'inline-flex', gap: '3px', marginRight: 'auto' }}>
+                                    {extra > 0 && (
+                                      <button type="button" title="Remove blank row" onClick={() => removeGapRow(group.name)} style={gapButton}>−</button>
+                                    )}
+                                    <button type="button" title="Add blank row" onClick={() => addGapRow(group.name)} style={gapButton}>+</button>
+                                  </span>
+                                )}
+                                <span>-</span>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    })()}
+                    {endsPageHere && (
+                      <tr className="continuation-note">
+                        <td colSpan={6} style={{ padding: '10px 8px 0', textAlign: 'right', fontSize: '10px', fontStyle: 'italic', color: '#64748b', borderLeft: FRAME, borderRight: FRAME, borderTop: 'none', borderBottom: 'none' }}>
+                          (continued on next page)
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </Fragment>
               )
             })}
 
-            {/* The seam when only the totals spill onto a new page (no group boundary to
-               mark it). Only for 'totals': notes or closing spilling have their own
-               markers further down. */}
+            {groups.length === 0 && (
+              // No items yet: one blank line to type the first one into.
+              <tbody>
+                <tr>
+                  <td style={bodyCell} />
+                  <td style={bodyCell}><SheetCell value="" onSave={v => saveBlankCell(null, 'name', v)} placeholder={t('invoiceSheet.newItem')} cellRef={sheetRef(0, 0)} onMove={sheetMove(0, 0)} /></td>
+                  <td style={bodyCell} /><td style={bodyCell} /><td style={bodyCell} /><td style={bodyCell} />
+                </tr>
+              </tbody>
+            )}
             {tailSpillsAt === 'totals' && (
               <tbody className="print:hidden">
                 <tr>
                   <td colSpan={6} style={{ padding: 0 }}>
-                    <PageBreakGap
-                      endPage={pageSegments.length}
-                      startPage={pageSegments.length + 1}
-                      total={previewTotalPages}
-                      invoiceId={invoice.id}
-                      client={invoice.kepada_yth}
-                      strong={false}
-                    />
+                    <PageBreakGap endPage={pageSegments.length} startPage={pageSegments.length + 1} total={previewTotalPages} invoiceId={invoice.id} client={invoice.kepada_yth} strong={false} />
                   </td>
                 </tr>
               </tbody>
             )}
 
-            {/* D/P / PELUNASAN / TOTAL in one tbody, never split. Whichever row is
-               first closes the item table with a top border (the others leave it
-               'hidden' so border-collapse doesn't draw a second line). */}
+            {/* TOTAL, then the D/P, then PELUNASAN, in one tbody that never splits.
+                The left part has no lines of its own, as in the Excel: a free note
+                beside TOTAL, the LUNAS mark beside a paid D/P, and the payment terms
+                (J/T, or e.g. CASH ON DELIVERY) beside PELUNASAN. */}
             <tbody ref={totalsRef} style={{ pageBreakInside: 'avoid' }}>
-              {/* D/P row, when there is one. Clicking overrides its automatic highlight
-                 with the selected swatch; the same swatch again restores it. */}
+              <tr {...highlightRowHandlers('total')}>
+                <td colSpan={3} style={{ ...openCell, borderTop: LINE }}>
+                  <div style={{ paddingLeft: '10px' }}><SheetCell value={totalNote} onSave={setTotalNote} uppercase={false} /></div>
+                </td>
+                <td style={{ ...sumCell, borderTop: LINE, textAlign: 'right', background: rowHighlights['total'] }}>{num(items.reduce((s, i) => s + i.amount, 0))}</td>
+                <td style={{ ...sumCell, borderTop: LINE, textAlign: 'center', background: rowHighlights['total'] }}>TOTAL</td>
+                <td style={{ ...sumCell, borderTop: LINE, textAlign: 'right', background: rowHighlights['total'] }}>{num(invoice.total)}</td>
+              </tr>
               {hasDp && (
                 <tr {...highlightRowHandlers('dp')}>
-                  {/* Blank spacer over NO/KETERANGAN/SIZE: first row in the group, so its
-                     top border closes the item table above. */}
-                  <td style={{ padding: cellPad, height: `${rowPx}px`, borderTop: '1px solid #ccc', borderBottomStyle: 'hidden' }} colSpan={3} />
-                  {/* A typable LUNAS label, only on a Pelunasan invoice (the D/P is paid by then).
-                     Auto-fit sizes the QTY column to it. */}
-                  <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
+                  <td colSpan={3} style={openCell} />
+                  <td style={{ ...sumCell, textAlign: 'right', background: rowHighlights['dp'] }}>
                     {invoice.type === 'pelunasan' && (
-                      <input
-                        ref={dpPaidLabel.ref}
-                        value={dpPaidLabel.value}
-                        onChange={dpPaidLabel.onChange}
-                        onClick={e => e.stopPropagation()}
-                        style={{ border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: `${fontPx}px`, fontWeight: 'bold', textAlign: 'right', width: '100%', padding: 0 }}
-                      />
+                      <span style={{ fontWeight: 'normal' }}><SheetCell value={dpPaidLabel.value} onSave={dpPaidLabel.setValue} align="right" /></span>
                     )}
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
-                    D/P {dpPercent} %
-                  </td>
-                  <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['dp'] ?? (highlightDp ? highlightColor : undefined) }}>
-                    {liveDownPayment.toLocaleString('id-ID')}
+                  <td style={{ ...sumCell, fontWeight: 'normal', textAlign: 'center', background: rowHighlights['dp'] }}>D/P - {dpPercent} %</td>
+                  <td style={{ ...sumCell, textAlign: 'right', background: rowHighlights['dp'] }}>
+                    {/* Already paid on a Pelunasan, so taken off, in brackets. */}
+                    {invoice.type === 'pelunasan' ? `(${num(liveDownPayment)})` : num(liveDownPayment)}
                   </td>
                 </tr>
               )}
-
-              {/* Pelunasan row — same click-to-override behavior as DP above. First in
-                 the group (and so closes the item table) when there's no D/P row. */}
               <tr {...highlightRowHandlers('pelunasan')}>
-                <td style={{ padding: cellPad, height: `${rowPx}px`, textAlign: 'right', ...(hasDp ? { borderTopStyle: 'hidden' as const } : { borderTop: '1px solid #ccc' }), borderBottomStyle: 'hidden' }} colSpan={3}>
-                  {/* J/T (due date), editable for this printed copy only. */}
-                  <input
-                    ref={jatuhTempo.ref}
-                    value={jatuhTempo.value}
-                    onChange={jatuhTempo.onChange}
-                    onClick={e => e.stopPropagation()}
-                    placeholder="J/T : —"
-                    style={{ border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: `${fontPx}px`, textAlign: 'right', width: '100%', padding: 0 }}
-                  />
+                <td colSpan={4} style={{ ...openCell, textAlign: 'right' }}>
+                  <SheetCell value={jatuhTempo.value} onSave={jatuhTempo.setValue} align="right" bold placeholder="J/T : —" />
                 </td>
-                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px` }} />
-                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
-                  PELUNASAN
-                </td>
-                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap', background: rowHighlights['pelunasan'] ?? (!highlightDp ? highlightColor : undefined) }}>
+                <td style={{ ...sumCell, textAlign: 'center', background: rowHighlights['pelunasan'] }}>PELUNASAN</td>
+                <td style={{ ...sumCell, textAlign: 'right', background: rowHighlights['pelunasan'] }}>
                   {/* The balance after discount, live — see liveBalanceDue above. */}
-                  {liveBalanceDue.toLocaleString('id-ID')}
+                  {num(liveBalanceDue)}
                 </td>
               </tr>
-
-              {/* Total row — last in the group now, so its spacer stays fully hidden
-                 (the row above it already closed the item table). */}
-              <tr
-                {...highlightRowHandlers('total')}
-                style={{ background: rowHighlights['total'] }}
-              >
-                <td style={{ padding: cellPad, height: `${rowPx}px`, borderTopStyle: 'hidden', borderBottomStyle: 'hidden' }} colSpan={3} />
-                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-                  {items.reduce((s, i) => s + i.amount, 0).toLocaleString('id-ID')}
-                </td>
-                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>TOTAL</td>
-                <td style={{ border: '1px solid #ccc', padding: cellPad, height: `${rowPx}px`, textAlign: 'right', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-                  {invoice.total.toLocaleString('id-ID')}
-                </td>
-              </tr>
-              {/* The note for a seam after PELUNASAN, when the notes and closing spill. */}
-              {tailSpillsAt === 'notes' && (
-                <tr className="continuation-note">
-                  <td colSpan={6} style={{ padding: '10px 8px 0', textAlign: 'right', fontSize: '10px', fontStyle: 'italic', color: '#64748b', border: 'none' }}>
-                    (continued on next page)
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
 
-          {/* The screen marker for that same seam. */}
           {tailSpillsAt === 'notes' && (
-            <PageBreakGap
-              endPage={pageSegments.length}
-              startPage={pageSegments.length + 1}
-              total={previewTotalPages}
-              invoiceId={invoice.id}
-              client={invoice.kepada_yth}
-              strong={false}
-            />
+            <PageBreakGap endPage={pageSegments.length} startPage={pageSegments.length + 1} total={previewTotalPages} invoiceId={invoice.id} client={invoice.kepada_yth} strong={false} />
           )}
 
-          {/* Notes and the closing block (signature/footer) are each their own
-             unbreakable unit, independently placed: if notes fit in whatever's
-             left of the page, they stay there even when the signature that
-             follows doesn't — only the signature moves, rather than forcing
-             both to a fresh page and leaving the rest of this one blank. */}
-          <div ref={notesRef} style={{ marginTop: tightMargin(18), fontSize: `${fontPx}px`, pageBreakInside: 'avoid' }}>
-            <div style={{ fontWeight: 'bold', textDecoration: 'underline', marginBottom: '4px' }}>SYARAT & KETENTUAN :</div>
-            <ol style={{ margin: 0, paddingLeft: '16px', lineHeight: compact ? '1.25' : '1.5' }}>
-              {notes.map((note, idx) => (
-                // An empty line stays editable on screen but doesn't print as a bare number.
-                <li key={idx} className={note.trim() === '' ? 'print:hidden' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <input
-                    value={note}
-                    onChange={e => updateNote(idx, e.target.value)}
-                    placeholder="Note text…"
-                    style={{ border: 'none', background: 'transparent', font: 'inherit', width: '100%', padding: 0 }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeNote(idx)}
-                    className="print:hidden"
-                    title="Remove this note"
-                    style={{ flexShrink: 0, width: '16px', height: '16px', lineHeight: '16px', textAlign: 'center', borderRadius: '999px', border: 'none', background: '#e2e8f0', color: '#64748b', fontSize: '11px', cursor: 'pointer' }}
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ol>
-            <button
-              ref={addNoteBtnRef}
-              type="button"
-              onClick={addNote}
-              className="print:hidden btn-secondary flex items-center gap-1.5"
-              style={{ marginTop: '8px', fontSize: '12px', padding: '4px 10px' }}
-            >
-              <Plus size={12} /> Add note
-            </button>
+          {/* CATATAN: numbered, in the Excel's serif, with the bank details as the
+              last point. Notes and the closing block are each their own unbreakable
+              unit, independently placed (see the prediction above). */}
+          {(() => {
+            const visible = notes.map((n, i) => ({ n, i })).filter(x => x.n.trim() !== '')
+            const numberOf = new Map(visible.map((x, k) => [x.i, k + 1]))
+            return (
+              <div ref={notesRef} style={{ marginTop: tightMargin(12), fontFamily: SERIF, fontSize: `${fontPx}px`, lineHeight: compact ? 1.2 : 1.32, pageBreakInside: 'avoid' }}>
+                <div>CATATAN :</div>
+                {notes.map((note, idx) => (
+                  // An empty line stays editable on screen but doesn't print as a bare number.
+                  <div key={idx} className={note.trim() === '' ? 'print:hidden' : undefined} style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                    <span style={{ minWidth: '14px' }}>{numberOf.get(idx) ? `${numberOf.get(idx)}.` : ''}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}><SheetCell value={note} onSave={v => updateNote(idx, v)} uppercase={false} placeholder="…" /></div>
+                    <button type="button" onClick={() => removeNote(idx)} className="print:hidden" title="Remove this note"
+                      style={{ flexShrink: 0, width: '16px', height: '16px', lineHeight: '16px', textAlign: 'center', borderRadius: '999px', border: 'none', background: '#e2e8f0', color: '#64748b', fontSize: '11px', cursor: 'pointer' }}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                  <span style={{ minWidth: '14px' }}>{visible.length + 1}.</span>
+                  <span>Pembayaran via transfer ke rekening a/n :</span>
+                </div>
+                {/* Bank details, shared with the kwitansi (useRekening). */}
+                <div style={{ paddingLeft: '18px' }}>
+                  <SheetCell value={rekening.accountName} onSave={v => setRekening({ accountName: v })} uppercase={false} />
+                </div>
+                <div style={{ paddingLeft: '18px' }}>
+                  <SheetCell value={rekening.bankBranch} onSave={v => setRekening({ bankBranch: v })} uppercase={false} />
+                </div>
+                <div style={{ paddingLeft: '18px', fontFamily: 'Arial, sans-serif', fontWeight: 'bold' }}>
+                  <span style={{ display: 'inline-flex', gap: '4px', whiteSpace: 'nowrap' }}>No. Rek. <SheetCell value={rekening.accountNumber} onSave={v => setRekening({ accountNumber: v })} uppercase={false} /></span>
+                </div>
+                <button ref={addNoteBtnRef} type="button" onClick={addNote} className="print:hidden btn-secondary flex items-center gap-1.5" style={{ marginTop: '8px', fontSize: '12px', padding: '4px 10px', fontFamily: 'Arial, sans-serif' }}>
+                  <Plus size={12} /> Add note
+                </button>
+              </div>
+            )
+          })()}
 
-            {/* Bank details in their own box (shared with the kwitansi via useRekening). */}
-            <div style={{ marginTop: tightMargin(10), background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: compact ? '6px 10px' : '10px 14px' }}>
-              <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>INFORMASI PEMBAYARAN</div>
-              <div>Pembayaran via transfer ke rekening a/n :</div>
-              <div style={{ marginTop: '2px' }}>
-                <input
-                  value={rekening.accountName}
-                  onChange={e => setRekening({ accountName: e.target.value })}
-                  style={{ border: 'none', background: 'transparent', font: 'inherit', fontWeight: 'bold', width: '220px', padding: 0 }}
-                />
-              </div>
-              <div>
-                <input
-                  value={rekening.bankBranch}
-                  onChange={e => setRekening({ bankBranch: e.target.value })}
-                  style={{ border: 'none', background: 'transparent', font: 'inherit', width: '220px', padding: 0 }}
-                />
-              </div>
-              <div>
-                No Rek. <input
-                  value={rekening.accountNumber}
-                  onChange={e => setRekening({ accountNumber: e.target.value })}
-                  style={{ border: 'none', background: 'transparent', font: 'inherit', fontWeight: 'bold', width: '160px', padding: 0 }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Print-only: tells the reader notes are complete even though the
-             signature that normally follows isn't here yet. */}
           {tailSpillsAt === 'closing' && (
-            <div className="hidden print:block" style={{ textAlign: 'right', fontSize: '10px', fontStyle: 'italic', color: '#64748b', marginTop: '4px' }}>
-              (continued on next page)
-            </div>
-          )}
-          {/* The screen marker for that same seam. */}
-          {tailSpillsAt === 'closing' && (
-            <PageBreakGap
-              endPage={pageSegments.length}
-              startPage={pageSegments.length + 1}
-              total={previewTotalPages}
-              invoiceId={invoice.id}
-              client={invoice.kepada_yth}
-              strong={false}
-            />
+            <PageBreakGap endPage={pageSegments.length} startPage={pageSegments.length + 1} total={previewTotalPages} invoiceId={invoice.id} client={invoice.kepada_yth} strong={false} />
           )}
 
-          {/* Signature and footer — its own independently-breakable unit; see
-             the notes comment above for why it's no longer joined to notes. */}
+          {/* Signatures, the copy list and the company's address, as one unit. */}
           <div ref={closingRef} style={{ pageBreakInside: 'avoid' }}>
-            {/* Signature block */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginTop: tightMargin(24), fontSize: `${fontPx}px` }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '24px', marginTop: tightMargin(14), fontSize: `${fontPx - 1}px`, lineHeight: 1.3 }}>
               <div>
-                <div style={{ fontWeight: 'bold', marginBottom: tightMargin(36) }}>ASLI INVOICE DI TERIMA OLEH</div>
-                <div style={{ borderTop: '1px solid #000', paddingTop: '4px', width: '200px' }} />
-                <div>TANDA TANGAN</div>
-                <div style={{ marginTop: '4px' }}>NAMA JELAS</div>
-                <div>JABATAN</div>
+                <div style={{ fontWeight: 'bold', paddingLeft: '36px', marginBottom: sz(96) }}>ASLI INVOICE DI TERIMA OLEH :</div>
+                <div style={{ fontFamily: SERIF, width: '62%', borderBottom: '1px solid #000', paddingBottom: '1px' }}>TANDA TANGAN</div>
+                <div style={{ fontFamily: SERIF }}>NAMA JELAS</div>
+                <div style={{ fontFamily: SERIF }}>JABATAN</div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: tightMargin(36) }}>DI BUAT OLEH</div>
-                <div style={{ borderTop: '1px solid #000', paddingTop: '4px', display: 'inline-block', width: '200px' }} />
-                <div>
-                  <input
-                    ref={signatoryName.ref}
-                    value={signatoryName.value}
-                    onChange={signatoryName.onChange}
-                    style={{ border: 'none', background: 'transparent', font: 'inherit', textAlign: 'right', width: '200px', padding: 0 }}
-                  />
+              <div>
+                <div style={{ fontWeight: 'bold', marginBottom: sz(96) }}>DI BUAT OLEH :</div>
+                {/* Same font and line as TANDA TANGAN opposite, so the two lines sit level. */}
+                <div style={{ fontFamily: SERIF, width: '75%', borderBottom: '1px solid #000', paddingBottom: '1px' }}>&nbsp;</div>
+                <div style={{ fontFamily: SERIF, width: '75%' }}>
+                  <SheetCell value={signatoryName.value} onSave={signatoryName.setValue} />
+                  <SheetCell value={signatoryTitle.value} onSave={signatoryTitle.setValue} />
                 </div>
-                <div>
-                  <input
-                    ref={signatoryTitle.ref}
-                    value={signatoryTitle.value}
-                    onChange={signatoryTitle.onChange}
-                    style={{ border: 'none', background: 'transparent', font: 'inherit', textAlign: 'right', width: '200px', padding: 0 }}
-                  />
-                </div>
-                <div style={{ fontWeight: 'bold' }}>KREASI MAKMUR ABADI</div>
               </div>
             </div>
 
-            {/* Footer */}
-            <div style={{ textAlign: 'center', marginTop: tightMargin(20), paddingTop: '8px', borderTop: '1px solid #ccc', fontSize: `${fontPx}px` }}>
+            {/* Who keeps which copy. */}
+            <table style={{ marginTop: tightMargin(10), fontFamily: SERIF, fontSize: `${fontPx - 1}px`, borderCollapse: 'collapse' }}>
+              <tbody>
+                {[['Asli', 'Client'], ['Copy 1', 'KMA'], ['Copy 2', 'Produksi KMA']].map(([who, copy]) => (
+                  <tr key={who}>
+                    <td style={{ padding: '0 18px 0 0' }}>{who}</td>
+                    <td style={{ padding: '0 18px 0 0' }}>:</td>
+                    <td style={{ padding: 0 }}>{copy}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div style={{ textAlign: 'center', marginTop: tightMargin(14), fontSize: `${fontPx - 1.5}px`, fontWeight: 'bold', lineHeight: 1.35 }}>
               <div>MUARA KARANG BLOK 9 SELATAN NO. 52 - 55 , JAKARTA UTARA 14450</div>
               <div>TELP. 021.300.253.99 / Hp. 0811.857.372</div>
               <div>Email : fifi67@yahoo.com</div>
             </div>
           </div>
+
+          </div>
+          {/* ↑ closes the Fit to 1 page wrapper */}
 
           {/* Preview of the last page's footer (earlier pages show theirs in their gap). */}
           {previewTotalPages > 1 && (
@@ -1553,11 +1775,34 @@ export function InvoicePrintPage() {
         </div>
       </div>
 
+      {confirmDeleteItem && (
+        <ConfirmDialog
+          message={t('invoiceSheet.deleteConfirm', { name: `${confirmDeleteItem.item_name} ${confirmDeleteItem.size ?? ''}`.trim() })}
+          onConfirm={() => { deleteItemRow(confirmDeleteItem); setConfirmDeleteItem(null) }}
+          onCancel={() => setConfirmDeleteItem(null)}
+        />
+      )}
+
       {/* Print styles */}
       <style>{`
         /* The print-only "(continued on next page)" row: hidden on screen, shown in
            @media print below. */
         .continuation-note { display: none; }
+
+        /* Fit to 1 page measures the invoice as printed: these are hidden for
+           that instant exactly as printing hides them (see measureFit). */
+        .kma-print-measure #invoice .print\\:hidden { display: none !important; }
+
+        /* The invoice's cells: plain text on paper, Excel-like on screen. */
+        .sheet-cell { width: 100%; border: 0; background: transparent; font: inherit; color: inherit; padding: 0; margin: 0; outline: none; }
+        .sheet-ph { color: #94a3b8; font-weight: normal; font-style: italic; }
+        @media screen {
+          .sheet-cell:focus { outline: 2px solid #2563eb; outline-offset: 1px; border-radius: 1px; }
+          .sheet-editing { background: #fffbe6; }
+        }
+        .sheet-del { position: absolute; left: -22px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; border-radius: 999px; border: 1px solid #fecaca; background: #fff; color: #dc2626; font-size: 13px; line-height: 15px; cursor: pointer; opacity: 0; }
+        .sheet-row:hover .sheet-del, .sheet-row:focus-within .sheet-del, .sheet-del:focus { opacity: 1; }
+        @media (pointer: coarse) { .sheet-del { opacity: 0.8; } }
 
         @media print {
           body { margin: 0; background: white; }
@@ -1565,6 +1810,7 @@ export function InvoicePrintPage() {
           .print\\:shadow-none { box-shadow: none !important; }
           .print\\:p-0 { padding: 0 !important; }
           .continuation-note { display: table-row !important; }
+          .sheet-ph { visibility: hidden !important; }
           /* Undo the on-screen scaling when printing. */
           .scale-wrap { width: auto !important; height: auto !important; overflow: visible !important; }
           #invoice-page-wrap { transform: none !important; }

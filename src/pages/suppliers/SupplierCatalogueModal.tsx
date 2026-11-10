@@ -2,8 +2,11 @@ import { useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
-import { Plus, Trash2, ChevronRight, Palette, FileText, Upload, Pipette } from 'lucide-react'
+import { Plus, Trash2, ChevronRight, Palette, FileText, Upload, Pipette, ScanSearch } from 'lucide-react'
 import { PhotoColorPicker } from './PhotoColorPicker'
+import { ColourReader } from './ColourReader'
+import { DesignGallery } from './DesignGallery'
+import { DESIGN_CATEGORIES } from '@/data/designs'
 import { Modal } from '@/components/ui/Modal'
 import { EditableCell, ConfirmDialog, UppercaseField, formatRp } from '@/components/ui'
 import { supplierMaterialHooks, supplierMaterialColorHooks, supplierDocumentHooks } from '@/hooks'
@@ -20,11 +23,12 @@ const isImage = (name: string) => /\.(jpe?g|png)$/i.test(name)
  *  materials — so a plain photo is accepted too. Upload always adds a new
  *  one rather than replacing — a supplier can have a catalogue and a
  *  separate price list, or several years' editions. */
-function DocumentList({ supplier }: { supplier: Supplier }) {
+function DocumentList({ supplier, readColours = true }: { supplier: Supplier; readColours?: boolean }) {
   const { data: docs = [], isLoading } = supplierDocumentHooks.useBySupplier(supplier.id)
   const upload = supplierDocumentHooks.useUpload()
   const del = supplierDocumentHooks.useDelete()
   const [confirmDelete, setConfirmDelete] = useState<SupplierDocument | null>(null)
+  const [reading, setReading] = useState<SupplierDocument | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const dateLocale = useDateLocale()
   const { t } = useTranslation()
@@ -71,6 +75,10 @@ function DocumentList({ supplier }: { supplier: Supplier }) {
               <span className="text-xs text-slate-400 shrink-0 dark:text-navy-600">
                 {format(new Date(d.uploaded_at), 'd MMM yyyy', { locale: dateLocale })}
               </span>
+              {readColours && <button type="button" onClick={() => setReading(d)} className="btn-ghost btn-sm !px-2 shrink-0 text-navy-700 dark:text-slate-200" title={t('colourReader.readColoursHint')}>
+                <ScanSearch size={14} aria-hidden /> <span className="hidden sm:inline">{t('colourReader.readColours')}</span>
+                <span className="sr-only sm:hidden">{t('colourReader.readColours')}</span>
+              </button>}
               <button onClick={() => setConfirmDelete(d)} className="text-slate-300 hover:text-red-500 dark:text-navy-700" title={t('supplierCatalogue.deleteDocument')} aria-label={t('supplierCatalogue.deleteDocument')}>
                 <Trash2 size={13} />
               </button>
@@ -82,6 +90,7 @@ function DocumentList({ supplier }: { supplier: Supplier }) {
       <button className="btn-secondary btn-sm" disabled={upload.isPending} onClick={() => fileInput.current?.click()}>
         <Upload size={14} /> {upload.isPending ? t('supplierCatalogue.uploading') : t('supplierCatalogue.uploadPdfOrPhoto')}
       </button>
+      {reading && <ColourReader supplier={supplier} document={reading} onClose={() => setReading(null)} />}
       {confirmDelete && (
         <ConfirmDialog
           message={t('supplierCatalogue.deleteFileConfirm', { name: confirmDelete.file_name })}
@@ -274,6 +283,9 @@ export function SupplierCatalogueModal({ supplier, onClose }: { supplier: Suppli
   const [newName, setNewName] = useState('')
   const [newBrand, setNewBrand] = useState('')
   const { t } = useTranslation()
+  // Bordir and sablon suppliers work from photos of designs (logos,
+  // slogans), not materials and colours: their catalogue is a gallery.
+  const designMode = DESIGN_CATEGORIES.has(supplier.supplier_category)
 
   const addMaterial = () => {
     if (!newName.trim()) return
@@ -287,9 +299,13 @@ export function SupplierCatalogueModal({ supplier, onClose }: { supplier: Suppli
     <Modal title={t('supplierCatalogue.title', { name: supplier.supplier_name })} onClose={onClose} size="xl" guard={false}>
       <div className="space-y-3">
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          {t('supplierCatalogue.intro')}
+          {designMode ? t('designs.intro') : t('supplierCatalogue.intro')}
         </p>
-        <DocumentList supplier={supplier} />
+        {designMode && <DesignGallery supplier={supplier} />}
+        {designMode && <hr className="border-slate-100 dark:border-navy-800" />}
+        <DocumentList supplier={supplier} readColours={!designMode} />
+        {/* A bordir/sablon supplier only sees materials if it already has some. */}
+        {(!designMode || materials.length > 0) && <>
         <hr className="border-slate-100 dark:border-navy-800" />
         <div className="flex items-end gap-2 bg-slate-50 rounded-lg p-2.5 dark:bg-navy-950">
           <label className="flex-1">
@@ -313,6 +329,7 @@ export function SupplierCatalogueModal({ supplier, onClose }: { supplier: Suppli
             materials.map(m => <MaterialRow key={m.id} material={m} />)
           )}
         </div>
+        </>}
         <div className="flex justify-end">
           <button className="btn-secondary" onClick={onClose}>{t('common.close')}</button>
         </div>

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ImageOff, Pipette, Sun, Upload } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { supplierDocumentHooks } from '@/hooks'
+import { corrected, hexOf, toLinear, toSrgb, type RGB } from '@/utils/colour'
 
 // Taking a colour from a photo of the supplier's swatches. A photo's colours
 // shift with the light it was taken in (warm lamps make everything yellow,
@@ -14,23 +15,7 @@ import { supplierDocumentHooks } from '@/hooks'
 // fabric takes the average of a small patch, not one pixel, so the weave
 // and noise don't decide the colour.
 
-type RGB = [number, number, number]
-
 const isImageName = (name: string) => /\.(jpe?g|png)$/i.test(name)
-const toLinear = (c: number) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }
-const toSrgb = (v: number) => { const c = v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055; return Math.round(Math.min(1, Math.max(0, c)) * 255) }
-const hexOf = ([r, g, b]: RGB) => `#${[r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')}`
-// Paper isn't a perfect white: what the reference should read as, in linear light (sRGB #f2f2f2).
-const WHITE_TARGET = toLinear(242)
-
-/** The colour after correcting for the white reference, if there is one. */
-function corrected(sample: RGB, white: RGB | null): RGB {
-  if (!white) return sample
-  return sample.map((c, i) => {
-    const gain = Math.min(4, Math.max(0.25, WHITE_TARGET / Math.max(0.01, toLinear(white[i]))))
-    return toSrgb(toLinear(c) * gain)
-  }) as RGB
-}
 
 /** Opens a colour picked from one of the supplier's photos (or one chosen
  *  from this device, not uploaded) and hands back its hex. */

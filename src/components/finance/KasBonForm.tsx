@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Plus, Trash2, Factory, Wrench } from 'lucide-react'
+import { Plus, Trash2, Factory, Wrench, Images } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { formatRp } from '@/components/ui'
-import { useFinanceBatch, useSupplierCatalogues } from '@/hooks'
+import { useFinanceBatch, useSupplierCatalogues, supplierDesignHooks } from '@/hooks'
 import { useIsDirty, useUnsavedChanges, useAutosaveDraft, loadDraft, clearDraft } from '@/hooks/useUnsavedChanges'
 import { useAuth } from '@/contexts/AuthContext'
 import { ApiError } from '@/api'
@@ -16,6 +16,9 @@ import type { FinanceBatch, FinanceHeader, Order, Supplier } from '@/types'
 import { draftProblem, draftsToBatch, draftTotal, newDraft, supplierWithCategory, type DraftLine, type Kind } from './ledgerModel'
 import { guessColumns, readRows } from './columnGuess'
 import { MaterialColorPicker } from './MaterialColorPicker'
+import { DesignPickerModal, DesignThumb } from './DesignPicker'
+import { designFromText, designLabel, designsFor } from '@/data/designs'
+import type { SupplierDesign } from '@/types'
 
 interface KasBonFormProps {
   kind: Kind
@@ -47,6 +50,9 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
   const save = useFinanceBatch()
   // SAI's static catalogue plus every database-backed supplier's own.
   const catalogues = useSupplierCatalogues()
+  const { data: designs = [] } = supplierDesignHooks.useList()
+  // The line whose design gallery is open.
+  const [designPick, setDesignPick] = useState<{ key: string; designs: SupplierDesign[]; supplierName: string; price: number; selectedId?: number } | null>(null)
   const formRef = useRef<HTMLDivElement>(null)
 
   // Autosaved locally so a crashed tab or closed browser doesn't take a half-
@@ -220,6 +226,9 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
               const catMatch = catalogue ? materialFromText(catalogue, l.name) : undefined
               const catCode = catalogue && catMatch ? colorCodeFromText(catMatch, l.name) : undefined
               const catColors = catalogue && catMatch ? catalogue.colorsFor(catMatch) : []
+              // A bordir/sablon supplier's designs, when it has some.
+              const lineDesigns = prod ? designsFor(designs, l.supplier_id) : []
+              const design = lineDesigns.length ? designFromText(lineDesigns, l.supplier_id, l.name) : undefined
               return (
                 <div key={l.key} className={`px-3 py-2 ${problem ? 'bg-red-50/50 dark:bg-red-500/10' : ''}`}>
                   <div className="grid grid-cols-2 md:grid-cols-[1.5rem_minmax(0,1.3fr)_minmax(0,1.6fr)_4.5rem_5.5rem_7rem_7rem_minmax(0,1fr)_2rem] gap-2 items-center">
@@ -252,9 +261,12 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
                       className="field col-span-2 md:col-span-1 !py-1.5"
                       placeholder={catalogue ? t('kasBon.namePlaceholderCatalogue') : prod ? t('kasBon.namePlaceholderProduction') : t('kasBon.namePlaceholderOperation')}
                       value={l.name}
-                      list={catalogue ? `material-catalogue-${catalogue.id}` : undefined}
+                      list={catalogue ? `material-catalogue-${catalogue.id}` : lineDesigns.length ? `designs-${l.supplier_id}` : undefined}
                       onChange={e => {
                         const name = e.target.value.toUpperCase()
+                        // A design typed or chosen from the suggestions: by the piece, at its price.
+                        const pickedDesign = !catalogue && lineDesigns.length ? designFromText(lineDesigns, l.supplier_id, name) : undefined
+                        if (pickedDesign) return setLine(l.key, { name, unit: 'pcs', ...(pickedDesign.price && !l.price ? { price: String(pickedDesign.price) } : {}) })
                         const picked = catalogue ? materialFromText(catalogue, name) : undefined
                         // A database-backed material carries the supplier's
                         // current price; fill it in like the name/unit, but
@@ -307,6 +319,14 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
                     </button>
                   </div>
                   {problem && <p className="mt-1 text-[11px] text-red-500 dark:text-red-400">{problem}</p>}
+                  {!problem && lineDesigns.length > 0 && !catMatch && (
+                    <button type="button"
+                      onClick={() => setDesignPick({ key: l.key, designs: lineDesigns, supplierName: supplierName ?? '', price: Number(l.price) || 0, selectedId: design?.id })}
+                      className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1 text-xs text-navy-700 hover:bg-slate-50 dark:border-navy-700 dark:text-slate-200 dark:hover:bg-white/5">
+                      {design ? <DesignThumb design={design} className="w-6 h-6 rounded" /> : <Images size={13} aria-hidden />}
+                      {design ? t('designs.changeDesign') : t('designs.pickDesign', { count: lineDesigns.length })}
+                    </button>
+                  )}
                   {!problem && catalogue && catMatch && (
                     <>
                       <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
@@ -356,6 +376,25 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
         {/* One per registered supplier catalogue — only lines whose supplier
             matches that catalogue actually attach to it (see `catalogue`
             above), so an unmatched one is simply inert. */}
+        {/* One per supplier with designs, for the Bahan suggestions. */}
+        {[...new Set(designs.map(d => d.supplier_id))].map(sid => (
+          <datalist key={`d${sid}`} id={`designs-${sid}`}>
+            {designsFor(designs, sid).map(d => <option key={d.id} value={designLabel(d)} />)}
+          </datalist>
+        ))}
+        {designPick && (
+          <DesignPickerModal
+            supplierName={designPick.supplierName}
+            designs={designPick.designs}
+            currentPrice={designPick.price}
+            selectedId={designPick.selectedId}
+            onPick={(d, usePrice) => {
+              setLine(designPick.key, { name: designLabel(d), unit: 'pcs', ...(usePrice && d.price ? { price: String(d.price) } : {}) })
+              setDesignPick(null)
+            }}
+            onClose={() => setDesignPick(null)}
+          />
+        )}
         {catalogues.map(c => (
           <datalist key={c.id} id={`material-catalogue-${c.id}`}>
             {c.materials.map(m => <option key={materialLabel(m)} value={materialLabel(m)} />)}

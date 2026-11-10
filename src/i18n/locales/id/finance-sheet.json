@@ -128,7 +128,17 @@
     "colourChip": "Warna",
     "density": "Tinggi baris",
     "densityCompact": "Baris rapat",
-    "densityComfortable": "Baris lega"
+    "densityComfortable": "Baris lega",
+    "catalogue": {
+      "chip": "Katalog",
+      "chipTitle": "Pilih Bahan dan warna baris ini dari katalog {{supplier}}",
+      "title": "Katalog {{supplier}}",
+      "intro": "Pilih bahan untuk baris ini; warnanya dipilih setelahnya. Bahan diganti dengan nama dan kode warna dari katalog.",
+      "search": "Cari bahan…",
+      "usePrice": "Pakai juga harga dari katalog",
+      "currentPrice": "Harga baris ini sekarang: {{price}}",
+      "pickFrom": "Pilih dari katalog {{supplier}}"
+    }
   },
   "kasBon": {
     "restoreDraft": "Pulihkan Kas Bon yang sedang Anda isi sebelumnya?",

@@ -19,6 +19,8 @@
     "arVsEndTitle": "Piutang sekarang, dibanding piutang di akhir {{month}}",
     "unpaidInvoices_other": "{{count}} invoice belum lunas",
     "overdueAmount": "{{amount}} terlambat",
-    "noneOverdue": "tidak ada yang terlambat"
+    "noneOverdue": "tidak ada yang terlambat",
+    "soFar": "sejauh ini",
+    "trendAria": "{{label}}, 6 bulan terakhir: {{values}}. Pakai tombol panah untuk berpindah bulan."
   }
 }

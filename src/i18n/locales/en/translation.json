@@ -453,5 +453,25 @@
     "costs": "Costs",
     "aria": "Invoiced and costs, month by month, for the last six months",
     "hint": "Left bar invoiced, right bar costs; the figure under each month is its profit. Hover or tap a month for the breakdown."
+  },
+  "invoiceSheet": {
+    "nameFirst": "Type the KETERANGAN first, then its size, qty and price.",
+    "rowDeleted": "Deleted {{name}}",
+    "deleteRow": "Delete this line",
+    "deleteRowNamed": "Delete the line {{name}}",
+    "deleteConfirm": "Delete {{name}} from the order? The invoice's total updates with it.",
+    "pasted_one": "Added {{count}} line from the paste",
+    "pasted_other": "Added {{count}} lines from the paste",
+    "pasteUndone": "Paste undone",
+    "badDate": "That date wasn't understood. Type it like 25/02/2026.",
+    "needClient": "KEPADA YTH can't be empty.",
+    "newItem": "+ item…",
+    "newSize": "+ size",
+    "saving": "Saving…",
+    "fit": "Fit to 1 page",
+    "fitOnTitle": "Scale the invoice down just enough to print on one page",
+    "fitOffTitle": "Print at full size (a long invoice may take more pages)",
+    "fitOffBreaks": "(off while a page break is placed by hand)",
+    "tooLong": "Too long for one page even at 70%: prints on more pages"
   }
 }

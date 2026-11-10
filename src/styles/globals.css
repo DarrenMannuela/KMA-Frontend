@@ -213,3 +213,8 @@ table[data-density='compact'] tr.group\/gh > td { padding-top: 0.375rem; padding
 .delay-2  { animation-delay: 0.10s; }
 .delay-3  { animation-delay: 0.15s; }
 .delay-4  { animation-delay: 0.20s; }
+
+/* Notices never print (see App.tsx). */
+@media print {
+  .kma-toaster { display: none !important; }
+}

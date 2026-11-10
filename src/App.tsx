@@ -162,7 +162,10 @@ export default function App() {
         </Routes>
         </Suspense>
 
+        {/* print-hidden: a notice still showing when someone prints (just after
+            editing an invoice, say) must never end up on the paper. */}
         <Toaster
+          containerClassName="kma-toaster"
           position="bottom-right"
           toastOptions={{
             style: {

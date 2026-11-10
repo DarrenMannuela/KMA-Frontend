@@ -158,3 +158,62 @@ export function MaterialColorPickerModal({ material, colors, selectedCode, onPic
     </Modal>
   )
 }
+
+/** Choosing which of a supplier's catalogue materials a line is, for a line
+ *  whose Bahan isn't one yet (typed by hand, or its supplier was changed).
+ *  Hands back the material, and whether to take the catalogue's price too;
+ *  the caller then opens the colour grid for it. */
+export function CatalogueMaterialPickerModal({ supplierName, materials, currentPrice, onPick, onClose }: {
+  supplierName: string
+  materials: CatalogueMaterial[]
+  currentPrice: number
+  onPick: (material: CatalogueMaterial, usePrice: boolean) => void
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const isMobile = useIsMobile()
+  const viewportHeight = useVisualViewportHeight()
+  const [query, setQuery] = useState('')
+  const [usePrice, setUsePrice] = useState(true)
+  const q = query.trim().toLowerCase()
+  const shown = q ? materials.filter(m => materialLabel(m).toLowerCase().includes(q)) : materials
+  const rp = (n: number) => `Rp ${n.toLocaleString('id-ID')}`
+
+  return (
+    <Modal title={t('ledger.catalogue.title', { supplier: supplierName })} onClose={onClose} size="md" guard={false}>
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500 dark:text-slate-400">{t('ledger.catalogue.intro')}</p>
+        {materials.length > 6 && (
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400" aria-hidden />
+            <input autoFocus={!isMobile} type="text" value={query} onChange={e => setQuery(e.target.value)}
+              placeholder={t('ledger.catalogue.search')} aria-label={t('ledger.catalogue.search')} className="field !pl-9" />
+          </div>
+        )}
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-0.5" checked={usePrice} onChange={e => setUsePrice(e.target.checked)} />
+          <span>
+            {t('ledger.catalogue.usePrice')}
+            <span className="block text-xs text-slate-500 dark:text-slate-400">{t('ledger.catalogue.currentPrice', { price: rp(currentPrice) })}</span>
+          </span>
+        </label>
+        <ul className="divide-y divide-slate-100 overflow-y-auto -mx-1 dark:divide-navy-800" style={{ maxHeight: Math.max(200, viewportHeight * 0.5) }}>
+          {shown.map(m => (
+            <li key={m.slug}>
+              <button type="button" onClick={() => onPick(m, usePrice)}
+                className="w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left hover:bg-slate-50 active:bg-slate-100 dark:hover:bg-white/5">
+                <Palette size={15} className="text-slate-400 shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-navy-900 truncate dark:text-slate-50">{materialLabel(m)}</span>
+                  {m.composition && <span className="block text-xs text-slate-500 truncate dark:text-slate-400">{m.composition}</span>}
+                </span>
+                {m.price ? <span className="text-xs font-mono text-slate-600 shrink-0 dark:text-slate-300">{rp(m.price)}</span> : null}
+              </button>
+            </li>
+          ))}
+          {shown.length === 0 && <li className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">{t('ledger.colourPicker.noMatch', { query })}</li>}
+        </ul>
+      </div>
+    </Modal>
+  )
+}

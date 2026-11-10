@@ -20,6 +20,8 @@
     "unpaidInvoices_one": "{{count}} unpaid invoice",
     "unpaidInvoices_other": "{{count}} unpaid invoices",
     "overdueAmount": "{{amount}} overdue",
-    "noneOverdue": "none overdue"
+    "noneOverdue": "none overdue",
+    "soFar": "so far",
+    "trendAria": "{{label}}, last 6 months: {{values}}. Use the arrow keys to step through the months."
   }
 }

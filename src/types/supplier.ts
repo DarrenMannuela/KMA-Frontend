@@ -60,3 +60,22 @@ export type UpdateSupplierMaterialRequest = Partial<Omit<SupplierMaterial, 'id' 
 
 export type CreateSupplierMaterialColorRequest = Omit<SupplierMaterialColor, 'id'>
 export type UpdateSupplierMaterialColorRequest = Partial<Omit<SupplierMaterialColor, 'id' | 'supplier_material_id'>>
+
+// ─── Matches dto/SupplierDesign.go ─────────────────────────────────────────────
+// A design a bordir or sablon supplier makes (a client's logo, a slogan),
+// with its photo — what those suppliers' catalogues really are.
+export interface SupplierDesign {
+  id: number
+  supplier_id: number
+  name: string
+  /** Where it goes, e.g. "DADA KIRI". */
+  placement: string | null
+  /** Its size, e.g. "7 CM". */
+  size: string | null
+  /** What the supplier charges per piece. */
+  price: number
+  notes: string | null
+  photo_path: string | null
+}
+export type CreateSupplierDesignRequest = Omit<SupplierDesign, 'id' | 'photo_path'>
+export type UpdateSupplierDesignRequest = Partial<CreateSupplierDesignRequest>

@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import { Trans, useTranslation } from 'react-i18next'
 import {
   ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, FileUp, Link2, Plus, Printer, Rows2, Rows3, Search, Trash2, X,
-  ArrowRightLeft, Tag, Copy, CheckSquare,
+  ArrowRightLeft, Tag, Copy, CheckSquare, BookOpen, Images,
 } from 'lucide-react'
 import { EditableCell, TableSkeleton, formatRp } from '@/components/ui'
 import { ErrorState } from '@/components/ui/Page'
@@ -13,7 +13,7 @@ import { ScrollX } from '@/components/ui/ScrollX'
 import { ConfirmDialog } from '@/components/ui'
 import {
   productionHooks, operationHooks, supplierHooks, orderHooks, useFinanceHeaders, useFinanceBatch, undoLast, useBudgets,
-  useSupplierCatalogues,
+  useSupplierCatalogues, supplierDesignHooks,
 } from '@/hooks'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { SI_UNITS } from '@/utils/Units'
@@ -21,9 +21,11 @@ import { formatDateShort, shortMonthLabel as monthShort, monthLabel } from '@/ut
 import { parseDelimited } from '@/utils/tableText'
 import { CATEGORY_COLORS } from '@/constants/supplierCategories'
 import { colorFromText, catalogueForSupplier, materialFromText, materialLabel, colorCodeFromText } from '@/data/materialCatalogue'
-import type { CatalogueMaterial, CatalogueColor } from '@/data/materialCatalogue'
-import { MaterialColorPickerModal } from './MaterialColorPicker'
-import type { FinanceBatch } from '@/types'
+import type { CatalogueMaterial, CatalogueColor, SupplierCatalogue } from '@/data/materialCatalogue'
+import { MaterialColorPickerModal, CatalogueMaterialPickerModal } from './MaterialColorPicker'
+import { DesignPickerModal, DesignThumb } from './DesignPicker'
+import { designFromText, designLabel, designsFor } from '@/data/designs'
+import type { FinanceBatch, SupplierDesign } from '@/types'
 import {
   fromProduction, fromOperation, editBatch, deleteBatch, inPeriod, previousPeriod, searchText, matchesSearch,
   supplierLabel, supplierWithCategory, orderLabel, newDraft,
@@ -185,6 +187,8 @@ export function Ledger({ kind, initial, title }: {
   // see useSupplierCatalogues — so the swatch/picker below works the same
   // way regardless of which supplier a line is on.
   const catalogues = useSupplierCatalogues()
+  // Bordir/sablon suppliers' designs, for the same kind of picker.
+  const { data: designs = [] } = supplierDesignHooks.useList()
   const { data: headers = [] } = useFinanceHeaders()
   const { data: budgets = [] } = useBudgets()
   const batch = useFinanceBatch()
@@ -218,7 +222,12 @@ export function Ledger({ kind, initial, title }: {
   // colour grid directly on click, rather than needing the row's own name
   // cell (plain text editing) or the separate Edit-line dialog first —
   // clicking the swatch itself didn't do anything before this.
-  const [colorPickFor, setColorPickFor] = useState<{ row: LedgerRow; material: CatalogueMaterial; colors: CatalogueColor[]; selectedCode?: string } | null>(null)
+  const [colorPickFor, setColorPickFor] = useState<{ row: LedgerRow; material: CatalogueMaterial; colors: CatalogueColor[]; selectedCode?: string; price?: number } | null>(null)
+  // A line whose Bahan isn't in its supplier's catalogue (typed by hand, or
+  // its supplier changed): choose the material first, then its colour.
+  const [materialPickFor, setMaterialPickFor] = useState<{ row: LedgerRow; catalogue: SupplierCatalogue; supplierName: string } | null>(null)
+  // A line from a bordir/sablon supplier: which of its designs it is.
+  const [designPickFor, setDesignPickFor] = useState<{ row: LedgerRow; designs: SupplierDesign[]; supplierName: string; selectedId?: number } | null>(null)
   // A single line's delete also confirms first — unlike the bulk one above,
   // it has no selecting-then-clicking-Delete step of its own to catch a
   // mis-click, just the one small icon.
@@ -596,9 +605,39 @@ export function Ledger({ kind, initial, title }: {
           // screens too, where a hover hint would never show. The name drops
           // the " - CODE" the chip already shows; the saved name is unchanged.
           const shownName = catMatch && catCode ? materialLabel(catMatch) : r.name
+          const lineDesigns = designsFor(designs, r.supplier_id)
+          const design = lineDesigns.length ? designFromText(lineDesigns, r.supplier_id, r.name) : undefined
           return (
             <span className="flex items-center gap-2 min-w-0">
               <span className="font-medium text-slate-800 truncate dark:text-slate-200" title={r.name}>{shownName}</span>
+              {lineDesigns.length > 0 && !catMatch && (
+                // A bordir/sablon supplier's design: its photo once picked,
+                // a dashed "Design" chip until then. Either opens the gallery.
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); setDesignPickFor({ row: r, designs: lineDesigns, supplierName: supplierLabel(suppliers, r.supplier_id) ?? '', selectedId: design?.id }) }}
+                  className={`ml-auto shrink-0 inline-flex items-center gap-1 rounded-full bg-white py-0.5 text-[11px] text-navy-700 hover:border-navy-500 hover:bg-navy-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-navy-400 dark:bg-navy-950 dark:text-slate-200 dark:hover:bg-navy-800 ${design ? 'border border-slate-300 pl-0.5 pr-1.5 shadow-sm dark:border-navy-600' : 'border border-dashed border-navy-300 pl-1.5 pr-1.5 dark:border-navy-500'}`}
+                  title={design ? t('designs.chipChange', { design: designLabel(design) }) : t('designs.chipPick', { supplier: supplierLabel(suppliers, r.supplier_id) ?? '' })}
+                  aria-label={design ? t('designs.chipChange', { design: designLabel(design) }) : t('designs.chipPick', { supplier: supplierLabel(suppliers, r.supplier_id) ?? '' })}
+                >
+                  {design ? <DesignThumb design={design} className="w-5 h-5 rounded-full" /> : <Images size={11} aria-hidden />}
+                  <span>{t('designs.chip')}</span>
+                  <ChevronDown size={11} className="text-slate-400 dark:text-slate-500" />
+                </button>
+              )}
+              {catalogue && !catMatch && catalogue.materials.length > 0 && lineDesigns.length === 0 && (
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); setMaterialPickFor({ row: r, catalogue, supplierName: supplierLabel(suppliers, r.supplier_id) ?? '' }) }}
+                  className="ml-auto shrink-0 inline-flex items-center gap-1 rounded-full border border-dashed border-navy-300 bg-white pl-1.5 pr-1.5 py-0.5 text-[11px] text-navy-700 hover:border-navy-500 hover:bg-navy-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-navy-400 dark:border-navy-500 dark:bg-navy-950 dark:text-slate-200 dark:hover:bg-navy-800"
+                  title={t('ledger.catalogue.chipTitle', { supplier: supplierLabel(suppliers, r.supplier_id) ?? '' })}
+                  aria-label={t('ledger.catalogue.chipTitle', { supplier: supplierLabel(suppliers, r.supplier_id) ?? '' })}
+                >
+                  <BookOpen size={11} aria-hidden />
+                  <span>{t('ledger.catalogue.chip')}</span>
+                  <ChevronDown size={11} className="text-slate-400 dark:text-slate-500" />
+                </button>
+              )}
               {catMatch && catColors.length > 0 && (
                 <button
                   type="button"
@@ -634,7 +673,7 @@ export function Ledger({ kind, initial, title }: {
     ...(kind === 'production' ? [{ key: 'total', header: `${t('ledger.columns.total')} (Rp)`, width: '8rem', sortKey: 'total' as SortKey, align: 'right' as const, value: (r: LedgerRow) => r.total, render: (r: LedgerRow) => <span className="font-mono tabular-nums font-semibold">{amount(r.total)}</span> }] : []),
     { key: 'order', header: t('ledger.columns.order'), width: '8rem', sortKey: 'order_id', field: 'order_id', type: 'text', suggestions: orderSuggestions, value: r => r.order_id ?? '',
       render: r => (r.order_id ? <span className="font-mono text-xs text-navy-700 dark:text-slate-200" title={orderLabel(orders, r.order_id)}>{r.order_id}</span> : <span className="text-slate-300 dark:text-navy-700">—</span>) },
-  ], [byKasBon, kind, t, headerSuggestions, suppliers, catalogues, supplierOptions, unitOptions, categories, orderSuggestions, orders])
+  ], [byKasBon, kind, t, headerSuggestions, suppliers, catalogues, designs, supplierOptions, unitOptions, categories, orderSuggestions, orders])
   // The checkbox and actions columns (2.25rem each) plus every fixed-width column.
   const fixedRem = 4.5 + columns.reduce((n, c) => n + (c.width.endsWith('rem') ? parseFloat(c.width) : 0), 0)
 
@@ -926,7 +965,9 @@ export function Ledger({ kind, initial, title }: {
                         <span className="flex items-center gap-1.5 min-w-0">
                           {kind === 'production' && (() => {
                             const c = colorFromText(supplierLabel(suppliers, r.supplier_id), r.name, catalogues)
-                            return c && <span className="w-3.5 h-3.5 rounded-full ring-1 ring-black/10 shrink-0" style={{ background: c.hex }} />
+                            if (c) return <span className="w-3.5 h-3.5 rounded-full ring-1 ring-black/10 shrink-0" style={{ background: c.hex }} />
+                            const d = designFromText(designs, r.supplier_id, r.name)
+                            return d && <DesignThumb design={d} className="w-6 h-6 rounded shrink-0" />
                           })()}
                           <span className="block font-medium text-slate-800 truncate dark:text-slate-200">{r.name || r.category}</span>
                         </span>
@@ -1156,13 +1197,60 @@ export function Ledger({ kind, initial, title }: {
           onDelete={() => setConfirmDeleteRow(editing)}
           onClose={() => setEditing(null)} />
       )}
+      {designPickFor && (
+        <DesignPickerModal
+          supplierName={designPickFor.supplierName}
+          designs={designPickFor.designs}
+          currentPrice={designPickFor.row.price}
+          selectedId={designPickFor.selectedId}
+          onPick={(d, usePrice) => {
+            const { row } = designPickFor
+            // Bahan, unit and (if wanted) price as one change, one Undo.
+            const b = editBatch([row], 'name', designLabel(d))
+            const patch = b.production_update?.[0]
+            if (patch) patch.fields = { ...patch.fields, si_unit: 'pcs', ...(usePrice && d.price ? { price: d.price } : {}) }
+            apply(b, t('ledger.changedLine', { name: row.name }))
+            setDesignPickFor(null)
+          }}
+          onClose={() => setDesignPickFor(null)}
+        />
+      )}
+      {materialPickFor && (
+        <CatalogueMaterialPickerModal
+          supplierName={materialPickFor.supplierName}
+          materials={materialPickFor.catalogue.materials}
+          currentPrice={materialPickFor.row.price}
+          onPick={(material, usePrice) => {
+            const { row, catalogue } = materialPickFor
+            const colors = catalogue.colorsFor(material)
+            const price = usePrice && material.price ? material.price : undefined
+            setMaterialPickFor(null)
+            if (colors.length) setColorPickFor({ row, material, colors, price })
+            else if (price != null && price !== row.price) {
+              const b = editBatch([row], 'name', materialLabel(material))
+              const patch = b.production_update?.[0]
+              if (patch) patch.fields = { ...patch.fields, price }
+              apply(b, t('ledger.changedLine', { name: row.name }))
+            } else editRow(row, 'name', materialLabel(material))
+          }}
+          onClose={() => setMaterialPickFor(null)}
+        />
+      )}
       {colorPickFor && (
         <MaterialColorPickerModal
           material={colorPickFor.material}
           colors={colorPickFor.colors}
           selectedCode={colorPickFor.selectedCode}
           onPick={code => {
-            editRow(colorPickFor.row, 'name', `${materialLabel(colorPickFor.material)} - ${code}`)
+            const { row, material, price } = colorPickFor
+            const name = `${materialLabel(material)} - ${code}`
+            if (price != null && price !== row.price) {
+              // Bahan and price as one change, so one Undo puts both back.
+              const b = editBatch([row], 'name', name)
+              const patch = b.production_update?.[0]
+              if (patch) patch.fields = { ...patch.fields, price }
+              apply(b, t('ledger.changedLine', { name: row.name }))
+            } else editRow(row, 'name', name)
             setColorPickFor(null)
           }}
           onClose={() => setColorPickFor(null)}
