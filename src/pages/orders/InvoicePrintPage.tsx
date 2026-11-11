@@ -8,7 +8,7 @@ import i18n from '@/i18n/config'
 import { friendlyError } from '@/utils/friendlyError'
 import { parseDate } from '@/utils/tableText'
 import type { Invoice, Item } from '@/types'
-import { ArrowLeft, Printer, Receipt, Plus, PackageSearch, X, Highlighter, Rows3 } from 'lucide-react'
+import { Receipt, Plus, PackageSearch, X, Highlighter, Rows3 } from 'lucide-react'
 import { format } from 'date-fns'
 import { invoicesApi, ordersApi, itemsApi } from '@/api'
 import { formatRp, FormField, ConfirmDialog } from '@/components/ui'
@@ -21,7 +21,9 @@ import { usePrintLightBody } from '@/hooks/usePrintLightBody'
 import { usePaperFormat, PAPER_FORMATS, type PaperFormat } from '@/utils/PaperFormatStore'
 import { useInvoiceLayout } from '@/utils/InvoiceLayoutStore'
 import { usePrintLayout } from '@/hooks/usePrintLayout'
-import { PrintLayoutPanel, PrintLayoutToggle, PANEL_ROOM_CLASS } from '@/components/print/PrintLayoutPanel'
+import { PrintLayoutPanel, PANEL_ROOM_CLASS } from '@/components/print/PrintLayoutPanel'
+import { PrintToolbar, ZoomButton } from '@/components/print/PrintToolbar'
+import { usePreviewZoom } from '@/hooks/usePreviewZoom'
 import { printFontStacks } from '@/utils/printLayout'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
 
@@ -546,7 +548,9 @@ export function InvoicePrintPage() {
 
   // Shrinks the preview to fit the screen (never scales up); printing is
   // unaffected.
-  const { containerRef: scaleContainerRef, docRef: scaleDocRef, scale, scaledWidth, scaledHeight } = useScaleToFit(true)
+  // Phones: fit the screen, or the real size (ZoomButton).
+  const zoom = usePreviewZoom()
+  const { containerRef: scaleContainerRef, docRef: scaleDocRef, scale, scaledWidth, scaledHeight } = useScaleToFit(zoom.fit)
 
   // The Add Row panel is a wide dropdown; on phones it's a modal instead.
   const isMobile = useIsMobile()
@@ -1141,16 +1145,11 @@ export function InvoicePrintPage() {
   return (
     <div className="min-h-screen bg-slate-100">
       {/* Toolbar (screen only); wraps on narrow screens. */}
-      <div data-print-toolbar className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap">
-        {/* Always to the invoice list: this page is often opened directly, with no
-           history to go back to. */}
-        <button
-          onClick={() => navigate('/invoice')}
-          className="btn-secondary flex items-center gap-1.5 text-sm"
-        >
-          <ArrowLeft size={14} /> Back
-        </button>
-        <span className="text-slate-400 text-sm flex-1 flex items-center gap-1.5">
+      <PrintToolbar
+        onBack={() => navigate('/invoice')}
+        onPrint={handlePrint}
+        layout={{ state: printLayout, open: layoutOpen, onToggle: () => setLayoutOpen(o => !o) }}
+        title={<>
           {invoice.id}
           {sheetBusy && <span className="badge bg-amber-50 text-amber-700" role="status">{t('invoiceSheet.saving')}</span>}
           {/* "At least": natural overflow can add pages beyond the prediction. */}
@@ -1159,7 +1158,8 @@ export function InvoicePrintPage() {
               at least {previewTotalPages} page{previewTotalPages === 1 ? '' : 's'}
             </span>
           )}
-        </span>
+        </>}
+        tools={<>
         <div className="flex items-center gap-1.5">
           {/* Fit to 1 page (on by default): scales the whole invoice down just
              enough to fit one page, never below 70%. See fitOnePage. */}
@@ -1209,7 +1209,7 @@ export function InvoicePrintPage() {
               onClick={() => setHighlightChoice(c.value)}
               title={c.name}
               aria-label={c.name}
-              className="w-5 h-5 rounded-full shrink-0"
+              className="w-10 h-10 !min-h-0 dock:w-5 dock:h-5 rounded-full shrink-0"
               style={{
                 background: c.value,
                 border: highlightChoice === c.value ? '2px solid #1e293b' : '1px solid #cbd5e1',
@@ -1426,18 +1426,8 @@ export function InvoicePrintPage() {
         >
           <Receipt size={14} /> Kwitansi
         </button>
-        <PrintLayoutToggle state={printLayout} open={layoutOpen} onToggle={() => setLayoutOpen(o => !o)} />
-        <button
-          onClick={handlePrint}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Printer size={14} /> {t('printLayout.print')}
-        </button>
-      </div>
-      <PrintLayoutPanel docType="invoice" state={printLayout} open={layoutOpen} onClose={() => setLayoutOpen(false)} />
-
-      {/* Manual page breaks, when there's more than one item group. */}
-      {groupNames.length > 1 && (
+        </>}
+        below={groupNames.length > 1 ? (
         <div className="print:hidden bg-white border-b border-slate-200 px-6 py-2 flex items-center gap-1.5 flex-wrap">
           <span className="text-xs text-slate-400 mr-0.5">Start a new page before:</span>
           {groupNames.map(name => (
@@ -1464,11 +1454,13 @@ export function InvoicePrintPage() {
             </button>
           )}
         </div>
-      )}
+        ) : undefined}
+      />
+      <PrintLayoutPanel docType="invoice" state={printLayout} open={layoutOpen} onClose={() => setLayoutOpen(false)} />
 
       {/* The page is a fixed physical width: it scrolls here (and .scale-wrap shrinks
          it to fit) so it doesn't widen the toolbar. Printing uses the real size. */}
-      <div className={`p-8 print:p-0 overflow-x-auto print:overflow-visible ${layoutOpen ? `${PANEL_ROOM_CLASS} max-lg:pb-[72vh]` : ''}`} ref={scaleContainerRef}>
+      <div className={`p-3 dock:p-8 print:p-0 overflow-x-auto print:overflow-visible ${layoutOpen ? `${PANEL_ROOM_CLASS} pb-[57vh] lg:pb-8` : ''}`} ref={scaleContainerRef}>
         <div
           className="scale-wrap"
           style={{ width: scaledWidth || undefined, height: scaledHeight || undefined, overflow: 'hidden' }}
@@ -1917,6 +1909,8 @@ export function InvoicePrintPage() {
           onCancel={() => setConfirmDeleteItem(null)}
         />
       )}
+
+      <ZoomButton zoom={zoom} hidden={layoutOpen} />
 
       {/* Print styles */}
       <style>{`

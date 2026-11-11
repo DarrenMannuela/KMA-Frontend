@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Printer } from 'lucide-react'
 import { format } from 'date-fns'
 import { orderHooks, itemHooks, invoiceHooks, clientHooks, supplierHooks, productionHooks, operationHooks, buktiKasHooks } from '@/hooks'
 import { LoadingState, ErrorState } from '@/components/ui/Page'
@@ -12,6 +11,9 @@ import { shortMonthLabel } from '@/utils/MonthUtils'
 import { CATEGORY_COLORS } from '@/constants/supplierCategories'
 import type { Invoice } from '@/types'
 import { usePrintLightBody } from '@/hooks/usePrintLightBody'
+import { useScaleToFit } from '@/hooks/useScaleToFit'
+import { usePreviewZoom } from '@/hooks/usePreviewZoom'
+import { PrintToolbar, ZoomButton } from '@/components/print/PrintToolbar'
 
 // A printable monthly or yearly summary — same underlying numbers as the
 // Finance Overview page (same financeStats functions, so the two can never
@@ -47,6 +49,10 @@ function delta(now: number, before: number, vsLabel: string): string | null {
 export function FinanceReportPrintPage() {
   usePrintLightBody()
   const navigate = useNavigate()
+  // The A4 page fits the screen (it overflowed both edges of a phone);
+  // ZoomButton shows it at its real size instead.
+  const zoom = usePreviewZoom()
+  const { containerRef: scaleContainerRef, docRef: scaleDocRef, scale, scaledWidth, scaledHeight } = useScaleToFit(zoom.fit)
   const [searchParams] = useSearchParams()
   const period = periodFromParams(searchParams)
   const isYear = period.mode === 'year'
@@ -119,18 +125,13 @@ export function FinanceReportPrintPage() {
   return (
     <div className="min-h-screen bg-slate-100">
       {/* Toolbar — hidden when printing */}
-      <div className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap">
-        <button onClick={() => navigate(-1)} className="btn-secondary flex items-center gap-1.5 text-sm">
-          <ArrowLeft size={14} /> Back
-        </button>
-        <span className="text-slate-400 text-sm flex-1">{title} — {periodLabel(period)}</span>
-        <button onClick={() => window.print()} className="btn-primary flex items-center gap-2">
-          <Printer size={14} /> Print / Save PDF
-        </button>
-      </div>
+      <PrintToolbar title={`${title} — ${periodLabel(period)}`} onBack={() => navigate(-1)} onPrint={() => window.print()} />
 
-      <div className="py-8 print:py-0 flex justify-center">
-        <div id="finance-report" className="bg-white shadow-lg print:shadow-none" style={{ width: '210mm', minHeight: '297mm', padding: '15mm 16mm', fontFamily: 'Arial, sans-serif', color: '#000', fontSize: '11px' }}>
+      <div className="p-3 dock:p-8 print:p-0 overflow-x-auto print:overflow-visible" ref={scaleContainerRef}>
+        {/* Centred by its margins, not flexbox: a centred page wider than the
+            screen (real size on a phone) would lose its left edge. */}
+        <div className="scale-wrap mx-auto" style={{ width: scaledWidth || undefined, height: scaledHeight || undefined, overflow: 'hidden' }}>
+        <div id="finance-report" ref={scaleDocRef} className="bg-white shadow-lg print:shadow-none" style={{ width: '210mm', minHeight: '297mm', padding: '15mm 16mm', fontFamily: 'Arial, sans-serif', color: '#000', fontSize: '11px', transform: `scale(${scale})`, transformOrigin: 'top left' }}>
           {/* Letterhead */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '18px', breakInside: 'avoid' }}>
             <img src="/Logo.png" alt="KMA Logo" style={{ width: '52px', height: 'auto', flexShrink: 0 }} />
@@ -339,7 +340,10 @@ export function FinanceReportPrintPage() {
             KREASI MAKMUR ABADI — TELP. 021.300.253.99 / Hp. 0811.857.372 — Email : fifi67@yahoo.com
           </div>
         </div>
+        </div>
       </div>
+
+      <ZoomButton zoom={zoom} />
 
       <style>{`
         @media print {
@@ -347,7 +351,9 @@ export function FinanceReportPrintPage() {
           .print\\:hidden { display: none !important; }
           .print\\:shadow-none { box-shadow: none !important; }
           .print\\:py-0 { padding-top: 0 !important; padding-bottom: 0 !important; }
-          #finance-report { width: 100% !important; box-shadow: none !important; }
+          .print\\:p-0 { padding: 0 !important; }
+          #finance-report { width: 100% !important; margin: 0 !important; transform: none !important; box-shadow: none !important; }
+          .scale-wrap { width: auto !important; height: auto !important; overflow: visible !important; }
           @page { size: A4; margin: 12mm; }
           aside { display: none !important; }
           header { display: none !important; }

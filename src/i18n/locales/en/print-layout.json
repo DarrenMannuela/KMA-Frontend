@@ -41,5 +41,12 @@
     "saved": "Layout saved: every computer now prints with it.",
     "unsaved": "Not saved yet. Only this page shows these changes, and they'll be on the paper if you print now.",
     "unsavedShort": "Unsaved changes"
+  },
+  "printToolbar": {
+    "back": "Back",
+    "tools": "Tools",
+    "print": "Print",
+    "zoomFit": "Fit to screen",
+    "zoomActual": "Actual size"
   }
 }

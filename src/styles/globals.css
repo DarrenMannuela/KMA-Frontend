@@ -149,6 +149,21 @@
        so desktop keeps its intentional density; !important because it has
        to win over those more specific text-sm/text-xs utility classes. */
     input, select, textarea { font-size: 16px !important; }
+
+    /* Fingers, not cursors: every button at least 44px tall (the size
+       Apple, Google and WCAG give for a touch target), and one that's only
+       an icon 44px wide too, centred. The desktop's compact sizes (btn-sm,
+       h-8 icon buttons) are for a mouse; on a phone they were easy to miss
+       and easy to hit the neighbour of. */
+    .btn, .btn-primary, .btn-gold, .btn-secondary, .btn-ghost, .btn-danger { min-height: 2.75rem; }
+    /* The same for a link or small text button that isn't a .btn (a "View
+       all", a filter pill, an icon link): add `tap`. */
+    .tap { min-height: 2.75rem; display: inline-flex; align-items: center; }
+    .tap-square { min-height: 2.75rem; min-width: 2.75rem; display: inline-flex; align-items: center; justify-content: center; }
+    :is(.btn, .btn-primary, .btn-gold, .btn-secondary, .btn-ghost, .btn-danger):not(:has(> :not(svg, .sr-only))) {
+      min-width: 2.75rem;
+      justify-content: center;
+    }
   }
 }
 

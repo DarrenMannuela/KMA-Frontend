@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Zap, AlertCircle, ChevronDown, LogOut, User as UserIcon, KeyRound, ShieldCheck, Menu, Languages, Sun, Moon } from 'lucide-react'
+import { Bell, Zap, AlertCircle, ChevronDown, LogOut, User as UserIcon, KeyRound, ShieldCheck, Menu, Languages, Sun, Moon, Search, Keyboard } from 'lucide-react'
 import { format } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
@@ -8,6 +8,8 @@ import { Trans, useTranslation } from 'react-i18next'
 import { useDateLocale } from '@/i18n/dateLocale'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
+import { Kbd } from '@/components/shortcuts/Kbd'
+import { MOD, openJumpTo, openShortcutsHelp } from '@/utils/shortcuts'
 
 // The stub/live route banners are for development builds only.
 const SHOW_DEV_STATUS = import.meta.env.DEV
@@ -123,6 +125,14 @@ function AccountMenu() {
             <Languages className="w-4 h-4" />
             {t('common.switchToLanguage', { language: nextLangLabel })}
           </button>
+          <button
+            onClick={() => { setOpen(false); openShortcutsHelp() }}
+            className="w-full flex items-center gap-2 px-3.5 py-2 text-sm text-navy-700 hover:bg-slate-50 transition-colors dark:text-slate-200 dark:hover:bg-white/5"
+          >
+            <Keyboard className="w-4 h-4" />
+            <span className="flex-1 text-left">{t('shortcuts.title')}</span>
+            <Kbd>?</Kbd>
+          </button>
           {/* No handler yet — there's nothing to show here until actual
               notifications exist (see the overdue-invoices idea). A dead
               button in the always-visible topbar row was worse than this:
@@ -228,6 +238,21 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
               {isUp === true ? t('topbar.backendLive') : isUp === false ? t('topbar.backendOffline') : t('topbar.connecting')}
             </span>
           </div>
+
+          {/* Jump to (Ctrl+K / ⌘K): a search-like button on wide screens, an
+              icon on phones. */}
+          <button
+            type="button"
+            onClick={openJumpTo}
+            aria-keyshortcuts="Control+K Meta+K"
+            title={t('jumpTo.title')}
+            aria-label={t('jumpTo.title')}
+            className="btn-ghost !px-2 min-w-[2.75rem] justify-center md:!px-3 md:w-56 md:justify-start md:gap-2 md:border md:border-slate-200 md:bg-slate-50 md:text-slate-500 md:hover:border-slate-300 dark:md:border-navy-700 dark:md:bg-navy-950/40 dark:md:text-slate-400"
+          >
+            <Search className="w-4 h-4 shrink-0" />
+            <span className="hidden md:inline flex-1 text-left text-sm font-normal">{t('jumpTo.button')}</span>
+            <span className="hidden md:flex items-center gap-0.5"><Kbd>{MOD}</Kbd><Kbd>K</Kbd></span>
+          </button>
 
           <ThemeToggle />
 

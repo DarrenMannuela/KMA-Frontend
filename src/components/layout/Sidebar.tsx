@@ -1,10 +1,9 @@
-import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
-  LayoutDashboard, ShoppingBag, ListOrdered, FileText,
+  LayoutDashboard, ShoppingBag,
   Truck, BarChart3,
-  Building2, Circle, ChevronDown, ChevronsLeft, ChevronsRight, ShieldCheck, X,
+  Circle, ChevronsLeft, ChevronsRight, ShieldCheck, X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -27,35 +26,20 @@ interface NavItem {
   activePrefixes?: string[]
 }
 
-interface NavGroup {
-  labelKey: string
-  icon: LucideIcon
-  items: NavItem[]
-}
-
+// Dashboard, then each section as one link. Orders and Finance each have
+// several pages, reached from the tab bar at the top of those pages
+// (OrdersSection, FinanceSection) rather than a second copy of the same nav
+// here; their link stays lit on every one of their tabs.
 const STANDALONE: NavItem[] = [
   { labelKey: 'sidebar.dashboard', path: '/', icon: LayoutDashboard },
+  {
+    labelKey: 'sidebar.ordersGroup', path: '/orders', icon: ShoppingBag, status: 'live',
+    activePrefixes: ['/items', '/invoice', '/clients'],
+  },
   { labelKey: 'sidebar.delivery', path: '/delivery', icon: Truck, status: 'live' },
-  // A single entry point into Finance — Overview, Production, Operations,
-  // Bukti Kas, Budgets and Suppliers used to each have their own sidebar
-  // row here too, duplicating the FinanceSection tab bar shown on every
-  // one of those pages. One nav beats two copies of the same nav.
   {
     labelKey: 'sidebar.financeGroup', path: '/finance', icon: BarChart3, status: 'live',
     activePrefixes: ['/production', '/operations', '/bukti-kas', '/finance/budgets', '/suppliers'],
-  },
-]
-
-const GROUPS: NavGroup[] = [
-  {
-    labelKey: 'sidebar.ordersGroup',
-    icon: ShoppingBag,
-    items: [
-      { labelKey: 'sidebar.clients',     path: '/clients',      icon: Building2,    status: 'live' },
-      { labelKey: 'sidebar.allOrders',  path: '/orders',      icon: ShoppingBag, status: 'live' },
-      { labelKey: 'sidebar.orderItems', path: '/items',        icon: ListOrdered, status: 'live' },
-      { labelKey: 'sidebar.invoice', path: '/invoice',  icon: FileText,    status: 'live' },
-    ],
   },
 ]
 
@@ -95,53 +79,6 @@ function NavItemLink({ item, onNavigate, collapsed }: { item: NavItem; onNavigat
         </>
       )}
     </NavLink>
-  )
-}
-
-function NavGroupSection({ group, onNavigate, collapsed }: { group: NavGroup; onNavigate?: () => void; collapsed?: boolean }) {
-  const location = useLocation()
-  const { t } = useTranslation()
-  const isAnyActive = group.items.some(i => location.pathname.startsWith(i.path) && i.path !== '/')
-  const [open, setOpen] = useState(isAnyActive)
-
-  return (
-    <div>
-      {/* Icon rail (collapsed + actually docked): a group toggle has nowhere
-         to put its own label, and a flyout menu isn't something to ship
-         without seeing it render — so each item stands alone instead, same
-         as any standalone link, set off by a thin rule. Rendered
-         unconditionally alongside the full version below and switched by
-         CSS alone (`hidden dock:block` / `dock:hidden`), the same way the
-         rest of this file hands off between the mobile drawer and the
-         docked sidebar — never both, but never by a JS width check either. */}
-      {collapsed && (
-        <div role="group" aria-label={t(group.labelKey)} className="hidden dock:block dock:py-1 dock:rounded-xl dock:bg-white/[0.04] dock:space-y-0.5">
-          {group.items.map(item => (
-            <NavItemLink key={item.path} item={item} onNavigate={onNavigate} collapsed />
-          ))}
-        </div>
-      )}
-      <div className={collapsed ? 'dock:hidden' : ''}>
-        <button
-          onClick={() => setOpen(o => !o)}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-navy-300 hover:bg-white/5 hover:text-white transition-all duration-150 group"
-        >
-          <group.icon className="w-4 h-4 shrink-0 text-navy-400 group-hover:text-navy-200" />
-          <span className="flex-1 text-left">{t(group.labelKey)}</span>
-          <ChevronDown
-            className={`w-3.5 h-3.5 text-navy-500 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-          />
-        </button>
-
-        {open && (
-          <div className="ml-3 pl-3 border-l border-navy-800 mt-0.5 space-y-0.5">
-            {group.items.map(item => (
-              <NavItemLink key={item.path} item={item} onNavigate={onNavigate} />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
   )
 }
 
@@ -204,15 +141,11 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapsed }: Sidebar
           {/* Dashboard first */}
           <NavItemLink item={STANDALONE[0]} onNavigate={onClose} collapsed={collapsed} />
 
+          {/* Orders, Delivery, Finance: one link each (see STANDALONE). */}
           <div className="pt-2 space-y-0.5">
-            {/* Orders group */}
-            <NavGroupSection group={GROUPS[0]} onNavigate={onClose} collapsed={collapsed} />
-
-            {/* Delivery, then Finance — both standalone single links; Finance's
-                own sub-pages are reached via FinanceSection's tab bar instead
-                of a second copy of the same nav here. */}
-            <NavItemLink item={STANDALONE[1]} onNavigate={onClose} collapsed={collapsed} />
-            <NavItemLink item={STANDALONE[2]} onNavigate={onClose} collapsed={collapsed} />
+            {STANDALONE.slice(1).map(item => (
+              <NavItemLink key={item.path} item={item} onNavigate={onClose} collapsed={collapsed} />
+            ))}
           </div>
 
           {/* Admin-only: user management. Assumes useAuth()'s user has a

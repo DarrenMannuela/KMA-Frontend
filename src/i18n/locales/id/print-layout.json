@@ -41,5 +41,12 @@
     "saved": "Tata letak disimpan: semua komputer kini mencetak dengannya.",
     "unsaved": "Belum disimpan. Perubahan ini hanya tampil di halaman ini, dan ikut tercetak jika Anda mencetak sekarang.",
     "unsavedShort": "Perubahan belum disimpan"
+  },
+  "printToolbar": {
+    "back": "Kembali",
+    "tools": "Alat",
+    "print": "Cetak",
+    "zoomFit": "Muat layar",
+    "zoomActual": "Ukuran asli"
   }
 }

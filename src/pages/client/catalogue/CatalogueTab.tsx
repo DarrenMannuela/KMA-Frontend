@@ -183,7 +183,7 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 dark:text-slate-500" />
-            <input ref={searchRef} className="field pl-9" placeholder={t('catalogue.searchPlaceholder')} value={query} onChange={e => setQuery(e.target.value)} />
+            <input ref={searchRef} data-kbd="search" aria-keyshortcuts="/" className="field pl-9" placeholder={t('catalogue.searchPlaceholder')} value={query} onChange={e => setQuery(e.target.value)} />
           </div>
           <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
             {t('catalogue.pricesFor')}
@@ -192,7 +192,7 @@ export function CatalogueTab({ client, items, isLoading, isError, onRetry, allPr
             </select>
           </label>
           <div className="ml-auto flex flex-wrap gap-2">
-            <button className="btn-primary btn-sm inline-flex items-center gap-1.5" onClick={() => setDialog({ kind: 'add' })}>
+            <button className="btn-primary btn-sm inline-flex items-center gap-1.5" onClick={() => setDialog({ kind: 'add' })} data-kbd="new" aria-keyshortcuts="n" title={t('shortcuts.withKey', { action: t('catalogue.addItem'), key: 'N' })}>
               <Plus size={14} /> {t('catalogue.addItem')}
             </button>
             <button className="btn-secondary btn-sm inline-flex items-center gap-1.5" disabled={!items.length}

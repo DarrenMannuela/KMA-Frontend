@@ -273,7 +273,7 @@ export function FinancePage() {
           actions={
             <div className="inline-flex rounded-lg bg-slate-100 p-0.5 dark:bg-white/10">
               {([['supplier', t('financeOverview.suppliers')], ['material', 'Bahan'], ['category', t('common.operations')]] as [Breakdown, string][]).map(([k, label]) => (
-                <button key={k} onClick={() => setBreakdown(k)} className={`px-2.5 py-1 text-xs font-medium rounded-md ${breakdown === k ? 'bg-white text-navy-900 shadow-sm dark:bg-navy-900 dark:text-slate-50' : 'text-slate-600 dark:text-slate-400'}`}>{label}</button>
+                <button key={k} onClick={() => setBreakdown(k)} className={`tap justify-center px-2.5 py-1 text-xs font-medium rounded-md ${breakdown === k ? 'bg-white text-navy-900 shadow-sm dark:bg-navy-900 dark:text-slate-50' : 'text-slate-600 dark:text-slate-400'}`}>{label}</button>
               ))}
             </div>
           }
@@ -329,9 +329,9 @@ export function FinancePage() {
                           rel="noopener noreferrer"
                           onClick={e => e.stopPropagation()}
                           title={t('financeOverview.remindOnWhatsapp')}
-                          className="inline-flex w-6 h-6 rounded-md items-center justify-center text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-500/10 transition-colors"
+                          className="tap-square inline-flex w-6 h-6 rounded-md items-center justify-center text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-500/10 transition-colors"
                         >
-                          <MessageCircle className="w-3.5 h-3.5" />
+                          <MessageCircle className="w-4 h-4 dock:w-3.5 dock:h-3.5" />
                         </a>
                       )}
                     </td>

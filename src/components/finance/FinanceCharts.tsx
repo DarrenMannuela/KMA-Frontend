@@ -324,6 +324,11 @@ export function MonthsChart({ data }: { data: MonthMoney[] }) {
   const { t } = useTranslation()
   const [ref, width] = useWidth<HTMLDivElement>()
   const [active, setActive] = useState<number | null>(null)
+  // A phone can't hover: there the month's figures sit in a panel under the
+  // chart, showing the current month until another is tapped (or a finger
+  // dragged across), instead of a pop-up under the finger.
+  const isMobile = useIsMobile()
+  const dragging = useRef(false)
   const height = 210
   const pad = { l: 44, r: 6, t: 10, b: 40 }
   const invoiced = data.map(d => d.paid + d.unpaid)
@@ -337,8 +342,12 @@ export function MonthsChart({ data }: { data: MonthMoney[] }) {
   const bw = Math.max(4, Math.min(16, slot * 0.28))
   const cx = (i: number) => pad.l + slot * i + slot / 2
   const current = data.length - 1
-  const shown = active ?? null
+  const shown = active ?? (isMobile && data.length ? data.length - 1 : null)
   const tip = shown != null ? data[shown] : null
+  const monthAtX = (clientX: number, el: Element) => {
+    const r = el.getBoundingClientRect()
+    return Math.max(0, Math.min(data.length - 1, Math.floor((clientX - r.left - pad.l) / Math.max(1, slot))))
+  }
   const GAP = 2 // surface gap between stacked parts
 
   // One stacked bar: the lower part solid, the upper part solid or striped.
@@ -358,9 +367,14 @@ export function MonthsChart({ data }: { data: MonthMoney[] }) {
   const profit = (i: number) => invoiced[i] - costs[i]
 
   return (
-    <div ref={ref} className="relative w-full select-none" style={{ height }}>
+    <div ref={ref} className="relative w-full select-none" style={isMobile ? undefined : { height }}>
       {width > 0 && (
-        <svg width={width} height={height} role="img" aria-label={t('dashboardChart.aria')} className="overflow-visible">
+        <svg width={width} height={height} role="img" aria-label={t('dashboardChart.aria')} className="overflow-visible"
+          style={isMobile ? { touchAction: 'pan-y' } : undefined}
+          onPointerDown={e => { if (e.pointerType !== 'mouse') { dragging.current = true; setActive(monthAtX(e.clientX, e.currentTarget)) } }}
+          onPointerMove={e => { if (dragging.current) setActive(monthAtX(e.clientX, e.currentTarget)) }}
+          onPointerUp={() => { dragging.current = false }}
+          onPointerCancel={() => { dragging.current = false }}>
           <defs>
             {/* Unpaid: the invoiced blue in stripes, money not in yet. */}
             <pattern id="unpaid-stripes" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -384,11 +398,11 @@ export function MonthsChart({ data }: { data: MonthMoney[] }) {
                 role="button"
                 aria-label={`${d.name}: ${t('dashboardChart.invoiced')} ${formatRp(invoiced[i])}, ${t('dashboardChart.costs')} ${formatRp(costs[i])}, ${t('common.profit')} ${formatRp(p)}`}
                 className="outline-none [&:focus-visible>rect:first-child]:stroke-navy-400"
-                onMouseEnter={() => setActive(i)}
-                onMouseLeave={() => setActive(null)}
+                onMouseEnter={() => { if (!isMobile) setActive(i) }}
+                onMouseLeave={() => { if (!isMobile) setActive(null) }}
                 onFocus={() => setActive(i)}
-                onBlur={() => setActive(null)}
-                onClick={() => setActive(a => (a === i ? null : i))}
+                onBlur={() => { if (!isMobile) setActive(null) }}
+                onClick={() => { if (!isMobile) setActive(a => (a === i ? null : i)) }}
               >
                 {/* The hit target is the whole month, not just the bars. */}
                 <rect x={pad.l + slot * i + 1} y={pad.t} width={slot - 2} height={h + pad.b - 2} rx="6"
@@ -405,7 +419,7 @@ export function MonthsChart({ data }: { data: MonthMoney[] }) {
           })}
         </svg>
       )}
-      {tip && shown != null && (
+      {tip && shown != null && !isMobile && (
         <div
           className="pointer-events-none absolute z-20 rounded-lg bg-navy-950 text-white text-xs px-3 py-2 shadow-xl whitespace-nowrap ring-1 ring-white/10"
           style={{ top: 0, left: Math.min(Math.max(cx(shown) - 95, 0), Math.max(0, width - 190)) }}
@@ -420,6 +434,22 @@ export function MonthsChart({ data }: { data: MonthMoney[] }) {
             <span className="text-navy-200 pl-2">{t('common.operations')}</span><span className="font-mono text-right text-navy-100">{formatRp(tip.operations)}</span>
             <span className="font-semibold mt-1 pt-1 border-t border-white/15">{profit(shown) < 0 ? t('common.loss') : t('common.profit')}</span>
             <span className={`font-mono font-semibold text-right mt-1 pt-1 border-t border-white/15 ${profit(shown) < 0 ? 'text-red-300' : 'text-green-300'}`}>{formatRp(Math.abs(profit(shown)))}</span>
+          </div>
+        </div>
+      )}
+      {/* Phones: the picked month's figures under the chart. */}
+      {tip && shown != null && isMobile && (
+        <div className="mt-2 rounded-xl bg-slate-50 px-3.5 py-3 text-sm dark:bg-white/[0.04]" aria-live="polite">
+          <div className="font-semibold text-navy-900 mb-2 dark:text-slate-50">{tip.name}</div>
+          <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
+            <span className="font-medium text-slate-700 dark:text-slate-200">{t('dashboardChart.invoiced')}</span><span className="font-mono text-right text-navy-900 dark:text-slate-50">{formatRp(invoiced[shown])}</span>
+            <span className="text-slate-500 pl-3 dark:text-slate-400">{t('common.paid')}</span><span className="font-mono text-right text-slate-600 dark:text-slate-300">{formatRp(tip.paid)}</span>
+            <span className="text-slate-500 pl-3 dark:text-slate-400">{t('common.unpaid')}</span><span className="font-mono text-right text-slate-600 dark:text-slate-300">{formatRp(tip.unpaid)}</span>
+            <span className="font-medium mt-1 text-slate-700 dark:text-slate-200">{t('dashboardChart.costs')}</span><span className="font-mono text-right mt-1 text-navy-900 dark:text-slate-50">{formatRp(costs[shown])}</span>
+            <span className="text-slate-500 pl-3 dark:text-slate-400">{t('common.production')}</span><span className="font-mono text-right text-slate-600 dark:text-slate-300">{formatRp(tip.production)}</span>
+            <span className="text-slate-500 pl-3 dark:text-slate-400">{t('common.operations')}</span><span className="font-mono text-right text-slate-600 dark:text-slate-300">{formatRp(tip.operations)}</span>
+            <span className="font-semibold mt-1 pt-1.5 border-t border-slate-200 text-navy-900 dark:border-navy-700 dark:text-slate-50">{profit(shown) < 0 ? t('common.loss') : t('common.profit')}</span>
+            <span className={`font-mono font-semibold text-right mt-1 pt-1.5 border-t border-slate-200 dark:border-navy-700 ${profit(shown) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>{formatRp(Math.abs(profit(shown)))}</span>
           </div>
         </div>
       )}

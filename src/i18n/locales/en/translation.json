@@ -452,7 +452,8 @@
     "invoiced": "Invoiced",
     "costs": "Costs",
     "aria": "Invoiced and costs, month by month, for the last six months",
-    "hint": "Left bar invoiced, right bar costs; the figure under each month is its profit. Hover or tap a month for the breakdown."
+    "hint": "Left bar invoiced, right bar costs; the figure under each month is its profit. Hover or tap a month for the breakdown.",
+    "hintTouch": "Left bar invoiced, right bar costs; the figure under each month is its profit. Tap a month, or drag across them, for its breakdown below."
   },
   "invoiceSheet": {
     "nameFirst": "Type the KETERANGAN first, then its size, qty and price.",
@@ -479,5 +480,8 @@
     "unfoldAll": "Unfold all items",
     "resizeHint": "Drag to resize the column; double-click to fit it to its contents",
     "resetWidths": "Reset column widths"
+  },
+  "ordersTabs": {
+    "sectionTitle": "Orders section"
   }
 }

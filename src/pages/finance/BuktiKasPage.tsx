@@ -51,7 +51,7 @@ export function BuktiKasPage() {
         title="Bukti Kas"
         subtitle={t('buktiKas.subtitle', { total: formatRp(grandTotal) })}
         actions={
-          <button className="btn-primary btn-sm" onClick={() => setFormFor({})}>
+          <button className="btn-primary btn-sm" onClick={() => setFormFor({})} data-kbd="new" aria-keyshortcuts="n" title={t('shortcuts.withKey', { action: t('common.addNew'), key: 'N' })}>
             <Plus size={14} /> {t('common.addNew')}
           </button>
         }

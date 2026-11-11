@@ -4,6 +4,9 @@ import { useEffect, useRef } from 'react'
 // so a ConfirmDialog over a Modal closes alone.
 const stack: object[] = []
 
+/** Whether any dialog is open (app-wide shortcuts stay quiet while one is). */
+export const anyDialogOpen = () => stack.length > 0
+
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
 
 /** Dialog keyboard behaviour: focus moves in on open (to `initialFocus`, or

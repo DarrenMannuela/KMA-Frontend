@@ -227,7 +227,7 @@ function InvoiceTile({ label, invoice, allInvoices, actionLabel, onAction }: {
             <button
               type="button"
               onClick={() => navigate(`/invoice/${encodeURIComponent(invoice.id)}`)}
-              className="font-mono text-sm text-navy-700 hover:underline dark:text-navy-200"
+              className="tap font-mono text-sm text-navy-700 hover:underline dark:text-navy-200"
               title={t('orders.detail.payment.open')}
             >
               {invoice.id}
@@ -444,7 +444,7 @@ export function OrderDetailPage() {
               <>
                 {' · '}
                 <button
-                  className="inline-flex items-center gap-1 text-navy-500 hover:underline"
+                  className="tap inline-flex items-center gap-1 text-navy-500 hover:underline"
                   onClick={() => navigate(`/clients/${order.client_id}`)}
                 >
                   <Building2 size={11} /> {t('common.clientRecord')}
@@ -506,23 +506,23 @@ export function OrderDetailPage() {
               <p className="text-center text-slate-400 py-8 dark:text-slate-500">{t('orders.detail.noItemsYetAddOne')}</p>
             ) : itemGroups.map(group => {
               const rowActions = (item: Item) => (
-                <div className="flex items-center gap-3 mt-2" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center gap-1 dock:gap-3 mt-2 -ml-2 dock:ml-0" onClick={e => e.stopPropagation()}>
                   <button
-                    className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1 dark:text-slate-500"
+                    className="tap px-2 dock:px-0 rounded-lg text-slate-500 hover:text-gold-500 text-sm dock:text-xs flex items-center gap-1.5 dock:gap-1 dark:text-slate-400"
                     onClick={() => openDuplicate(item)}
                     title={t('orders.detail.duplicateTooltip')}
                   >
                     <Copy size={12} /> {t('orders.detail.copy')}
                   </button>
                   <button
-                    className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1 dark:text-slate-500"
+                    className="tap px-2 dock:px-0 rounded-lg text-slate-500 hover:text-blue-500 text-sm dock:text-xs flex items-center gap-1.5 dock:gap-1 dark:text-slate-400"
                     onClick={() => openEdit(item)}
                     title={t('orders.detail.editTooltip')}
                   >
                     <Pencil size={12} /> {t('orders.detail.edit')}
                   </button>
                   <button
-                    className="text-slate-400 hover:text-red-500 text-xs disabled:opacity-50 dark:text-slate-500"
+                    className="tap px-2 dock:px-0 rounded-lg text-slate-500 hover:text-red-500 text-sm dock:text-xs disabled:opacity-50 dark:text-slate-400"
                     onClick={() => setConfirmDeleteItem(item)}
                     disabled={del.isPending}
                   >
@@ -619,21 +619,21 @@ export function OrderDetailPage() {
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-3">
                           <button
-                            className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1 dark:text-slate-500"
+                            className="tap px-2 dock:px-0 rounded-lg text-slate-500 hover:text-gold-500 text-sm dock:text-xs flex items-center gap-1.5 dock:gap-1 dark:text-slate-400"
                             onClick={() => openDuplicate(item)}
                             title={t('orders.detail.duplicateTooltip')}
                           >
                             <Copy size={12} /> {t('orders.detail.copy')}
                           </button>
                           <button
-                            className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1 dark:text-slate-500"
+                            className="tap px-2 dock:px-0 rounded-lg text-slate-500 hover:text-blue-500 text-sm dock:text-xs flex items-center gap-1.5 dock:gap-1 dark:text-slate-400"
                             onClick={() => openEdit(item)}
                             title={t('orders.detail.editTooltip')}
                           >
                             <Pencil size={12} /> {t('orders.detail.edit')}
                           </button>
                           <button
-                            className="text-slate-400 hover:text-red-500 text-xs disabled:opacity-50 dark:text-slate-500"
+                            className="tap px-2 dock:px-0 rounded-lg text-slate-500 hover:text-red-500 text-sm dock:text-xs disabled:opacity-50 dark:text-slate-400"
                             onClick={() => setConfirmDeleteItem(item)}
                             disabled={del.isPending}
                           >
@@ -680,21 +680,21 @@ export function OrderDetailPage() {
                         <td className="p-4 text-right">
                           <div className="flex items-center justify-end gap-3" onClick={e => e.stopPropagation()}>
                             <button
-                              className="text-slate-400 hover:text-gold-500 text-xs flex items-center gap-1 dark:text-slate-500"
+                              className="tap px-2 dock:px-0 rounded-lg text-slate-500 hover:text-gold-500 text-sm dock:text-xs flex items-center gap-1.5 dock:gap-1 dark:text-slate-400"
                               onClick={() => openDuplicate(item)}
                               title={t('orders.detail.duplicateTooltip')}
                             >
                               <Copy size={12} /> {t('orders.detail.copy')}
                             </button>
                             <button
-                              className="text-slate-400 hover:text-blue-500 text-xs flex items-center gap-1 dark:text-slate-500"
+                              className="tap px-2 dock:px-0 rounded-lg text-slate-500 hover:text-blue-500 text-sm dock:text-xs flex items-center gap-1.5 dock:gap-1 dark:text-slate-400"
                               onClick={() => openEdit(item)}
                               title={t('orders.detail.editTooltip')}
                             >
                               <Pencil size={12} /> {t('orders.detail.edit')}
                             </button>
                             <button
-                              className="text-slate-400 hover:text-red-500 text-xs disabled:opacity-50 dark:text-slate-500"
+                              className="tap px-2 dock:px-0 rounded-lg text-slate-500 hover:text-red-500 text-sm dock:text-xs disabled:opacity-50 dark:text-slate-400"
                               onClick={() => setConfirmDeleteItem(item)}
                               disabled={del.isPending}
                             >

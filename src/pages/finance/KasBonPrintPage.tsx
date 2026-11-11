@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Printer } from 'lucide-react'
 import { format } from 'date-fns'
 import { productionHooks, operationHooks, supplierHooks } from '@/hooks'
 import { LoadingState, ErrorState } from '@/components/ui/Page'
@@ -8,6 +7,8 @@ import { formatRp } from '@/components/ui'
 import { fromProduction, fromOperation, inPeriod, supplierLabel, type LedgerRow, type Period } from '@/components/finance/ledgerModel'
 import { monthLabel } from '@/utils/MonthUtils'
 import { useScaleToFit } from '@/hooks/useScaleToFit'
+import { usePreviewZoom } from '@/hooks/usePreviewZoom'
+import { PrintToolbar, ZoomButton } from '@/components/print/PrintToolbar'
 import { usePrintLightBody } from '@/hooks/usePrintLightBody'
 
 /** "05/KB/26" sorts after "04/KB/26" and after "99/KB/25" — same ordering
@@ -82,7 +83,8 @@ export function KasBonPrintPage() {
     return m
   }, [scopedRows])
 
-  const { containerRef: scaleContainerRef, docRef: scaleDocRef, scale, scaledWidth, scaledHeight } = useScaleToFit(true)
+  const zoom = usePreviewZoom()
+  const { containerRef: scaleContainerRef, docRef: scaleDocRef, scale, scaledWidth, scaledHeight } = useScaleToFit(zoom.fit)
 
   if (queries.some(q => q.isLoading)) return <LoadingState label="Loading the Kas Bon lines…" />
   if (queries.some(q => q.isError)) {
@@ -113,21 +115,13 @@ export function KasBonPrintPage() {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <div className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap">
-        <button onClick={() => navigate(-1)} className="btn-secondary flex items-center gap-1.5 text-sm">
-          <ArrowLeft size={14} /> Back
-        </button>
-        <span className="text-slate-400 text-sm flex-1">{title}</span>
-        <button onClick={() => window.print()} className="btn-primary flex items-center gap-2">
-          <Printer size={14} /> Print / Save PDF
-        </button>
-      </div>
+      <PrintToolbar title={title} onBack={() => navigate(-1)} onPrint={() => window.print()} />
 
       {/* The page is a fixed physical width (A4); on a phone or tablet it's
          scaled down to fit here instead of forcing horizontal scroll —
          printing itself always uses the real A4 size (see @media print below). */}
-      <div className="p-4 sm:p-8 print:p-0 flex justify-center overflow-x-auto print:overflow-visible" ref={scaleContainerRef}>
-        <div className="scale-wrap" style={{ width: scaledWidth || undefined, height: scaledHeight || undefined, overflow: 'hidden' }}>
+      <div className="p-3 dock:p-8 print:p-0 overflow-x-auto print:overflow-visible" ref={scaleContainerRef}>
+        <div className="scale-wrap mx-auto" style={{ width: scaledWidth || undefined, height: scaledHeight || undefined, overflow: 'hidden' }}>
         <div id="kasbon-report" ref={scaleDocRef} className="bg-white shadow-lg print:shadow-none" style={{ width: '210mm', minHeight: '297mm', padding: '15mm 16mm', fontFamily: 'Arial, sans-serif', color: '#000', fontSize: '11px', transform: `scale(${scale})`, transformOrigin: 'top left' }}>
           {/* Letterhead */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '18px', breakInside: 'avoid' }}>
@@ -218,6 +212,8 @@ export function KasBonPrintPage() {
         </div>
         </div>
       </div>
+
+      <ZoomButton zoom={zoom} />
 
       <style>{`
         @media print {

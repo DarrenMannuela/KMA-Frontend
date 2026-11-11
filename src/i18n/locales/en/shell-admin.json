@@ -91,7 +91,8 @@
     "noMaterials": "No materials yet — add the first one above.",
     "available": "Available",
     "unavailable": "Not available",
-    "availableLabel": "{{code}} available from the supplier"
+    "availableLabel": "{{code}} available from the supplier",
+    "tapToEdit": "Tap to add its details"
   },
   "auth": {
     "couldNotReachServer": "Could not reach the auth server",

@@ -90,7 +90,7 @@ export function InvoiceListPage() {
               key={f}
               type="button"
               onClick={() => setStatusFilter(f)}
-              className={`px-3 py-1 rounded-md text-xs font-medium capitalize transition-colors ${
+              className={`tap justify-center min-w-[2.75rem] px-3 py-1 rounded-md text-xs font-medium capitalize transition-colors ${
                 statusFilter === f ? 'bg-white shadow-sm text-navy-900 dark:bg-navy-900 dark:text-slate-50' : 'text-slate-500 hover:text-navy-700 dark:text-slate-400'
               }`}
             >
@@ -134,7 +134,7 @@ export function InvoiceListPage() {
           render: r => (
             <button
               type="button"
-              className={`badge ${statusBadge(r)} cursor-pointer hover:opacity-75 transition-opacity min-w-16 justify-center`}
+              className={`badge ${statusBadge(r)} cursor-pointer hover:opacity-75 transition-opacity min-w-16 justify-center tap`}
               onClick={() => toggleStatus(r)}
               disabled={update.isPending}
               title={r.status === 'paid' ? t('invoiceList.markUnpaid') : t('invoiceList.markPaid')}

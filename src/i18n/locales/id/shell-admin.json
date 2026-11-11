@@ -91,7 +91,8 @@
     "noMaterials": "Belum ada bahan — tambahkan yang pertama di atas.",
     "available": "Tersedia",
     "unavailable": "Tidak tersedia",
-    "availableLabel": "{{code}} tersedia dari supplier"
+    "availableLabel": "{{code}} tersedia dari supplier",
+    "tapToEdit": "Ketuk untuk mengisi detailnya"
   },
   "auth": {
     "couldNotReachServer": "Tidak dapat terhubung ke server autentikasi",

@@ -151,7 +151,7 @@ export function ClientDetailPage() {
       <div className="flex gap-1 border-b border-slate-200 dark:border-navy-700">
         <button
           onClick={() => setTab('contacts')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+          className={`tap px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
             tab === 'contacts' ? 'border-navy-900 text-navy-900 dark:text-slate-50' : 'border-transparent text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
           }`}
         >
@@ -159,7 +159,7 @@ export function ClientDetailPage() {
         </button>
         <button
           onClick={() => setTab('catalogue')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+          className={`tap px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
             tab === 'catalogue' ? 'border-navy-900 text-navy-900 dark:text-slate-50' : 'border-transparent text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
           }`}
         >

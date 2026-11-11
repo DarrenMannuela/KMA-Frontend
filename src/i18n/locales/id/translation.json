@@ -445,7 +445,8 @@
     "invoiced": "Invoice",
     "costs": "Biaya",
     "aria": "Invoice dan biaya per bulan, enam bulan terakhir",
-    "hint": "Batang kiri invoice, batang kanan biaya; angka di bawah tiap bulan adalah labanya. Arahkan atau ketuk bulan untuk rinciannya."
+    "hint": "Batang kiri invoice, batang kanan biaya; angka di bawah tiap bulan adalah labanya. Arahkan atau ketuk bulan untuk rinciannya.",
+    "hintTouch": "Batang kiri invoice, batang kanan biaya; angka di bawah tiap bulan adalah labanya. Ketuk bulan, atau geser di atasnya, untuk rinciannya di bawah."
   },
   "invoiceSheet": {
     "nameFirst": "Isi KETERANGAN dulu, lalu ukuran, qty dan harganya.",
@@ -471,5 +472,8 @@
     "unfoldAll": "Buka semua barang",
     "resizeHint": "Seret untuk mengubah lebar kolom; klik dua kali untuk menyesuaikan dengan isinya",
     "resetWidths": "Kembalikan lebar kolom"
+  },
+  "ordersTabs": {
+    "sectionTitle": "Bagian pesanan"
   }
 }

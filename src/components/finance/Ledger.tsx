@@ -820,26 +820,29 @@ export function Ledger({ kind, initial, title }: {
               <span className={total > budget ? 'text-red-600 font-medium dark:text-red-400' : ''}>{Math.round((total / budget) * 100)}%</span>
             </span>
           )}
-          <div className="flex flex-wrap items-center gap-2 ml-auto">
-            <button className="btn-secondary btn-sm" onClick={() => setImportGrid(null)} title={t('ledger.importTitle')} aria-label={t('ledger.import')}><FileUp size={14} /><span className="hidden min-[1400px]:inline">{t('ledger.import')}</span></button>
-            <button className="btn-secondary btn-sm" onClick={() => exportRows(sorted)} disabled={!visible.length} title={t('ledger.exportTitle')} aria-label={t('ledger.export')}><Download size={14} /><span className="hidden min-[1400px]:inline">{t('ledger.export')}</span></button>
-            <button
-              className="btn-secondary btn-sm"
-              disabled={!visible.length}
-              title={t('ledger.printTitle')}
-              aria-label={t('ledger.print')}
-              onClick={() => {
+          {/* On a phone: New Kas Bon across the card, and Import, Export and
+              Print under it, each named and with a larger icon, rather than
+              three bare icons side by side that were easy to mix up. */}
+          <div className={isMobile ? 'grid grid-cols-3 gap-2 w-full' : 'flex flex-wrap items-center gap-2 ml-auto'}>
+            {(() => {
+              const icon = isMobile ? 18 : 14
+              const label = (text: string) => <span className={isMobile ? '' : 'hidden min-[1400px]:inline'}>{text}</span>
+              const side = isMobile ? 'btn-secondary justify-center !px-2' : 'btn-secondary btn-sm'
+              const printKasBon = () => {
                 const p = filters.period
                 const qs = p.mode === 'range'
                   ? `mode=range&from=${encodeURIComponent(p.from)}&to=${encodeURIComponent(p.to)}`
                   : p.mode === 'all' ? 'mode=all'
                   : `mode=${p.mode}&year=${p.year}&month=${p.month}`
                 navigate(`/finance/kasbon/print?${qs}`)
-              }}
-            >
-              <Printer size={14} /><span className="hidden min-[1400px]:inline">{t('ledger.print')}</span>
-            </button>
-            <button className="btn-primary btn-sm" onClick={() => setForm({})} title={t('ledger.newKasBonTitle')}><Plus size={14} /> {t('ledger.newKasBon')}</button>
+              }
+              return <>
+                <button className={side} onClick={() => setImportGrid(null)} title={t('ledger.importTitle')} aria-label={t('ledger.import')}><FileUp size={icon} />{label(t('ledger.import'))}</button>
+                <button className={side} onClick={() => exportRows(sorted)} disabled={!visible.length} title={t('ledger.exportTitle')} aria-label={t('ledger.export')}><Download size={icon} />{label(t('ledger.export'))}</button>
+                <button className={side} disabled={!visible.length} title={t('ledger.printTitle')} aria-label={t('ledger.print')} onClick={printKasBon}><Printer size={icon} />{label(t('ledger.print'))}</button>
+                <button className={isMobile ? 'btn-primary justify-center col-span-3 order-first' : 'btn-primary btn-sm'} onClick={() => setForm({})} title={t('ledger.newKasBonTitle')} data-kbd="new" aria-keyshortcuts="n"><Plus size={isMobile ? 18 : 14} /> {t('ledger.newKasBon')}</button>
+              </>
+            })()}
           </div>
         </div>
 
@@ -849,6 +852,8 @@ export function Ledger({ kind, initial, title }: {
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400" />
             <input
               ref={searchRef}
+              data-kbd="search"
+              aria-keyshortcuts="/"
               className="field !pl-8 !py-1.5"
               placeholder={t('ledger.searchPlaceholder')}
               value={filters.q}

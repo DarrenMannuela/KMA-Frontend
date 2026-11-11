@@ -91,7 +91,7 @@ export function UsersPage() {
         title={t('topbar.titles.users')}
         subtitle={t('usersAdmin.subtitle')}
         actions={
-          <button onClick={() => setShowForm(true)} className="btn-primary text-sm">
+          <button onClick={() => setShowForm(true)} className="btn-primary text-sm" data-kbd="new" aria-keyshortcuts="n" title={t('shortcuts.withKey', { action: t('usersAdmin.addUser'), key: 'N' })}>
             <Plus className="w-4 h-4" />
             {t('usersAdmin.addUser')}
           </button>

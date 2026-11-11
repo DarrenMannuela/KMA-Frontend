@@ -11,6 +11,8 @@ import { MustChangePasswordRoute } from '@/components/auth/MustChangePasswordRou
 import { RedirectDirectAccess } from '@/components/auth/RedirectDirectAccess'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { FinanceSection } from '@/components/finance/FinanceSection'
+import { OrdersSection } from '@/components/orders/OrdersSection'
+import { KeyboardShortcuts } from '@/components/shortcuts/KeyboardShortcuts'
 
 // Each page is its own chunk, loaded the first time its route is visited.
 const DashboardPage = lazy(() => import('@/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
@@ -95,9 +97,6 @@ function AppShell() {
           <Suspense fallback={<ContentSpinner />}>
           <Routes>
             <Route path="/"                     element={<DashboardPage />} />
-            <Route path="/orders"               element={<OrdersPage />} />
-            <Route path="/items"                element={<ItemsPage />} />
-            <Route path="/invoice"              element={<InvoiceListPage />} />
             <Route path="/delivery"             element={<DeliveryPage />} />
             <Route path="/delivery/:id"         element={<DeliveryDetailPage />} />
             <Route element={<FinanceSection />}>
@@ -108,10 +107,16 @@ function AppShell() {
               <Route path="/bukti-kas"          element={<BuktiKasPage />} />
               <Route path="/suppliers"          element={<SuppliersPage />} />
             </Route>
-            <Route path="/orders/:id"           element={<OrderDetailPage />} />
-            <Route path="/clients"                        element={<ClientsPage />} />
-            <Route path="/clients/:id"                    element={<ClientDetailPage />} />
-            <Route path="/clients/:clientId/items/:itemId" element={<ClientItemDetailPage />} />
+            {/* Orders, their items, invoices and clients under one tab bar, like Finance. */}
+            <Route element={<OrdersSection />}>
+              <Route path="/orders"             element={<OrdersPage />} />
+              <Route path="/orders/:id"         element={<OrderDetailPage />} />
+              <Route path="/items"              element={<ItemsPage />} />
+              <Route path="/invoice"            element={<InvoiceListPage />} />
+              <Route path="/clients"            element={<ClientsPage />} />
+              <Route path="/clients/:id"        element={<ClientDetailPage />} />
+              <Route path="/clients/:clientId/items/:itemId" element={<ClientItemDetailPage />} />
+            </Route>
             <Route path="/reports/yearly"                 element={<Navigate to="/finance" replace />} />
             <Route path="/admin/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
           </Routes>
@@ -164,6 +169,9 @@ export default function App() {
 
         {/* print-hidden: a notice still showing when someone prints (just after
             editing an invoice, say) must never end up on the paper. */}
+        {/* Ctrl+K, 1–4, [ ], /, N, L and ? everywhere once signed in. */}
+        <KeyboardShortcuts />
+
         <Toaster
           containerClassName="kma-toaster"
           position="bottom-right"

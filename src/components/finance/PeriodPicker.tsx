@@ -67,7 +67,7 @@ export function PeriodPicker({ value, onChange, modes = ['month', 'year', 'all',
             role="tab"
             aria-selected={value.mode === m.mode}
             onClick={() => onChange({ ...value, mode: m.mode })}
-            className={`flex-1 sm:flex-initial px-2.5 py-1 text-xs font-medium rounded-md text-center transition-colors ${value.mode === m.mode ? 'bg-white text-navy-900 shadow-sm dark:bg-navy-900 dark:text-slate-50' : 'text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
+            className={`flex-1 sm:flex-initial px-2.5 py-2.5 text-sm dock:py-1 dock:text-xs font-medium rounded-md text-center transition-colors ${value.mode === m.mode ? 'bg-white text-navy-900 shadow-sm dark:bg-navy-900 dark:text-slate-50' : 'text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
           >
             {t(m.labelKey)}
           </button>
@@ -75,12 +75,12 @@ export function PeriodPicker({ value, onChange, modes = ['month', 'year', 'all',
       </div>
       {(value.mode === 'month' || value.mode === 'year') && (
         <div className="flex items-center justify-center w-full sm:w-auto sm:justify-start">
-          <button onClick={() => step(-1)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500 dark:hover:bg-white/10 dark:text-slate-400" aria-label={t('finance.periodPicker.previous')}>
-            <ChevronLeft size={16} />
+          <button onClick={() => step(-1)} className="w-11 h-11 dock:w-auto dock:h-auto dock:p-1.5 flex items-center justify-center rounded-md hover:bg-slate-100 text-slate-500 dark:hover:bg-white/10 dark:text-slate-400" aria-label={t('finance.periodPicker.previous')}>
+            <ChevronLeft size={18} />
           </button>
           <span className="text-sm font-semibold text-slate-700 min-w-[7.5rem] text-center tabular-nums dark:text-slate-300">{periodLabel(value)}</span>
-          <button onClick={() => step(1)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500 dark:hover:bg-white/10 dark:text-slate-400" aria-label={t('finance.periodPicker.next')}>
-            <ChevronRight size={16} />
+          <button onClick={() => step(1)} className="w-11 h-11 dock:w-auto dock:h-auto dock:p-1.5 flex items-center justify-center rounded-md hover:bg-slate-100 text-slate-500 dark:hover:bg-white/10 dark:text-slate-400" aria-label={t('finance.periodPicker.next')}>
+            <ChevronRight size={18} />
           </button>
         </div>
       )}

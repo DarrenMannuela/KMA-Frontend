@@ -1,5 +1,6 @@
 import { ErrorState } from './Page'
 import { useDeferredValue, useEffect, useRef, useState } from 'react'
+import { Kbd } from '@/components/shortcuts/Kbd'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Pencil, Trash2, Search, ChevronDown, ChevronRight } from 'lucide-react'
@@ -175,12 +176,16 @@ export function CrudPage<T extends { id: string | number }>({
           <div className="relative flex-1 min-w-[12rem] sm:max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" aria-hidden />
             <input
-              className="field !pl-9 !py-2 text-sm"
+              data-kbd="search"
+              aria-keyshortcuts="/"
+              className="field !pl-9 !pr-9 !py-2 text-sm"
               placeholder={t('common.searchPlaceholder', { what: title.toLowerCase() })}
               aria-label={t('common.searchPlaceholder', { what: title.toLowerCase() })}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
+            {/* The key that jumps here, while there's room for it. */}
+            {!search && <Kbd className="hidden dock:inline-flex absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">/</Kbd>}
           </div>
         )}
         {filterBar}
@@ -188,7 +193,7 @@ export function CrudPage<T extends { id: string | number }>({
           <span className="hidden sm:inline text-xs text-slate-500 tabular-nums dark:text-slate-400" aria-live="polite">
             {t('common.record', { count: filtered.length })}
           </span>
-          <button className="btn-primary" onClick={openCreate}>
+          <button className="btn-primary" onClick={openCreate} data-kbd="new" aria-keyshortcuts="n" title={t('shortcuts.withKey', { action: t('common.addNew'), key: 'N' })}>
             <Plus className="w-4 h-4" />
             {t('common.addNew')}
           </button>

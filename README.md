@@ -75,11 +75,18 @@ What each part of KMA is for and how to use it. Every screen except the printed 
 
 ### Things that work everywhere
 
+- **Menu.** The sidebar has one link per area: Dashboard, Orders, Delivery, Finance (and Users for admins). An area with several pages has a tab bar at the top of them: **Orders** has All Orders · Order Items · Invoice · Clients, and **Finance** has its six. A client's or an order's own page keeps its tab lit. On phones every page of the area shows at once at the top, as a grid of tiles with an icon and name and the current one filled (Finance two rows of three, Orders one row of four), so none is hidden behind a menu (`src/components/layout/SectionTabs.tsx`).
+- **Keyboard.** Press **?** anywhere for the full list (also under the account menu).
+  - **Ctrl+K** (⌘K on a Mac), or **Jump to…** in the top bar: type part of a page's name, an order or invoice number, a client or a company, then Enter. Pages and a few actions (dark mode, language, shortcuts) show before anything is typed.
+  - **1–4** go to Dashboard, Orders, Delivery, Finance (**5** Users, for admins); **[** and **]** step through the tabs of Orders or Finance.
+  - On list pages **/** jumps to the search box (the "/" in the box shows it) and **N** is Add New; **Ctrl+Z** undoes the last change.
+  - On print pages **L** opens or closes Layout, and **Esc** closes it.
+  - Single-key shortcuts pause while typing, while a table cell is selected (typing there edits the cell) and while a window is open. Pages mark their search box, New button, tab bar and Layout button with `data-kbd`, and one handler serves them all (`src/components/shortcuts/`).
 - **Edit in place.** On most tables, click a cell (or move to it with the arrow keys and start typing) to change it; Enter saves, Esc cancels. "click to fill" marks an empty cell that can take a value.
 - **Undo.** Edits, moves and deletes show a toast with **Undo**, and **Ctrl+Z** on the same screen undoes the last one. Deleting an order, invoice, delivery, client or supplier can be undone for 30 days, and it comes back with everything the delete removed (an order's items, invoices and deliveries; a client's contacts and catalogue).
 - **Lists.** Every list page has one toolbar: search on the left, the record count and **Add New** on the right. Long lists show 100 rows at a time with **Show more**; the Actions column stays pinned on the right when a table scrolls sideways.
 - **Light and dark mode** from the moon/sun button in the top bar. The badge beside it shows whether the server is reachable ("Backend live"), so "can't save" and "the server is down" don't look the same.
-- **Phones.** Tables turn into cards and pop-ups open as sheets from the bottom. The menu (☰) opens the sidebar.
+- **Phones.** Tables turn into cards and pop-ups open as sheets from the bottom. The menu (☰) opens the sidebar. Everything you tap is at least 44px (buttons, icons, filters, the period picker's Month / Year / All / Dates and arrows, links like **View all**): the shared button styles grow on a phone, and the `tap` / `tap-square` classes do the same for links and small text buttons (`src/styles/globals.css`). Toolbars that were only icons get their names on a phone, e.g. a Kas Bon ledger shows **New Kas Bon** across the card with **Import · Export · Print** under it.
 - **If a page breaks.** An unexpected error shows a "Something went wrong" card instead of a blank page: **Reload page**, or **Go to dashboard** when reloading breaks it again. **Technical details** under it shows the error message, to pass on when reporting it (`src/components/ErrorBoundary.tsx`).
 
 ### Dashboard
@@ -87,10 +94,10 @@ What each part of KMA is for and how to use it. Every screen except the printed 
 The first screen: what needs doing and how the month is going.
 
 - **Top row:** money owed to you (AR receivable, with how much of it is overdue), orders and deliveries this month, and production and operations spending, each with a comparison with last month up to the same day, coloured by meaning (more orders is green, more cost is red).
-- **Each card's small chart** covers the last six months, with the months labelled underneath. Orders, deliveries and spending are monthly totals, so they show as bars; AR is a running balance, so it's a line. The current month is still running, so its bar is striped and its point hollow: a low bar early in the month means "so far", not a drop. Hover or tap a month to see its figure (e.g. "October 2026: Rp 12.300.000"), or tab to a chart and step through the months with the arrow keys.
+- **Each card's small chart** covers the last six months, with the months labelled underneath. Orders, deliveries and spending are monthly totals, so they show as bars; AR is a running balance, so it's a line. The current month is still running, so its bar is striped and its point hollow: a low bar early in the month means "so far", not a drop. Point at a month to see its figure ("October 2026: Rp 12.300.000"); it shows in the card where the comparison usually is, so a finger never covers it. On a phone each card takes the full width and its chart stretches across it: tap a month (again to let go) or drag a finger sideways across the months. On a computer, hover, or tab to a chart and step through the months with the arrow keys.
 - **Unpaid invoices:** every unpaid invoice, overdue ones first, with how many days late. The WhatsApp button beside an overdue invoice opens a reminder message to the client's primary contact, ready to read over before sending. Click an invoice to open it.
 - **Recent orders:** the latest five with their payment status. Click one to open it.
-- **Last 6 months chart:** for each month, a bar for what was invoiced (solid = paid, striped = still unpaid) beside a bar for costs (production and operations), and that month's profit underneath. Hover, tap or keyboard-focus a month for the full breakdown. **Yearly** opens the Finance overview.
+- **Last 6 months chart:** for each month, a bar for what was invoiced (solid = paid, striped = still unpaid) beside a bar for costs (production and operations), and that month's profit underneath. Hover or keyboard-focus a month for the full breakdown. On a phone the breakdown sits in a panel under the chart, showing the current month until you tap another or drag across them. **Yearly** opens the Finance overview.
 - **Quick actions:** start a new order, delivery, Kas Bon or supplier in one click.
 
 ### Clients
@@ -153,6 +160,7 @@ Company records, their contacts, and what each client buys at what price.
   - **Spacing** between the parts of the page, 50% to 200%.
 - **Save for everyone** keeps the changes; **Discard changes** drops them; **Reset to default** goes back to the built-in layout (then Save). An unsaved change is marked with a dot on Layout, and it's what prints if you print before saving, so a change can be tried on paper first. Leaving the page drops it.
 - On the invoice, **Fit to 1 page** still shrinks everything together when larger sizes make it too tall.
+- **Print pages on a phone** (invoice, kwitansi, Surat Jalan/DO, reports, Kas Bon print) share one short bar: back arrow, the document's name, **Layout** (or **Tools** on the invoice, where Layout is the first tool, then Fit to 1 page, Fold all, Highlight, Add Row, paper size, Kwitansi and page breaks, in a sheet from the bottom) and **Print**. The page fills the screen width, with **Actual size** at the bottom right to see it at its real size and scroll around it (**Fit to screen** goes back). The Layout panel takes the lower half of the screen so the page stays visible above it (`src/components/print/PrintToolbar.tsx`).
 - Saved by `PUT /api/v1/print-layout/:type` (`invoice`, `kwitansi`, `sj`, `do`); `src/utils/printLayout.ts` holds the defaults and limits, `src/components/print/PrintLayoutPanel.tsx` the panel.
 
 ### Finance
@@ -199,6 +207,8 @@ Cash **received**, grouped by Bukti Kas the way Kas Bon groups spending: one car
 #### Suppliers
 
 Supplier records by category (Sablon, Embroidery, Merchandise, Uniform, General). **Catalogue** on a supplier's row opens its catalogue.
+
+- **On a phone** the catalogue rearranges for a finger: the add-material form stacks full width, each material is a card (tap its name to open it) with every field labelled and full size, and each colour is a card with a big swatch (tap it to change the colour), its code and category, a large Available switch, **Pick from photo** and a delete button, all at least 44px. A computer keeps the compact table.
 
 **Bordir and sablon suppliers** work from designs, not fabrics, so their catalogue is a **Designs** gallery: each logo, slogan or name tag the supplier makes for KMA, with a photo of the stitched or printed sample, its placement (e.g. DADA KIRI), its size (e.g. 7 CM), the price per piece and an optional note. **Add a design** takes the photo and details together; click a design to edit it or replace its photo. A Kas Bon line for that supplier then picks a design the way a fabric line picks a colour (see the sheet's **Design** chip): the Bahan becomes "DESIGN - PLACEMENT - SIZE", the unit pcs, and the price the design's price per piece. Their catalogue still holds uploaded files, but without **Read colours**.
 

@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Printer } from 'lucide-react'
 import { format } from 'date-fns'
 import { deliveryApi, deliveryItemApi } from '@/api'
 import { useScaleToFit } from '@/hooks/useScaleToFit'
 import { usePrintLightBody } from '@/hooks/usePrintLightBody'
 import { usePrintLayout } from '@/hooks/usePrintLayout'
-import { PrintLayoutPanel, PrintLayoutToggle, PANEL_ROOM_CLASS } from '@/components/print/PrintLayoutPanel'
+import { PrintLayoutPanel, PANEL_ROOM_CLASS } from '@/components/print/PrintLayoutPanel'
+import { PrintToolbar, ZoomButton } from '@/components/print/PrintToolbar'
+import { usePreviewZoom } from '@/hooks/usePreviewZoom'
 import { printFontStacks, type PrintLayout } from '@/utils/printLayout'
 import type { Delivery, DeliveryItem } from '@/types'
 
@@ -77,9 +77,10 @@ export function DeliveryPrintPage() {
 
   // Shrinks the preview to fit the screen; printing is unaffected. Called before
   // the early returns (rules of hooks).
-  const { containerRef: scaleContainerRef, docRef: scaleDocRef, scale, scaledWidth, scaledHeight } = useScaleToFit(true)
+  // Phones: fit the screen, or the real size (ZoomButton).
+  const zoom = usePreviewZoom()
+  const { containerRef: scaleContainerRef, docRef: scaleDocRef, scale, scaledWidth, scaledHeight } = useScaleToFit(zoom.fit)
   // The DO and the SJ each have their own layout (see the Layout panel).
-  const { t } = useTranslation()
   const printLayout = usePrintLayout(delivery?.type === 'DO' ? 'do' : 'sj')
   const [layoutOpen, setLayoutOpen] = useState(false)
 
@@ -107,25 +108,18 @@ export function DeliveryPrintPage() {
   return (
     <div className="min-h-screen bg-slate-100">
       {/* Toolbar — hidden when printing */}
-      <div data-print-toolbar className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap">
-        <button onClick={() => navigate(-1)} className="btn-secondary flex items-center gap-1.5 text-sm">
-          <ArrowLeft size={14} /> Back
-        </button>
-        <span className="text-slate-400 text-sm flex-1">
-          {isDO ? 'Delivery Order' : 'Surat Jalan'} — {delivery.id}
-          {slips.length > 1 && ` · ${slips.length} ${isDO ? 'boxes' : 'packages'}`}
-        </span>
-        <PrintLayoutToggle state={printLayout} open={layoutOpen} onToggle={() => setLayoutOpen(o => !o)} />
-        <button onClick={() => window.print()} className="btn-primary flex items-center gap-2">
-          <Printer size={14} /> {t('printLayout.print')}
-        </button>
-      </div>
+      <PrintToolbar
+        title={<>{isDO ? 'Delivery Order' : 'Surat Jalan'} — {delivery.id}{slips.length > 1 && ` · ${slips.length} ${isDO ? 'boxes' : 'packages'}`}</>}
+        onBack={() => navigate(-1)}
+        onPrint={() => window.print()}
+        layout={{ state: printLayout, open: layoutOpen, onToggle: () => setLayoutOpen(o => !o) }}
+      />
       <PrintLayoutPanel docType={isDO ? 'do' : 'sj'} state={printLayout} open={layoutOpen} onClose={() => setLayoutOpen(false)} />
 
       {/* The sheets are a fixed physical width: they scroll (and are scaled to fit,
          as one block) here so they don't widen the toolbar. Printing uses the
          real size. */}
-      <div className={`p-8 print:p-0 overflow-x-auto print:overflow-visible ${layoutOpen ? `${PANEL_ROOM_CLASS} max-lg:pb-[72vh]` : ''}`} ref={scaleContainerRef}>
+      <div className={`p-3 dock:p-8 print:p-0 overflow-x-auto print:overflow-visible ${layoutOpen ? `${PANEL_ROOM_CLASS} pb-[57vh] lg:pb-8` : ''}`} ref={scaleContainerRef}>
         <div
           className="scale-wrap"
           style={{ width: scaledWidth || undefined, height: scaledHeight || undefined, overflow: 'hidden' }}
@@ -154,6 +148,8 @@ export function DeliveryPrintPage() {
         </div>
         </div>
       </div>
+
+      <ZoomButton zoom={zoom} hidden={layoutOpen} />
 
       {/* Print styles */}
       <style>{`

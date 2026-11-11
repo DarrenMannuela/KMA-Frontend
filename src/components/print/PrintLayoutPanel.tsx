@@ -1,4 +1,5 @@
-import { useLayoutEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
+import { anyDialogOpen } from '@/hooks/useDialog'
 import { useTranslation } from 'react-i18next'
 import { SlidersHorizontal, X } from 'lucide-react'
 import type { PrintLayoutState } from '@/hooks/usePrintLayout'
@@ -6,19 +7,24 @@ import { PRINT_FONTS, PRINT_LIMITS, type LogoPosition, type PrintDocType, type P
 
 /** The toolbar button that opens the Layout panel; a dot shows a change
  *  that isn't saved yet. */
-export function PrintLayoutToggle({ state, open, onToggle }: { state: PrintLayoutState; open: boolean; onToggle: () => void }) {
+export function PrintLayoutToggle({ state, open, onToggle, compact = false }: { state: PrintLayoutState; open: boolean; onToggle: () => void; compact?: boolean }) {
   const { t } = useTranslation()
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-expanded={open}
-      className={`relative px-2 py-1 rounded text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+      data-kbd="layout"
+      aria-keyshortcuts="l"
+      title={t('shortcuts.withKey', { action: t('printLayout.button'), key: 'L' })}
+      // compact: the phone's version, a full 44px target.
+      className={`relative rounded transition-colors flex items-center justify-center gap-1.5 ${
+        compact ? 'h-11 px-3 rounded-lg text-sm font-medium border' : 'px-2 py-1 text-xs font-medium border'} ${
         open ? 'bg-navy-900 text-white border-navy-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
       }`}
     >
-      <SlidersHorizontal size={13} aria-hidden /> {t('printLayout.button')}
-      {state.dirty && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500" aria-label={t('printLayout.unsavedShort')} />}
+      <SlidersHorizontal size={compact ? 17 : 13} aria-hidden /> {t('printLayout.button')}
+      {state.dirty && <span className={`absolute w-2 h-2 rounded-full bg-amber-500 ${compact ? 'top-2 right-2' : '-top-1 -right-1'}`} aria-label={t('printLayout.unsavedShort')} />}
     </button>
   )
 }
@@ -98,6 +104,16 @@ export function PrintLayoutPanel({ docType, state, open, onClose }: {
 }) {
   const { t } = useTranslation()
   const top = useToolbarBottom(open)
+  // Esc closes the panel (a dialog over it, or a cell's edit, takes Esc first).
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || anyDialogOpen()) return
+      onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
   if (!open) return null
   const { layout, change } = state
   const logoOptions: { value: LogoPosition; label: string }[] = [
@@ -110,7 +126,7 @@ export function PrintLayoutPanel({ docType, state, open, onClose }: {
   return (
     <aside
       className="print:hidden fixed z-20 bg-white border-slate-200 flex flex-col shadow-[0_8px_30px_rgba(15,23,42,0.12)]
-        inset-x-0 bottom-0 max-h-[70vh] rounded-t-2xl border-t
+        inset-x-0 bottom-0 max-h-[55vh] rounded-t-2xl border-t
         lg:inset-x-auto lg:right-0 lg:top-[var(--pl-top)] lg:bottom-0 lg:max-h-none lg:w-[336px] lg:rounded-none lg:border-t-0 lg:border-l"
       style={{ '--pl-top': `${top}px` } as React.CSSProperties}
       aria-label={t('printLayout.title', { doc: t(`printLayout.doc.${docType}`) })}

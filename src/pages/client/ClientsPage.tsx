@@ -84,7 +84,7 @@ export function ClientsPage() {
         { header: '', key: 'catalogue_link', render: r => (
           <button
             onClick={(e) => { e.stopPropagation(); navigate(`/clients/${r.id}`) }}
-            className="inline-flex items-center gap-1 text-sm font-medium text-navy-600 hover:text-navy-800"
+            className="tap inline-flex items-center gap-1 text-sm font-medium text-navy-600 hover:text-navy-800"
           >
             {t('clientsArea.cataloguePoc')} <ArrowRight size={14} />
           </button>

@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { invoiceAmount } from '@/utils/invoiceAmount'
 import { orderPaymentStatus } from '@/utils/orderStatus'
 import { waLink, overdueReminderMessage, primaryContactPhone } from '@/utils/whatsapp'
@@ -39,31 +39,59 @@ const TONE_TEXT: Record<Tone, string> = {
 }
 const TONE_TEXT_ON_NAVY: Record<Tone, string> = { good: 'text-green-300', bad: 'text-red-300', neutral: 'text-navy-200' }
 
+/** The month a pointer is over, from its x across a chart of `n` months. */
+function monthAt(e: React.PointerEvent<Element>, n: number) {
+  const r = e.currentTarget.getBoundingClientRect()
+  return Math.max(0, Math.min(n - 1, Math.floor(((e.clientX - r.left) / Math.max(1, r.width)) * n)))
+}
+
+/** Its width as it changes (for a chart that fills its card). */
+function useBoxWidth<T extends HTMLElement>() {
+  const [el, setEl] = useState<T | null>(null)
+  const [width, setWidth] = useState(0)
+  useLayoutEffect(() => {
+    if (!el) return
+    setWidth(el.clientWidth)
+    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [el])
+  return [setEl, width] as const
+}
+
 /** The last six months, small: bars for monthly totals (orders, spending),
  *  a filled line for a running balance (AR). Each month has its initial
- *  under it, and hovering, tapping or focusing a month shows its figure.
+ *  under it. Pointing at a month (hover; on a phone a tap, or a finger
+ *  dragged across) picks it, and the card shows that month's figure where
+ *  its comparison usually is (see MonthReadout), never under the finger.
  *  The last month is the current one, still running: its bar is striped and
- *  its point hollow, so an early-in-the-month dip doesn't read as a drop. */
-function MiniTrend({ values, months, kind, format: fmt, label, accent = false, width = 132, height = 44 }: {
+ *  its point hollow, so an early-in-the-month dip doesn't read as a drop.
+ *  `width="fill"` stretches it across its card (phones), so each month is a
+ *  finger-sized target. */
+function MiniTrend({ values, months, kind, label, format: fmt, accent = false, width = 132, height = 44, active, onActive }: {
   values: number[]
   months: Date[]
   kind: 'bars' | 'line'
-  format: (n: number) => string
   /** What the figures are, for the screen-reader summary. */
   label: string
+  format: (n: number) => string
   accent?: boolean
-  width?: number
+  width?: number | 'fill'
   height?: number
+  active: number | null
+  onActive: (i: number | null) => void
 }) {
   const { t } = useTranslation()
   const dateLocale = useDateLocale()
-  const [active, setActive] = useState<number | null>(null)
   const patternId = useId()
+  const [boxRef, boxWidth] = useBoxWidth<HTMLDivElement>()
+  const pressed = useRef(false)
   if (values.length < 2) return null
+  const w = width === 'fill' ? boxWidth : width
   const n = values.length
-  const labelH = 11
+  const labelH = 12
   const plotH = height - labelH - 2
-  const slot = width / n
+  const slot = w / n
   const max = Math.max(...values, 0) || 1
   const min = kind === 'line' ? Math.min(...values, 0) : 0
   const span = max - min || 1
@@ -71,8 +99,6 @@ function MiniTrend({ values, months, kind, format: fmt, label, accent = false, w
   const cx = (i: number) => slot * i + slot / 2
   const last = n - 1
   const monthFmt = slot >= 20 ? 'MMM' : 'MMMMM'
-  const name = (i: number) => format(months[i], 'MMMM yyyy', { locale: dateLocale })
-  const tip = active != null ? `${name(active)}${active === last ? ` (${t('dashboardKpi.soFar')})` : ''}: ${fmt(values[active])}` : null
   const muted = accent ? 'text-navy-300' : 'text-slate-400 dark:text-slate-500'
   const summary = t('dashboardKpi.trendAria', { label, values: values.map((v, i) => `${format(months[i], 'MMM', { locale: dateLocale })} ${fmt(v)}`).join(', ') })
 
@@ -81,74 +107,91 @@ function MiniTrend({ values, months, kind, format: fmt, label, accent = false, w
   const areaPath = `${linePath} L${cx(last).toFixed(1)},${plotH} L${cx(0).toFixed(1)},${plotH} Z`
 
   return (
-    <div className="relative shrink-0" onMouseLeave={() => setActive(null)}>
-      {tip && (
-        <div className={`pointer-events-none absolute bottom-full right-0 mb-1.5 z-20 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium shadow-lg ${accent ? 'bg-white text-navy-900' : 'bg-navy-900 text-white dark:bg-slate-100 dark:text-navy-900'}`}>
-          {tip}
-        </div>
+    <div ref={boxRef} className={width === 'fill' ? 'w-full' : 'shrink-0'} style={{ height }}>
+      {w > 0 && (
+        <svg
+          width={w} height={height} viewBox={`0 0 ${w} ${height}`} role="img" aria-label={summary}
+          // Focusable: the arrow keys step through the months.
+          tabIndex={0}
+          onFocus={() => { if (active == null) onActive(last) }}
+          onBlur={() => onActive(null)}
+          onKeyDown={e => {
+            if (e.key === 'ArrowLeft') { e.preventDefault(); onActive(Math.max(0, (active ?? last) - 1)) }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); onActive(Math.min(last, (active ?? last) + 1)) }
+            else if (e.key === 'Escape') onActive(null)
+          }}
+          // A mouse picks by hovering; a finger by tapping (again to let go)
+          // or dragging sideways. Up-and-down still scrolls the page.
+          onPointerDown={e => {
+            pressed.current = true
+            const i = monthAt(e, n)
+            onActive(e.pointerType !== 'mouse' && active === i ? null : i)
+          }}
+          onPointerMove={e => { if (e.pointerType === 'mouse' || pressed.current) onActive(monthAt(e, n)) }}
+          onPointerUp={() => { pressed.current = false }}
+          onPointerCancel={() => { pressed.current = false }}
+          onPointerLeave={e => { if (e.pointerType === 'mouse') onActive(null) }}
+          style={{ touchAction: 'pan-y' }}
+          className="overflow-visible block rounded outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-current"
+        >
+          <defs>
+            <linearGradient id={`${patternId}-fade`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="currentColor" stopOpacity={0.3} />
+              <stop offset="1" stopColor="currentColor" stopOpacity={0} />
+            </linearGradient>
+            <pattern id={patternId} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect width="4" height="4" fill="currentColor" opacity="0.25" />
+              <rect width="1.6" height="4" fill="currentColor" />
+            </pattern>
+          </defs>
+          {/* The picked month's column, faintly. */}
+          {active != null && <rect x={slot * active + 1} y={0} width={Math.max(0, slot - 2)} height={plotH + 1} rx={4} fill="currentColor" opacity={0.08} />}
+          {/* Baseline */}
+          <line x1={0} x2={w} y1={plotH + 0.5} y2={plotH + 0.5} stroke="currentColor" strokeOpacity={0.18} />
+          {kind === 'bars' ? values.map((v, i) => {
+            const bw = Math.min(width === 'fill' ? 22 : 14, slot * 0.58)
+            const top = y(v)
+            const h = Math.max(v > 0 ? 2 : 0, plotH - top)
+            const isActive = active === i
+            return (
+              <rect key={i} x={cx(i) - bw / 2} y={plotH - h} width={bw} height={h} rx={Math.min(2, bw / 2)}
+                fill={i === last ? `url(#${patternId})` : 'currentColor'}
+                opacity={isActive || active == null ? (i === last ? 1 : 0.85) : 0.35} />
+            )
+          }) : (
+            <>
+              <path d={areaPath} fill={`url(#${patternId}-fade)`} />
+              <path d={linePath} fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinejoin="round" strokeLinecap="round" />
+              {linePts.map(([x, py], i) => (
+                <circle key={i} cx={x} cy={py} r={active === i ? 3.5 : i === last ? 3 : 1.75}
+                  fill={i === last ? (accent ? '#131a32' : 'var(--chart-surface)') : 'currentColor'}
+                  stroke="currentColor" strokeWidth={i === last ? 1.75 : 0} />
+              ))}
+            </>
+          )}
+          {months.map((m, i) => (
+            <text key={i} x={cx(i)} y={height - 1} textAnchor="middle" fontSize={width === 'fill' ? 10 : 9} fill="currentColor"
+              className={i === last || active === i ? '' : muted} fontWeight={i === last || active === i ? 600 : 400}>
+              {format(m, monthFmt, { locale: dateLocale })}
+            </text>
+          ))}
+        </svg>
       )}
-      {/* Focusable: the arrow keys step through the months, and the figure
-          shows the same way it does on hover. */}
-      <svg
-        width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={summary}
-        tabIndex={0}
-        onFocus={() => setActive(last)}
-        onBlur={() => setActive(null)}
-        onKeyDown={e => {
-          if (e.key === 'ArrowLeft') { e.preventDefault(); setActive(a => Math.max(0, (a ?? last) - 1)) }
-          else if (e.key === 'ArrowRight') { e.preventDefault(); setActive(a => Math.min(last, (a ?? last) + 1)) }
-          else if (e.key === 'Escape') setActive(null)
-        }}
-        className="overflow-visible block rounded outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-current"
-      >
-        <defs>
-          <linearGradient id={`${patternId}-fade`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="currentColor" stopOpacity={0.3} />
-            <stop offset="1" stopColor="currentColor" stopOpacity={0} />
-          </linearGradient>
-          <pattern id={patternId} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <rect width="4" height="4" fill="currentColor" opacity="0.25" />
-            <rect width="1.6" height="4" fill="currentColor" />
-          </pattern>
-        </defs>
-        {/* Baseline */}
-        <line x1={0} x2={width} y1={plotH + 0.5} y2={plotH + 0.5} stroke="currentColor" strokeOpacity={0.18} />
-        {kind === 'bars' ? values.map((v, i) => {
-          const bw = Math.min(14, slot * 0.58)
-          const top = y(v)
-          const h = Math.max(v > 0 ? 2 : 0, plotH - top)
-          const isActive = active === i
-          return (
-            <rect key={i} x={cx(i) - bw / 2} y={plotH - h} width={bw} height={h} rx={Math.min(2, bw / 2)}
-              fill={i === last ? `url(#${patternId})` : 'currentColor'}
-              opacity={isActive || active == null ? (i === last ? 1 : 0.85) : 0.35} />
-          )
-        }) : (
-          <>
-            <path d={areaPath} fill={`url(#${patternId}-fade)`} />
-            <path d={linePath} fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinejoin="round" strokeLinecap="round" />
-            {linePts.map(([x, py], i) => (
-              <circle key={i} cx={x} cy={py} r={active === i ? 3.5 : i === last ? 3 : 1.75}
-                fill={i === last ? (accent ? '#131a32' : 'var(--chart-surface)') : 'currentColor'}
-                stroke="currentColor" strokeWidth={i === last ? 1.75 : 0} />
-            ))}
-          </>
-        )}
-        {active != null && kind === 'line' && <line x1={cx(active)} x2={cx(active)} y1={2} y2={plotH} stroke="currentColor" strokeOpacity={0.35} strokeDasharray="2 2" />}
-        {months.map((m, i) => (
-          <text key={i} x={cx(i)} y={height - 1} textAnchor="middle" fontSize="9" fill="currentColor"
-            className={i === last || active === i ? '' : muted} fontWeight={i === last ? 600 : 400}>
-            {format(m, monthFmt, { locale: dateLocale })}
-          </text>
-        ))}
-        {/* One hit target per month, the full height. */}
-        {values.map((_, i) => (
-          <rect key={`hit${i}`} x={slot * i} y={0} width={slot} height={height} fill="transparent"
-            onMouseEnter={() => setActive(i)} onClick={() => setActive(a => (a === i ? null : i))} />
-        ))}
-      </svg>
     </div>
   )
+}
+
+/** A picked month's figure, in place of the card's comparison line. */
+function useMonthReadout(months: Date[], values: number[], fmt: (n: number) => string) {
+  const { t } = useTranslation()
+  const dateLocale = useDateLocale()
+  const [active, setActive] = useState<number | null>(null)
+  const last = months.length - 1
+  const readout = active == null ? null : {
+    month: `${format(months[active], 'MMMM yyyy', { locale: dateLocale })}${active === last ? ` (${t('dashboardKpi.soFar')})` : ''}`,
+    value: fmt(values[active] ?? 0),
+  }
+  return { active, setActive, readout }
 }
 
 interface KpiProps {
@@ -164,27 +207,72 @@ interface KpiProps {
 }
 
 // A label, the figure, its last six months and how it compares with last
-// month, coloured by whether that's good news, not by its sign.
+// month, coloured by whether that's good news, not by its sign. Picking a
+// month on the chart shows its figure where the comparison is.
 function Kpi({ label, value, trend, months, kind, format: fmt, delta, sub, accent }: KpiProps) {
+  const isMobile = useIsMobile()
+  const { active, setActive, readout } = useMonthReadout(months, trend, fmt)
+  const chart = (
+    <span className={`${isMobile ? 'block w-full' : 'ml-auto'} ${accent ? 'text-gold-400' : 'text-navy-500 dark:text-navy-300'}`}>
+      <MiniTrend values={trend} months={months} kind={kind} format={fmt} label={label} accent={accent}
+        width={isMobile ? 'fill' : 132} height={isMobile ? 60 : 44} active={active} onActive={setActive} />
+    </span>
+  )
   return (
     <div className={`h-full rounded-2xl p-5 flex flex-col gap-3 min-w-0 ${
       accent ? 'bg-navy-900 text-white' : 'bg-white border border-slate-100 shadow-card dark:bg-navy-900 dark:border-navy-800'
     }`}>
       <span className={`text-sm font-medium ${accent ? 'text-navy-200' : 'text-slate-600 dark:text-slate-300'}`}>{label}</span>
       {/* The chart drops under the figure when both don't fit on one line,
-          rather than squeezing the figure onto two. */}
+          rather than squeezing the figure onto two; on a phone it's always
+          under it, across the card. */}
       <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2 min-w-0">
         <p className={`font-mono font-semibold tabular-nums leading-tight tracking-tight text-2xl whitespace-nowrap ${accent ? 'text-white' : 'text-navy-900 dark:text-slate-50'}`}>
           {value}
         </p>
-        <span className={`ml-auto ${accent ? 'text-gold-400' : 'text-navy-500 dark:text-navy-300'}`}>
-          <MiniTrend values={trend} months={months} kind={kind} format={fmt} label={label} accent={accent} />
-        </span>
+        {!isMobile && chart}
       </div>
-      <div className="mt-auto text-xs space-y-0.5">
-        <p className={`font-medium ${(accent ? TONE_TEXT_ON_NAVY : TONE_TEXT)[delta.tone]}`} title={delta.title}>{delta.text}</p>
-        {sub && <p className={accent ? 'text-navy-200' : 'text-slate-500 dark:text-slate-400'}>{sub}</p>}
+      {isMobile && chart}
+      <div className="mt-auto text-xs space-y-0.5 min-h-[2.25rem]" aria-live="polite">
+        {readout ? (
+          <>
+            <p className={accent ? 'text-navy-200' : 'text-slate-500 dark:text-slate-400'}>{readout.month}</p>
+            <p className={`font-mono font-semibold text-sm tabular-nums ${accent ? 'text-white' : 'text-navy-900 dark:text-slate-50'}`}>{readout.value}</p>
+          </>
+        ) : (
+          <>
+            <p className={`font-medium ${(accent ? TONE_TEXT_ON_NAVY : TONE_TEXT)[delta.tone]}`} title={delta.title}>{delta.text}</p>
+            {sub && <p className={accent ? 'text-navy-200' : 'text-slate-500 dark:text-slate-400'}>{sub}</p>}
+          </>
+        )}
       </div>
+    </div>
+  )
+}
+
+// One of CostKpis' rows: its label, this month's spend and the six months.
+function CostRow({ r }: { r: Omit<KpiProps, 'accent' | 'sub'> }) {
+  const isMobile = useIsMobile()
+  const { active, setActive, readout } = useMonthReadout(r.months, r.trend, r.format)
+  const chart = (
+    <MiniTrend values={r.trend} months={r.months} kind={r.kind} format={r.format} label={r.label}
+      width={isMobile ? 'fill' : 66} height={isMobile ? 52 : 32} active={active} onActive={setActive} />
+  )
+  return (
+    <div className="flex-1 px-4 py-3 min-w-0">
+      {/* The chart sits beside the label so the amount keeps the full
+          width (in this narrow card it pushed "Rp" onto its own line); on a
+          phone it's under the amount, across the card. */}
+      <div className="flex items-end justify-between gap-2 min-w-0">
+        <span className={`text-sm font-medium text-slate-600 truncate dark:text-slate-300 ${isMobile ? '' : 'pb-3'}`}>{r.label}</span>
+        {!isMobile && <span className="text-navy-500 dark:text-navy-300">{chart}</span>}
+      </div>
+      <p className="mt-0.5 font-mono font-semibold tabular-nums leading-tight text-lg text-navy-900 whitespace-nowrap dark:text-slate-50">{r.value}</p>
+      {isMobile && <div className="mt-2 text-navy-500 dark:text-navy-300">{chart}</div>}
+      <p className={`text-[11px] font-medium mt-0.5 min-h-[1rem] ${readout ? 'text-slate-600 dark:text-slate-300' : TONE_TEXT[r.delta.tone]}`}
+        title={readout ? undefined : r.delta.title} aria-live="polite">
+        {readout ? <>{readout.month}: <span className="font-mono font-semibold text-navy-900 dark:text-slate-50">{readout.value}</span></> : r.delta.text}
+      </p>
     </div>
   )
 }
@@ -193,20 +281,7 @@ function Kpi({ label, value, trend, months, kind, format: fmt, delta, sub, accen
 function CostKpis({ rows }: { rows: Omit<KpiProps, 'accent' | 'sub'>[] }) {
   return (
     <div className="h-full rounded-2xl bg-white border border-slate-100 shadow-card min-w-0 flex flex-col divide-y divide-slate-100 dark:bg-navy-900 dark:border-navy-800 dark:divide-navy-800">
-      {rows.map(r => (
-        <div key={r.label} className="flex-1 px-4 py-3 min-w-0">
-          {/* The chart sits beside the label so the amount keeps the full
-              width: in this narrow card it pushed "Rp" onto its own line. */}
-          <div className="flex items-end justify-between gap-2 min-w-0">
-            <span className="text-sm font-medium text-slate-600 truncate pb-3 dark:text-slate-300">{r.label}</span>
-            <span className="text-navy-500 dark:text-navy-300">
-              <MiniTrend values={r.trend} months={r.months} kind={r.kind} format={r.format} label={r.label} width={66} height={32} />
-            </span>
-          </div>
-          <p className="mt-0.5 font-mono font-semibold tabular-nums leading-tight text-lg text-navy-900 whitespace-nowrap dark:text-slate-50">{r.value}</p>
-          <p className={`text-[11px] font-medium mt-0.5 ${TONE_TEXT[r.delta.tone]}`} title={r.delta.title}>{r.delta.text}</p>
-        </div>
-      ))}
+      {rows.map(r => <CostRow key={r.label} r={r} />)}
     </div>
   )
 }
@@ -376,9 +451,10 @@ export function DashboardPage() {
     <div className="p-4 md:p-6 space-y-6 max-w-[1400px]">
 
       {/* ── KPI row ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+      {/* One card per row on a phone, so each chart has the full width. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
         {/* Receivables spans two columns and carries the accent */}
-        <div className="col-span-2 h-full">
+        <div className="sm:col-span-2 h-full">
           <Kpi
             accent
             label={t('dashboard.arReceivable')}
@@ -418,7 +494,7 @@ export function DashboardPage() {
           sub={t('common.inAllCount', { count: deliveries.length })}
         />
         {/* Two columns wide below xl, so it never sits alone beside an empty slot. */}
-        <div className="col-span-2 xl:col-span-1 h-full">
+        <div className="sm:col-span-2 xl:col-span-1 h-full">
           <CostKpis rows={[
             { label: t('common.production'), value: formatRp(prodCostThisMonth), trend: perMonth(safeProductions as ProductionRow[], p => p.date, p => p.price * p.amount), months, kind: 'bars', format: formatRp, delta: delta(prodCostThisMonth, prodLastMonth, 'bad') },
             { label: t('common.operations'), value: formatRp(opsCostThisMonth), trend: perMonth(safeOperations as OperationRow[], o => o.date, o => o.price), months, kind: 'bars', format: formatRp, delta: delta(opsCostThisMonth, opsLastMonth, 'bad') },
@@ -444,7 +520,7 @@ export function DashboardPage() {
                   <span className="badge bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400">{t('dashboard.overdueCount', { count: overdueInvoices.length })}</span>
                 )}
               </div>
-              <Link to="/invoice" className="flex items-center gap-1 -my-2 py-2 text-xs text-navy-600 hover:text-navy-800 dark:text-navy-300 dark:hover:text-slate-100 transition-colors font-medium shrink-0">
+              <Link to="/invoice" className="tap flex items-center gap-1 -my-2 py-2 text-xs text-navy-600 hover:text-navy-800 dark:text-navy-300 dark:hover:text-slate-100 transition-colors font-medium shrink-0">
                 {t('common.viewAll')} <ArrowUpRight className="w-3 h-3" />
               </Link>
             </div>
@@ -530,7 +606,7 @@ export function DashboardPage() {
                 <ShoppingBag className="w-4 h-4 text-navy-400" />
                 <h3 className="font-semibold text-navy-900 text-sm dark:text-slate-50">{t('dashboard.recentOrders')}</h3>
               </div>
-              <Link to="/orders" className="flex items-center gap-1 -my-2 py-2 text-xs text-navy-600 hover:text-navy-800 dark:text-navy-300 dark:hover:text-slate-100 transition-colors font-medium">
+              <Link to="/orders" className="tap flex items-center gap-1 -my-2 py-2 text-xs text-navy-600 hover:text-navy-800 dark:text-navy-300 dark:hover:text-slate-100 transition-colors font-medium">
                 {t('common.viewAll')} <ArrowUpRight className="w-3 h-3" />
               </Link>
             </div>
@@ -609,7 +685,7 @@ export function DashboardPage() {
             <div className="flex items-center gap-2 mb-1">
               <BarChart3 className="w-4 h-4 text-navy-400 shrink-0" />
               <h3 className="font-semibold text-navy-900 text-sm truncate dark:text-slate-50">{t('dashboardChart.title')}</h3>
-              <Link to="/finance" className="ml-auto flex items-center gap-1 -my-2 py-2 text-xs text-navy-600 hover:text-navy-800 dark:text-navy-300 dark:hover:text-slate-100 transition-colors font-medium shrink-0">
+              <Link to="/finance" className="tap ml-auto flex items-center gap-1 -my-2 py-2 text-xs text-navy-600 hover:text-navy-800 dark:text-navy-300 dark:hover:text-slate-100 transition-colors font-medium shrink-0">
                 {t('dashboard.yearly')} <ArrowUpRight className="w-3 h-3" />
               </Link>
             </div>
@@ -621,7 +697,7 @@ export function DashboardPage() {
             </p>
             <MonthsChart data={monthsMoney} />
             <div className="mt-3"><MonthsLegend /></div>
-            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">{t('dashboardChart.hint')}</p>
+            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">{t(isMobile ? 'dashboardChart.hintTouch' : 'dashboardChart.hint')}</p>
           </section>
 
           <section className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 fade-up delay-2 dark:bg-navy-900 dark:border-navy-800">
