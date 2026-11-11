@@ -136,6 +136,15 @@ export const supplierDesignApi = {
   deletePhoto: (id: number | string) => http.delete<void>(`/supplier-design/${encodeURIComponent(id)}/photo`).then(r => r.data),
 }
 
+// Print layouts, one per document, shared by everyone (see utils/printLayout).
+export interface SavedPrintLayout { doc_type: string; settings: unknown; updated_at: string }
+export const printLayoutApi = {
+  list: () => http.get<SavedPrintLayout[]>('/print-layout').then(r => r.data),
+  save: (docType: string, settings: object) =>
+    http.put<SavedPrintLayout>(`/print-layout/${encodeURIComponent(docType)}`, { settings }).then(r => r.data),
+  reset: (docType: string) => http.delete<void>(`/print-layout/${encodeURIComponent(docType)}`).then(r => r.data),
+}
+
 // The Kas Bon headers. One header can hold production and operation lines.
 export const financeHeaderApi = crud<FinanceHeader, CreateFinanceHeaderRequest, UpdateFinanceHeaderRequest>('/finance-header')
 

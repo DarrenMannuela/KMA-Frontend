@@ -2,6 +2,7 @@ import { invoiceAmount, liveDownPayment, balanceDue } from '@/utils/invoiceAmoun
 import { useState, useEffect, useLayoutEffect } from 'react'
 import type { CSSProperties } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { format } from 'date-fns'
@@ -9,6 +10,9 @@ import { invoicesApi, ordersApi } from '@/api'
 import { invoiceHooks } from '@/hooks'
 import { useScaleToFit } from '@/hooks/useScaleToFit'
 import { usePrintLightBody } from '@/hooks/usePrintLightBody'
+import { usePrintLayout } from '@/hooks/usePrintLayout'
+import { PrintLayoutPanel, PrintLayoutToggle, PANEL_ROOM_CLASS } from '@/components/print/PrintLayoutPanel'
+import { printFontStacks } from '@/utils/printLayout'
 import { useRekening } from '@/utils/RekeningStore'
 import { numberToWordsID } from '@/utils/NumberToWordsID'
 
@@ -42,8 +46,9 @@ const PAGE_STYLE: CSSProperties = {
   fontFamily: 'Arial, sans-serif', fontSize: '13px', color: '#000',
 }
 
-// One label width for every "label : value" row, so the colons line up.
-const LABEL_COL_W = 'w-[150px]'
+// One label width for every "label : value" row, so the colons line up; it
+// grows with the text size (--kw-label, set from the layout).
+const LABEL_COL_W = 'w-[var(--kw-label,150px)]'
 
 // A "Label : value" row on the shared label column.
 function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -108,7 +113,7 @@ function PaymentMethodOption({ label, active, onClick }: {
 function HeaderField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex font-bold">
-      <span className="w-[34px] shrink-0">{label}</span>
+      <span className="w-[2.6em] shrink-0">{label}</span>
       <span>: {children}</span>
     </div>
   )
@@ -116,19 +121,21 @@ function HeaderField({ label, children }: { label: string; children: React.React
 
 // An editable header field, for the receipt book's own number, which isn't
 // stored anywhere.
-function EditableHeaderField({ label, value, onChange, placeholder }: {
+function EditableHeaderField({ label, value, onChange, placeholder, font }: {
   label: string
   value: string
   onChange: (v: string) => void
   placeholder?: string
+  /** The row's own font (bold, at the layout's size), for measuring. */
+  font: string
 }) {
   // This row is font-bold, so the width has to be measured in a bold font
   // too — a regular-weight measurement would under-size a bold-rendered
   // string and clip it the same way the old `size` attribute did.
-  const width = useAutoWidthInput(value || placeholder || '', 'bold 13px Arial')
+  const width = useAutoWidthInput(value || placeholder || '', font)
   return (
     <div className="flex font-bold">
-      <span className="w-[34px] shrink-0">{label}</span>
+      <span className="w-[2.6em] shrink-0">{label}</span>
       <span>
         {': '}
         <input
@@ -154,6 +161,15 @@ export function KwitansiPrintPage() {
 
   // Shrinks the preview to fit the screen; printing is unaffected.
   const { containerRef: scaleContainerRef, docRef: scaleDocRef, scale, scaledWidth, scaledHeight } = useScaleToFit(true)
+
+  // Font, logo, sizes and spacing from the kwitansi's layout (Layout panel).
+  const { t } = useTranslation()
+  const printLayout = usePrintLayout('kwitansi')
+  const L = printLayout.layout
+  const fonts = printFontStacks(L)
+  const [layoutOpen, setLayoutOpen] = useState(false)
+  const fontAt = (weight: string, px: number) => `${weight} ${px}px ${fonts.main}`
+  const gap = (px: number) => Math.round(px * L.spacing)
 
   const { data: invoice, isLoading, isError, refetch } = useQuery({
     queryKey: ['invoice', invoiceId],
@@ -182,11 +198,11 @@ export function KwitansiPrintPage() {
   // font-semibold ≈ weight 600 — measuring at the same weight the field
   // actually renders in, same reasoning as EditableHeaderField's bold
   // measurement above.
-  const signerWidth = useAutoWidthInput(signerName || 'NAMA PENERIMA', '600 13px Arial')
+  const signerWidth = useAutoWidthInput(signerName || 'NAMA PENERIMA', fontAt('600', L.footerSize))
   // The signer's job title, under their name — same idea as the invoice
   // print's signatoryTitle, missing here until now.
   const [signerTitle, setSignerTitle] = useState('')
-  const signerTitleWidth = useAutoWidthInput(signerTitle || 'JABATAN', '13px Arial')
+  const signerTitleWidth = useAutoWidthInput(signerTitle || 'JABATAN', fontAt('400', L.footerSize))
   const [purposeText, setPurposeText] = useState('')
   const [purposeTouched, setPurposeTouched] = useState(false)
   useEffect(() => {
@@ -194,7 +210,7 @@ export function KwitansiPrintPage() {
       setPurposeText(`PEMESANAN ${(order.company ?? invoice.kepada_yth).toUpperCase()}`)
     }
   }, [order, invoice, purposeTouched])
-  const purposeWidth = useAutoWidthInput(purposeText || 'PEMESANAN SERAGAM …', '13px Arial')
+  const purposeWidth = useAutoWidthInput(purposeText || 'PEMESANAN SERAGAM …', fontAt('400', L.bodySize))
 
   // "Sudah terima dari" defaults to the invoice's client, editable for this
   // printed copy only — e.g. when the actual payer named on the receipt
@@ -204,7 +220,7 @@ export function KwitansiPrintPage() {
   useEffect(() => {
     if (!receivedFromTouched && invoice) setReceivedFrom(invoice.kepada_yth)
   }, [invoice, receivedFromTouched])
-  const receivedFromWidth = useAutoWidthInput(receivedFrom, '13px Arial', 120)
+  const receivedFromWidth = useAutoWidthInput(receivedFrom, fontAt('400', L.detailsSize), 120)
 
   // The auto-generated terbilang (amount in words) is editable too, for the
   // rare case it needs a human correction — same "trust it until touched"
@@ -220,7 +236,7 @@ export function KwitansiPrintPage() {
   // InfoRow's inline <span> (no block-level containing block to measure
   // against), so — same as every other field on this page — this is sized
   // by measuring the actual text instead.
-  const amountWordsWidth = useAutoWidthInput(amountWords, '13px Arial', 300)
+  const amountWordsWidth = useAutoWidthInput(amountWords, fontAt('400', L.detailsSize), 300)
 
   // Extra TERLAMPIR (attachment) lines, on top of the fixed ones below —
   // for anything attached to this particular receipt that isn't already
@@ -289,19 +305,21 @@ export function KwitansiPrintPage() {
   return (
     <div className="min-h-screen bg-slate-100">
       {/* Toolbar — hidden when printing */}
-      <div className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap">
+      <div data-print-toolbar className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap">
         <button onClick={() => navigate(-1)} className="btn-secondary flex items-center gap-1.5 text-sm">
           <ArrowLeft size={14} /> Back
         </button>
         <span className="text-slate-400 text-sm flex-1">Kwitansi — {invoice.id}</span>
+        <PrintLayoutToggle state={printLayout} open={layoutOpen} onToggle={() => setLayoutOpen(o => !o)} />
         <button onClick={() => window.print()} className="btn-primary flex items-center gap-2">
-          <Printer size={14} /> Print / Save PDF
+          <Printer size={14} /> {t('printLayout.print')}
         </button>
       </div>
+      <PrintLayoutPanel docType="kwitansi" state={printLayout} open={layoutOpen} onClose={() => setLayoutOpen(false)} />
 
       {/* The page is a fixed physical width: it scrolls (and is scaled to fit) here
          so it doesn't widen the toolbar. Printing uses the real size. */}
-      <div className="p-8 print:p-0 overflow-x-auto print:overflow-visible" ref={scaleContainerRef}>
+      <div className={`p-8 print:p-0 overflow-x-auto print:overflow-visible ${layoutOpen ? `${PANEL_ROOM_CLASS} max-lg:pb-[72vh]` : ''}`} ref={scaleContainerRef}>
         <div
           className="scale-wrap"
           style={{ width: scaledWidth || undefined, height: scaledHeight || undefined, overflow: 'hidden' }}
@@ -310,32 +328,60 @@ export function KwitansiPrintPage() {
           id="kwitansi"
           ref={scaleDocRef}
           className="bg-white mx-auto shadow-lg print:shadow-none"
-          style={{ ...PAGE_STYLE, transform: `scale(${scale})`, transformOrigin: 'top left' }}
+          style={{ ...PAGE_STYLE, fontFamily: fonts.main, fontSize: `${L.bodySize}px`, ['--kw-label' as string]: `${Math.round(150 * L.bodySize / 13)}px`, transform: `scale(${scale})`, transformOrigin: 'top left' }}
         >
-          {/* Header */}
-          <div className="flex items-start justify-between mb-7">
-            <div className="flex flex-col items-center">
-              {/* Centered whichever of logo and name is wider. */}
-              <img src="/Logo.png" alt="KMA Logo" className="block w-20 h-auto mb-1" />
-              <div className="font-bold text-sm tracking-[2px]">KREASI MAKMUR ABADI</div>
-            </div>
-
-            <div className="text-center flex-1">
-              <div className="font-bold text-[26px] tracking-[4px] underline underline-offset-4">
+          {/* Header: the logo over the company name, KWITANSI, and the receipt's
+              number, invoice and date. The layout puts the logo block left,
+              right, centred above the title, or leaves the logo out (the
+              name stays). */}
+          {(() => {
+            const logoBlock = (
+              // Shrinks (the name wraps) rather than pushing the header off the
+              // page when large sizes don't fit beside KWITANSI and the fields.
+              <div className="flex flex-col items-center min-w-0">
+                {L.logoPosition !== 'none' && (
+                  <img src="/Logo.png" alt="KMA Logo" style={{ width: `${L.logoSize}px`, height: 'auto', display: 'block', marginBottom: '4px' }} />
+                )}
+                <div style={{ fontWeight: 'bold', fontSize: `${L.companySize}px`, letterSpacing: '2px', textAlign: 'center' }}>KREASI MAKMUR ABADI</div>
+              </div>
+            )
+            const title = (
+              <div style={{ fontWeight: 'bold', fontSize: `${L.titleSize}px`, letterSpacing: '4px', textDecoration: 'underline', textUnderlineOffset: '4px', textAlign: 'center' }}>
                 KWITANSI
               </div>
-            </div>
-
-            <div className="min-w-[200px] space-y-1">
-              <EditableHeaderField label="No" value={kwitansiNo} onChange={setKwitansiNo} placeholder="052/KMA/08/26" />
-              <HeaderField label="INV">{invoice.id}</HeaderField>
-              <HeaderField label="TGL">{format(new Date(invoice.tanggal), 'd MMM yyyy').toUpperCase()}</HeaderField>
-            </div>
-          </div>
+            )
+            const fields = (
+              <div className="min-w-[200px] space-y-1" style={{ fontSize: `${L.detailsSize}px` }}>
+                <EditableHeaderField label="No" value={kwitansiNo} onChange={setKwitansiNo} placeholder="052/KMA/08/26" font={fontAt('bold', L.detailsSize)} />
+                <HeaderField label="INV">{invoice.id}</HeaderField>
+                <HeaderField label="TGL">{format(new Date(invoice.tanggal), 'd MMM yyyy').toUpperCase()}</HeaderField>
+              </div>
+            )
+            if (L.logoPosition === 'center') {
+              return (
+                <div style={{ marginBottom: `${gap(28)}px` }}>
+                  <div className="flex justify-center" style={{ marginBottom: `${gap(10)}px` }}>{logoBlock}</div>
+                  <div className="grid items-start" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
+                    <span />
+                    {title}
+                    <div className="justify-self-end">{fields}</div>
+                  </div>
+                </div>
+              )
+            }
+            const right = L.logoPosition === 'right'
+            return (
+              <div className="flex items-start justify-between" style={{ marginBottom: `${gap(28)}px` }}>
+                {right ? fields : logoBlock}
+                <div className="flex-1">{title}</div>
+                {right ? logoBlock : fields}
+              </div>
+            )
+          })()}
 
           {/* Bordered body */}
           <div className="border-2 border-black">
-            <div className="px-4 py-3.5 border-b border-black">
+            <div className="px-4 border-b border-black" style={{ paddingTop: `${gap(14)}px`, paddingBottom: `${gap(14)}px`, fontSize: `${L.detailsSize}px`, ['--kw-label' as string]: `${Math.round(150 * L.detailsSize / 13)}px` }}>
               <InfoRow label="Sudah terima dari">
                 <input
                   value={receivedFrom}
@@ -354,7 +400,7 @@ export function KwitansiPrintPage() {
               </InfoRow>
             </div>
 
-            <div className="px-4 py-3.5 border-b border-black min-h-[70px]">
+            <div className="px-4 border-b border-black min-h-[70px]" style={{ paddingTop: `${gap(14)}px`, paddingBottom: `${gap(14)}px` }}>
               <div className="mb-1.5">
                 {purposeLabel} UNTUK{' '}
                 <input
@@ -418,8 +464,9 @@ export function KwitansiPrintPage() {
               </button>
             </div>
 
-            <div className="p-4">
-              <div className="font-bold text-[26px] mb-3.5">
+            <div className="px-4" style={{ paddingTop: `${gap(16)}px`, paddingBottom: `${gap(16)}px` }}>
+              {/* The amount follows the title's size. */}
+              <div className="font-bold" style={{ fontSize: `${L.titleSize}px`, marginBottom: `${gap(14)}px` }}>
                 RP. {Math.round(printAmount).toLocaleString('id-ID')},-
               </div>
 
@@ -436,7 +483,7 @@ export function KwitansiPrintPage() {
               </div>
 
               {/* The signer's name and title, right-aligned below the bank block with room to sign. */}
-              <div className="flex flex-col items-end mt-8">
+              <div className="flex flex-col items-end" style={{ marginTop: `${gap(32)}px`, fontSize: `${L.footerSize}px` }}>
                 <input
                   value={signerName}
                   onChange={e => setSignerName(e.target.value.toUpperCase())}
@@ -449,7 +496,7 @@ export function KwitansiPrintPage() {
                   onChange={e => setSignerTitle(e.target.value.toUpperCase())}
                   placeholder="JABATAN"
                   style={{ font: 'inherit', width: signerTitleWidth }}
-                  className="border-none bg-transparent p-0 text-center text-xs text-slate-500 mt-0.5 placeholder:text-slate-300"
+                  className="border-none bg-transparent p-0 text-center text-slate-500 mt-0.5 placeholder:text-slate-300"
                 />
               </div>
             </div>

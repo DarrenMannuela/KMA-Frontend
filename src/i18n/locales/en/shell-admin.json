@@ -329,5 +329,12 @@
     "pickDesign_one": "Pick a design ({{count}})",
     "pickDesign_other": "Pick a design ({{count}})",
     "changeDesign": "Change design"
+  },
+  "errorScreen": {
+    "title": "Something went wrong",
+    "body": "This page hit an unexpected error. Your data is safe — try reloading.",
+    "reload": "Reload page",
+    "home": "Go to dashboard",
+    "details": "Technical details"
   }
 }

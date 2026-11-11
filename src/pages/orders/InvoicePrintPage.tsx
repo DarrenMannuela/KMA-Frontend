@@ -19,6 +19,10 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 import { useScaleToFit } from '@/hooks/useScaleToFit'
 import { usePrintLightBody } from '@/hooks/usePrintLightBody'
 import { usePaperFormat, PAPER_FORMATS, type PaperFormat } from '@/utils/PaperFormatStore'
+import { useInvoiceLayout } from '@/utils/InvoiceLayoutStore'
+import { usePrintLayout } from '@/hooks/usePrintLayout'
+import { PrintLayoutPanel, PrintLayoutToggle, PANEL_ROOM_CLASS } from '@/components/print/PrintLayoutPanel'
+import { printFontStacks } from '@/utils/printLayout'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
 
 // The five item-table columns with a natural, content-driven width — every
@@ -46,6 +50,9 @@ function escapeCssString(value: string): string {
 const BASE_FONT_PX = 11.5
 // The item table's row height (a minimum: a wrapping name still grows its row).
 const ROW_HEIGHT_PX = 14
+// The least KETERANGAN (the item names) is ever squeezed to by the other
+// columns, so names stay readable whatever widths are dragged.
+const KETERANGAN_MIN_PX = 160
 // The print-only running footer's band, taken out of #invoice's bottom padding
 // so the page size is unchanged. See the @page rule below.
 const FOOTER_MARGIN_MM = 14
@@ -69,7 +76,7 @@ function measureTextWidth(text: string, font: string): number {
 }
 // The cells' own padding plus slack: the QTY column also holds an input,
 // which clips its text rather than overflowing.
-const AUTOFIT_PADDING = 8 + 8 + 6
+const AUTOFIT_PADDING = 4 + 4 + 6
 
 // Muted pastels for the highlight picker (including the D/P vs Pelunasan sage).
 const HIGHLIGHT_PALETTE = [
@@ -91,7 +98,6 @@ function formatDate(date: string | Date | null | undefined) {
 
 // The look of KMA's own Excel invoice: a serif for the title, notes and
 // signature labels, Arial for everything else, a dark blue title.
-const SERIF = "Cambria, Georgia, 'Times New Roman', serif"
 const TITLE_BLUE = '#1f4e79'
 const FRAME = '1.5px solid #000'
 const LINE = '1px solid #000'
@@ -428,6 +434,13 @@ export function InvoicePrintPage() {
   // after the signatures, and a long one still on two pages). Never below
   // 70%: past that the text gets too small, and it prints on more pages.
   const [fitOnePage, setFitOnePage] = useState(true)
+  // The invoice's layout for everyone (Layout panel): font, logo, the size of
+  // each part and the spacing. Fit to 1 page scales all of it together.
+  const printLayout = usePrintLayout('invoice')
+  const PL = printLayout.layout
+  const fonts = printFontStacks(PL)
+  const SERIF = fonts.serif
+  const [layoutOpen, setLayoutOpen] = useState(false)
   const [fitZoom, setFitZoom] = useState(1)
   const [tooLongForOnePage, setTooLongForOnePage] = useState(false)
   // Whether it fits one page at full size (measured as printed, see measureFit).
@@ -442,15 +455,16 @@ export function InvoicePrintPage() {
   const fitActive = fitOnePage && manualBreaks.size === 0
   const fit = fitActive ? fitZoom : 1
   const sz = (px: number) => Math.round(px * fit * 100) / 100
-  const fontPx = sz(compact ? 10 : BASE_FONT_PX)
-  const rowPx = sz(compact ? 14 : ROW_HEIGHT_PX)
+  const fontPx = sz(compact ? 10 : PL.bodySize)
+  // Rows grow and shrink with the table's text.
+  const rowPx = sz(compact ? 14 : ROW_HEIGHT_PX * PL.bodySize / BASE_FONT_PX)
   // Every table cell's own padding (6px 8px normally) sits on top of its
   // row's height in content-box sizing, so it's a real, separate lever —
   // left alone, it alone would cap how much a row could ever shrink.
-  const cellPad = `${sz(1)}px 6px`
+  const cellPad = `${sz(1)}px 4px`
   // Scales a block-spacing value (margins between sections — the biggest
   // source of "whitespace" on a near-miss page) to 40% when compact.
-  const tightMargin = (px: number) => sz(compact ? Math.round(px * 0.4) : px)
+  const tightMargin = (px: number) => sz(compact ? Math.round(px * 0.4) : Math.round(px * PL.spacing))
   // A blank gap row's +/- controls must fit inside the same height budget
   // as every other cell in that row (rowPx minus the cell's own vertical
   // padding) — a fixed 18px button no longer fit once compact mode shrank
@@ -524,6 +538,9 @@ export function InvoicePrintPage() {
   // Per-invoice, not global — see PaperFormatStore's own comment for why
   // this isn't a shared preference the way column widths are.
   const [paperFormat, setPaperFormat] = usePaperFormat(invoice?.id)
+  // Column widths dragged by hand and items folded to one line, per invoice.
+  const { layout, setWidth, resetWidths, toggleFold, setFolded } = useInvoiceLayout(invoice?.id)
+  const isFolded = (name: string) => layout.folded.includes(name)
   const { widthMm: pageWidthMm, heightMm: pageHeightMm } = PAPER_FORMATS[paperFormat]
   const pageHeightPx = pageHeightMm * MM_TO_PX
 
@@ -656,6 +673,12 @@ export function InvoicePrintPage() {
       await itemsApi.create({ order_id: invoice.order_id, item_name: name, size: field === 'size' ? v.toUpperCase() : '', amount, price, sub_total: amount * price })
     })
   }
+
+  // A folded item's one price, typed over: every size takes it.
+  const saveGroupPrice = (rows: Item[], raw: string) => sheetEdit(async () => {
+    const price = Number(raw) || 0
+    for (const it of rows) await itemsApi.update(it.id, { price, sub_total: it.amount * price })
+  })
 
   const deleteItemRow = (item: Item) => sheetEdit(async () => { await itemsApi.delete(item.id) }, t('invoiceSheet.rowDeleted', { name: item.item_name }))
 
@@ -844,23 +867,38 @@ export function InvoicePrintPage() {
   // edit, note, paper size or font load can change; it only stores a real
   // change, so it settles in a couple of passes (sizes and height move
   // together, so each pass lands close).
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Settling guard. Text that wraps differently at each size (in a narrow
+  // KETERANGAN, say) can make one size too tall and the next a little short,
+  // and growing back would then bounce between the two forever — which React
+  // stops with a "too many updates" crash. So once a size has been too tall,
+  // the fit only shrinks until the invoice itself changes; and however it
+  // got there, a run of adjustments without the screen being drawn stops.
+  const fitContentKey = JSON.stringify([invoice, items, layout, PL, pageWidthMm, pageHeightMm, notes, extraGapRows, manualBreaks.size, fitOnePage])
+  const fitGuard = useRef({ key: '', overflowed: false, passes: 0 })
   useLayoutEffect(() => {
     const printed = measurePrinted()
     if (printed == null) return
+    const guard = fitGuard.current
+    if (guard.key !== fitContentKey) { guard.key = fitContentKey; guard.overflowed = false }
+    if (guard.passes >= 12) return
+    const step = (apply: () => void) => {
+      if (guard.passes++ === 0) requestAnimationFrame(() => { guard.passes = 0 })
+      apply()
+    }
     const fits = printed <= availablePx
-    if (fits !== fitsAtFullSize) setFitsAtFullSize(fits)
+    if (fits !== fitsAtFullSize) step(() => setFitsAtFullSize(fits))
     if (!fitActive) return
+    if (!fits) guard.overflowed = true
     // Smaller by how much it's over; back up (never past full size) when
-    // there's room to spare.
+    // there's room to spare and no larger size has already been too tall.
     let target = fit
-    if (printed > availablePx) target = fit * (availablePx / printed)
-    else if (fit < 1 && printed < availablePx * 0.97) target = Math.min(1, fit * (availablePx / printed))
+    if (!fits) target = fit * (availablePx / printed)
+    else if (fit < 1 && !guard.overflowed && printed < availablePx * 0.97) target = Math.min(1, fit * (availablePx / printed))
     // Below 70% the text is too small: full size, on more pages, instead.
     const tooLong = target < 0.7
     const next = tooLong ? 1 : Math.floor(target * 200) / 200
-    if (tooLong !== tooLongForOnePage) setTooLongForOnePage(tooLong)
-    if (Math.abs(next - fit) >= 0.005) setFitZoom(next)
+    if (tooLong !== tooLongForOnePage) step(() => setTooLongForOnePage(tooLong))
+    if (Math.abs(next - fit) >= 0.005) step(() => setFitZoom(next))
   })
 
   // One grouping for both the table and the page prediction.
@@ -989,25 +1027,31 @@ export function InvoicePrintPage() {
   // Each fixed column's content this render, for auto-fit. KETERANGAN takes the
   // remaining width.
   const hasDp = liveDownPayment > 0
+  // Headings may wrap ("HARGA NET / PCS" over two lines), so only their
+  // longest word counts; a folded item's list of sizes wraps too, so only
+  // its longest size counts. Everything else is sized to fit on one line.
+  const words = (h: string) => h.split(' ')
   const columnTexts: Record<ColumnKey, string[]> = {
-    no: ['ITEM', ...groups.map((_, i) => String(i + 1))],
-    size: ['SIZE', ...items.map(i => i.size || '-')],
+    no: [...words('ITEM'), ...groups.map((_, i) => String(i + 1))],
+    size: [...words('SIZE'), ...items.map(i => i.size || '-')],
     qty: [
-      'QTY / SET',
+      ...words('QTY / SET'),
       ...items.map(i => num(i.amount)),
+      ...groups.map(g => num(g.rows.reduce((n, i) => n + i.amount, 0))),
       num(items.reduce((s, i) => s + i.amount, 0)),
       ...(invoice.type === 'pelunasan' ? [dpPaidLabel.value] : []),
     ],
     hargaNet: [
-      'HARGA NET / PCS',
+      ...words('HARGA NET / PCS'),
       ...items.map(i => num(i.price)),
       'TOTAL',
       ...(hasDp ? [`D/P - ${dpPercent} %`] : []),
       'PELUNASAN',
     ],
     jumlah: [
-      'JUMLAH (Rp)',
+      ...words('JUMLAH (Rp)'),
       ...items.map(i => num(i.sub_total)),
+      ...groups.map(g => num(g.rows.reduce((n, i) => n + i.sub_total, 0))),
       num(invoice.total),
       // A Pelunasan prints the paid D/P in brackets.
       ...(hasDp ? [invoice.type === 'pelunasan' ? `(${num(liveDownPayment)})` : num(liveDownPayment)] : []),
@@ -1019,19 +1063,66 @@ export function InvoicePrintPage() {
   }
   // Measured in bold, the heaviest weight any of these cells uses, at
   // whatever size the table is actually printing at right now.
-  const autofitFont = `bold ${fontPx}px Arial`
+  const autofitFont = `bold ${fontPx}px ${fonts.main}`
   const fitWidthFor = (column: ColumnKey) =>
     columnTexts[column].reduce((max, t) => Math.max(max, measureTextWidth(t, autofitFont)), 0) + AUTOFIT_PADDING
-  const columnWidths: Record<ColumnKey, number> = {
-    no: fitWidthFor('no'),
-    size: fitWidthFor('size'),
-    qty: fitWidthFor('qty'),
-    hargaNet: fitWidthFor('hargaNet'),
-    jumlah: fitWidthFor('jumlah'),
+  // A width dragged by hand wins over the fitted one.
+  const wantedWidths: Record<ColumnKey, number> = {
+    no: layout.widths.no ?? fitWidthFor('no'),
+    size: layout.widths.size ?? fitWidthFor('size'),
+    qty: layout.widths.qty ?? fitWidthFor('qty'),
+    hargaNet: layout.widths.hargaNet ?? fitWidthFor('hargaNet'),
+    jumlah: layout.widths.jumlah ?? fitWidthFor('jumlah'),
   }
+  // KETERANGAN always keeps room for the item names: if the other columns
+  // (dragged wide, or on a narrower paper) would take more, they all give
+  // way in proportion.
+  const tableWidthPx = (pageWidthMm - 40) * MM_TO_PX
+  const fixedRoomPx = tableWidthPx - KETERANGAN_MIN_PX
+  const wantedTotal = Object.values(wantedWidths).reduce((s, w) => s + w, 0)
+  const columnWidths: Record<ColumnKey, number> = wantedTotal > fixedRoomPx
+    ? Object.fromEntries(Object.entries(wantedWidths).map(([c, w]) => [c, Math.floor(w * fixedRoomPx / wantedTotal)])) as Record<ColumnKey, number>
+    : wantedWidths
+  // Folding an item's sizes into one line (screen-only toggle in ITEM).
+  const foldButton = (name: string) => (
+    <button type="button" className="sheet-fold print:hidden" aria-expanded={!isFolded(name)}
+      title={isFolded(name) ? t('invoiceSheet.unfold') : t('invoiceSheet.fold')}
+      aria-label={`${isFolded(name) ? t('invoiceSheet.unfold') : t('invoiceSheet.fold')}: ${name}`}
+      onClick={e => { e.stopPropagation(); toggleFold(name) }}>
+      {isFolded(name) ? '▸' : '▾'}
+    </button>
+  )
+  const foldable = groups.filter(g => g.rows.length > 1).map(g => g.name)
+
+  // Dragging a column's edge, like Excel. KETERANGAN takes whatever is left,
+  // so ITEM is dragged by its right edge and the columns right of KETERANGAN
+  // by their left edge. A double-click fits the column to its contents again.
+  const resizeHandle = (col: ColumnKey, side: 'left' | 'right') => (
+    <span
+      className="col-resize print:hidden"
+      style={{ [side]: '-4px' }}
+      title={t('invoiceSheet.resizeHint')}
+      onDoubleClick={e => { e.stopPropagation(); setWidth(col, null) }}
+      onPointerDown={e => {
+        e.preventDefault(); e.stopPropagation()
+        const startX = e.clientX
+        const w0 = columnWidths[col]
+        // As wide as leaves KETERANGAN its room, and never past 320px.
+        const others = (Object.keys(columnWidths) as ColumnKey[]).filter(c => c !== col).reduce((s, c) => s + columnWidths[c], 0)
+        const maxW = Math.max(20, Math.min(320, fixedRoomPx - others))
+        const onMove = (ev: PointerEvent) => {
+          const dx = (ev.clientX - startX) / (scale || 1)
+          setWidth(col, Math.min(maxW, Math.max(20, side === 'right' ? w0 + dx : w0 - dx)))
+        }
+        const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp) }
+        window.addEventListener('pointermove', onMove)
+        window.addEventListener('pointerup', onUp)
+      }}
+    />
+  )
 
   // Cell styles for the item table, in the Excel invoice's look.
-  const headCell: React.CSSProperties = { borderLeft: LINE, borderRight: LINE, borderBottom: '3px double #e26b0a', padding: `${sz(8)}px 4px`, textAlign: 'center', fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: `${fontPx - 1}px` }
+  const headCell: React.CSSProperties = { borderLeft: LINE, borderRight: LINE, borderBottom: '3px double #e26b0a', padding: `${sz(6)}px 3px`, textAlign: 'center', fontWeight: 'bold', whiteSpace: 'normal', lineHeight: 1.15, fontSize: `${fontPx - 1}px`, position: 'relative' }
   const bodyCell: React.CSSProperties = { borderLeft: LINE, borderRight: LINE, borderTop: ROW_LINE, borderBottom: ROW_LINE, padding: cellPad, height: `${rowPx}px`, whiteSpace: 'nowrap' }
   const sumCell: React.CSSProperties = { border: LINE, padding: cellPad, height: `${rowPx + 4}px`, fontWeight: 'bold', whiteSpace: 'nowrap' }
   const openCell: React.CSSProperties = { padding: cellPad, height: `${rowPx + 4}px`, borderTop: 'none', borderBottom: 'none' }
@@ -1050,7 +1141,7 @@ export function InvoicePrintPage() {
   return (
     <div className="min-h-screen bg-slate-100">
       {/* Toolbar (screen only); wraps on narrow screens. */}
-      <div className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap">
+      <div data-print-toolbar className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap">
         {/* Always to the invoice list: this page is often opened directly, with no
            history to go back to. */}
         <button
@@ -1087,6 +1178,16 @@ export function InvoicePrintPage() {
           </button>
           {fitOnePage && manualBreaks.size > 0 && <span className="text-xs text-slate-400">{t('invoiceSheet.fitOffBreaks')}</span>}
           {fitOnePage && manualBreaks.size === 0 && tooLongForOnePage && <span className="text-xs text-amber-700">{t('invoiceSheet.tooLong')}</span>}
+          {foldable.length > 0 && (
+            // "Fold all" until every item with several sizes is folded.
+            <button type="button" onClick={() => setFolded(foldable.every(isFolded) ? [] : foldable)}
+              className="px-2 py-1 rounded text-xs font-medium border bg-white text-slate-500 border-slate-200 hover:border-slate-300">
+              {foldable.every(isFolded) ? t('invoiceSheet.unfoldAll') : t('invoiceSheet.foldAll')}
+            </button>
+          )}
+          {Object.keys(layout.widths).length > 0 && (
+            <button type="button" onClick={resetWidths} className="text-xs text-slate-400 hover:text-slate-600 underline">{t('invoiceSheet.resetWidths')}</button>
+          )}
           {/* On/off like the page-break pills. */}
           <button
             type="button"
@@ -1325,13 +1426,15 @@ export function InvoicePrintPage() {
         >
           <Receipt size={14} /> Kwitansi
         </button>
+        <PrintLayoutToggle state={printLayout} open={layoutOpen} onToggle={() => setLayoutOpen(o => !o)} />
         <button
           onClick={handlePrint}
           className="btn-primary flex items-center gap-2"
         >
-          <Printer size={14} /> Print / Save PDF
+          <Printer size={14} /> {t('printLayout.print')}
         </button>
       </div>
+      <PrintLayoutPanel docType="invoice" state={printLayout} open={layoutOpen} onClose={() => setLayoutOpen(false)} />
 
       {/* Manual page breaks, when there's more than one item group. */}
       {groupNames.length > 1 && (
@@ -1365,7 +1468,7 @@ export function InvoicePrintPage() {
 
       {/* The page is a fixed physical width: it scrolls here (and .scale-wrap shrinks
          it to fit) so it doesn't widen the toolbar. Printing uses the real size. */}
-      <div className="p-8 print:p-0 overflow-x-auto print:overflow-visible" ref={scaleContainerRef}>
+      <div className={`p-8 print:p-0 overflow-x-auto print:overflow-visible ${layoutOpen ? `${PANEL_ROOM_CLASS} max-lg:pb-[72vh]` : ''}`} ref={scaleContainerRef}>
         <div
           className="scale-wrap"
           style={{ width: scaledWidth || undefined, height: scaledHeight || undefined, overflow: 'hidden' }}
@@ -1394,7 +1497,7 @@ export function InvoicePrintPage() {
               width: `${pageWidthMm}mm`,
               minHeight: `${pageHeightMm}mm`,
               padding: '20mm 20mm 15mm 20mm',
-              fontFamily: 'Arial, sans-serif',
+              fontFamily: fonts.main,
               fontSize: `${fontPx}px`,
               color: '#000',
             }}
@@ -1406,17 +1509,21 @@ export function InvoicePrintPage() {
               serif INVOICE title, the client on the left and the invoice's details
               on the right, everything in bold. */}
           <div ref={topBlockRef}>
-          {/* The logo centred over the company name, the pair at top left. */}
-          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', marginBottom: tightMargin(6) }}>
-            <img src="/Logo.png" alt="KMA Logo" style={{ width: `${sz(90)}px`, height: 'auto', display: 'block' }} />
-            <div style={{ fontWeight: 'bold', fontSize: `${fontPx}px`, letterSpacing: '1px', marginTop: tightMargin(8) }}>KREASI&nbsp; MAKMUR&nbsp; ABADI</div>
+          {/* The logo centred over the company name; the pair at the left,
+              centre or right of the page as the layout says (the name stays
+              when the logo is left out). */}
+          <div style={{ display: 'flex', justifyContent: PL.logoPosition === 'center' ? 'center' : PL.logoPosition === 'right' ? 'flex-end' : 'flex-start', marginBottom: tightMargin(6) }}>
+            <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center' }}>
+              {PL.logoPosition !== 'none' && <img src="/Logo.png" alt="KMA Logo" style={{ width: `${sz(PL.logoSize)}px`, height: 'auto', display: 'block', marginBottom: tightMargin(8) }} />}
+              <div style={{ fontWeight: 'bold', fontSize: `${sz(PL.companySize)}px`, letterSpacing: '1px' }}>KREASI&nbsp; MAKMUR&nbsp; ABADI</div>
+            </div>
           </div>
 
-          <div style={{ textAlign: 'center', fontFamily: SERIF, fontWeight: 'bold', color: TITLE_BLUE, fontSize: `${sz(27)}px`, letterSpacing: '0.5px', margin: `0 0 ${tightMargin(12)}px` }}>
+          <div style={{ textAlign: 'center', fontFamily: SERIF, fontWeight: 'bold', color: TITLE_BLUE, fontSize: `${sz(PL.titleSize)}px`, letterSpacing: '0.5px', margin: `0 0 ${tightMargin(12)}px` }}>
             INVOICE
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '0 24px', marginBottom: tightMargin(14), fontSize: `${fontPx - 0.5}px`, fontWeight: 'bold', lineHeight: 1.3 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '0 24px', marginBottom: tightMargin(14), fontSize: `${sz(PL.detailsSize)}px`, fontWeight: 'bold', lineHeight: 1.3 }}>
             <table style={{ borderCollapse: 'collapse' }}>
               <tbody>
                 <tr>
@@ -1475,14 +1582,14 @@ export function InvoicePrintPage() {
           <table onPaste={onSheetPaste} style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0', fontSize: `${fontPx}px`, lineHeight: 1.2, tableLayout: 'fixed', border: FRAME, borderBottom: '3px double #000' }}>
             <thead ref={theadRef}>
               <tr>
-                <th style={{ ...headCell, width: `${columnWidths.no}px` }}>ITEM</th>
+                <th style={{ ...headCell, width: `${columnWidths.no}px` }}>ITEM{resizeHandle('no', 'right')}</th>
                 {/* KETERANGAN takes the remaining width and may wrap (long item names). */}
                 <th style={headCell}>KETERANGAN</th>
-                <th style={{ ...headCell, width: `${columnWidths.size}px` }}>SIZE</th>
-                <th style={{ ...headCell, width: `${columnWidths.qty}px` }}>QTY / SET</th>
+                <th style={{ ...headCell, width: `${columnWidths.size}px` }}>SIZE{resizeHandle('size', 'left')}</th>
+                <th style={{ ...headCell, width: `${columnWidths.qty}px` }}>QTY / SET{resizeHandle('qty', 'left')}</th>
                 {/* Fitted to the longest amount; no ellipsis, so a sizing bug would show. */}
-                <th style={{ ...headCell, width: `${columnWidths.hargaNet}px` }}>HARGA NET / PCS</th>
-                <th style={{ ...headCell, width: `${columnWidths.jumlah}px` }}>JUMLAH (Rp)</th>
+                <th style={{ ...headCell, width: `${columnWidths.hargaNet}px` }}>HARGA NET / PCS{resizeHandle('hargaNet', 'left')}</th>
+                <th style={{ ...headCell, width: `${columnWidths.jumlah}px` }}>JUMLAH (Rp){resizeHandle('jumlah', 'left')}</th>
               </tr>
             </thead>
 
@@ -1535,7 +1642,34 @@ export function InvoicePrintPage() {
                       ...(manualBreakHere ? { pageBreakBefore: 'always', breakBefore: 'page' } : {}),
                     }}
                   >
-                    {group.rows.map((item, rowIdx) => {
+                    {isFolded(group.name) ? (() => {
+                      // Folded: the item's sizes as one line — its sizes, total
+                      // quantity, price (or range) and total.
+                      const key = `fold-${group.name}`
+                      const r = sheetRow.n++
+                      const qty = group.rows.reduce((n, i) => n + i.amount, 0)
+                      const sum = group.rows.reduce((n, i) => n + i.sub_total, 0)
+                      const prices = [...new Set(group.rows.map(i => i.price))].sort((a, b) => a - b)
+                      return (
+                        <tr key={key} {...highlightRowHandlers(key)} style={{ background: rowHighlights[key] }} className="sheet-row">
+                          <td style={{ ...bodyCell, textAlign: 'center', position: 'relative' }}>
+                            {groupIdx + 1}
+                            {foldButton(group.name)}
+                          </td>
+                          <td style={{ ...bodyCell, whiteSpace: 'normal' }}>
+                            <SheetCell value={group.name.toUpperCase()} onSave={v => saveItemCell(group.rows[0], 'name', v, group.rows)} align="center" bold cellRef={sheetRef(r, 0)} onMove={sheetMove(r, 0)} />
+                          </td>
+                          <td style={{ ...bodyCell, textAlign: 'center', whiteSpace: 'normal' }}>{group.rows.map(i => i.size || '-').join(', ')}</td>
+                          <td style={{ ...bodyCell, textAlign: 'right' }}>{num(qty)}</td>
+                          <td style={{ ...bodyCell, textAlign: 'right', whiteSpace: prices.length > 1 ? 'normal' : 'nowrap' }}>
+                            {prices.length === 1
+                              ? <SheetCell value={prices[0]} numeric onSave={v => saveGroupPrice(group.rows, v)} align="right" cellRef={sheetRef(r, 3)} onMove={sheetMove(r, 3)} />
+                              : `${num(prices[0])} – ${num(prices[prices.length - 1])}`}
+                          </td>
+                          <td style={{ ...bodyCell, textAlign: 'right' }}>{num(sum)}</td>
+                        </tr>
+                      )
+                    })() : group.rows.map((item, rowIdx) => {
                       const key = `item-${item.id}`
                       const bg = rowHighlights[key]
                       const r = sheetRow.n++
@@ -1543,6 +1677,7 @@ export function InvoicePrintPage() {
                         <tr key={key} {...highlightRowHandlers(key)} style={{ background: bg }} className="sheet-row">
                           <td style={{ ...bodyCell, textAlign: 'center', position: 'relative' }}>
                             {rowIdx === 0 ? groupIdx + 1 : ''}
+                            {rowIdx === 0 && group.rows.length > 1 && foldButton(group.name)}
                             {/* Delete this line (screen only, shows on hover or focus). */}
                             <button type="button" className="sheet-del print:hidden" title={t('invoiceSheet.deleteRow')} aria-label={t('invoiceSheet.deleteRowNamed', { name: `${item.item_name} ${item.size ?? ''}`.trim() })}
                               onClick={e => { e.stopPropagation(); setConfirmDeleteItem(item) }}>×</button>
@@ -1677,7 +1812,7 @@ export function InvoicePrintPage() {
             const visible = notes.map((n, i) => ({ n, i })).filter(x => x.n.trim() !== '')
             const numberOf = new Map(visible.map((x, k) => [x.i, k + 1]))
             return (
-              <div ref={notesRef} style={{ marginTop: tightMargin(12), fontFamily: SERIF, fontSize: `${fontPx}px`, lineHeight: compact ? 1.2 : 1.32, pageBreakInside: 'avoid' }}>
+              <div ref={notesRef} style={{ marginTop: tightMargin(12), fontFamily: SERIF, fontSize: `${sz(PL.footerSize + 1)}px`, lineHeight: compact ? 1.2 : 1.32, pageBreakInside: 'avoid' }}>
                 <div>CATATAN :</div>
                 {notes.map((note, idx) => (
                   // An empty line stays editable on screen but doesn't print as a bare number.
@@ -1701,7 +1836,7 @@ export function InvoicePrintPage() {
                 <div style={{ paddingLeft: '18px' }}>
                   <SheetCell value={rekening.bankBranch} onSave={v => setRekening({ bankBranch: v })} uppercase={false} />
                 </div>
-                <div style={{ paddingLeft: '18px', fontFamily: 'Arial, sans-serif', fontWeight: 'bold' }}>
+                <div style={{ paddingLeft: '18px', fontFamily: fonts.main, fontWeight: 'bold' }}>
                   <span style={{ display: 'inline-flex', gap: '4px', whiteSpace: 'nowrap' }}>No. Rek. <SheetCell value={rekening.accountNumber} onSave={v => setRekening({ accountNumber: v })} uppercase={false} /></span>
                 </div>
                 <button ref={addNoteBtnRef} type="button" onClick={addNote} className="print:hidden btn-secondary flex items-center gap-1.5" style={{ marginTop: '8px', fontSize: '12px', padding: '4px 10px', fontFamily: 'Arial, sans-serif' }}>
@@ -1717,15 +1852,15 @@ export function InvoicePrintPage() {
 
           {/* Signatures, the copy list and the company's address, as one unit. */}
           <div ref={closingRef} style={{ pageBreakInside: 'avoid' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '24px', marginTop: tightMargin(14), fontSize: `${fontPx - 1}px`, lineHeight: 1.3 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '24px', marginTop: tightMargin(14), fontSize: `${sz(PL.footerSize)}px`, lineHeight: 1.3 }}>
               <div>
-                <div style={{ fontWeight: 'bold', paddingLeft: '36px', marginBottom: sz(96) }}>ASLI INVOICE DI TERIMA OLEH :</div>
+                <div style={{ fontWeight: 'bold', paddingLeft: '36px', marginBottom: tightMargin(96) }}>ASLI INVOICE DI TERIMA OLEH :</div>
                 <div style={{ fontFamily: SERIF, width: '62%', borderBottom: '1px solid #000', paddingBottom: '1px' }}>TANDA TANGAN</div>
                 <div style={{ fontFamily: SERIF }}>NAMA JELAS</div>
                 <div style={{ fontFamily: SERIF }}>JABATAN</div>
               </div>
               <div>
-                <div style={{ fontWeight: 'bold', marginBottom: sz(96) }}>DI BUAT OLEH :</div>
+                <div style={{ fontWeight: 'bold', marginBottom: tightMargin(96) }}>DI BUAT OLEH :</div>
                 {/* Same font and line as TANDA TANGAN opposite, so the two lines sit level. */}
                 <div style={{ fontFamily: SERIF, width: '75%', borderBottom: '1px solid #000', paddingBottom: '1px' }}>&nbsp;</div>
                 <div style={{ fontFamily: SERIF, width: '75%' }}>
@@ -1736,7 +1871,7 @@ export function InvoicePrintPage() {
             </div>
 
             {/* Who keeps which copy. */}
-            <table style={{ marginTop: tightMargin(10), fontFamily: SERIF, fontSize: `${fontPx - 1}px`, borderCollapse: 'collapse' }}>
+            <table style={{ marginTop: tightMargin(10), fontFamily: SERIF, fontSize: `${sz(PL.footerSize)}px`, borderCollapse: 'collapse' }}>
               <tbody>
                 {[['Asli', 'Client'], ['Copy 1', 'KMA'], ['Copy 2', 'Produksi KMA']].map(([who, copy]) => (
                   <tr key={who}>
@@ -1748,7 +1883,7 @@ export function InvoicePrintPage() {
               </tbody>
             </table>
 
-            <div style={{ textAlign: 'center', marginTop: tightMargin(14), fontSize: `${fontPx - 1.5}px`, fontWeight: 'bold', lineHeight: 1.35 }}>
+            <div style={{ textAlign: 'center', marginTop: tightMargin(14), fontSize: `${sz(PL.footerSize - 0.5)}px`, fontWeight: 'bold', lineHeight: 1.35 }}>
               <div>MUARA KARANG BLOK 9 SELATAN NO. 52 - 55 , JAKARTA UTARA 14450</div>
               <div>TELP. 021.300.253.99 / Hp. 0811.857.372</div>
               <div>Email : fifi67@yahoo.com</div>
@@ -1802,6 +1937,10 @@ export function InvoicePrintPage() {
         }
         .sheet-del { position: absolute; left: -22px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; border-radius: 999px; border: 1px solid #fecaca; background: #fff; color: #dc2626; font-size: 13px; line-height: 15px; cursor: pointer; opacity: 0; }
         .sheet-row:hover .sheet-del, .sheet-row:focus-within .sheet-del, .sheet-del:focus { opacity: 1; }
+        .sheet-fold { position: absolute; left: 1px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; line-height: 14px; padding: 0; border: 0; background: transparent; color: #64748b; font-size: 10px; cursor: pointer; border-radius: 3px; }
+        .sheet-fold:hover, .sheet-fold:focus-visible { background: #e2e8f0; color: #0f172a; outline: none; }
+        .col-resize { position: absolute; top: 0; bottom: 0; width: 8px; cursor: col-resize; z-index: 2; touch-action: none; }
+        .col-resize:hover { background: rgba(37, 99, 235, 0.35); }
         @media (pointer: coarse) { .sheet-del { opacity: 0.8; } }
 
         @media print {
@@ -1826,7 +1965,7 @@ export function InvoicePrintPage() {
             /* Page X of Y: counter(pages) only works in an @page margin box. */
             @bottom-left {
               content: "Page " counter(page) " of " counter(pages);
-              font-family: Arial, sans-serif;
+              font-family: ${fonts.main};
               font-size: 10px;
               color: #94a3b8;
               /* Inset like #invoice's 20mm side padding, centered in the footer band. */
@@ -1836,7 +1975,7 @@ export function InvoicePrintPage() {
             /* Invoice number and client, on the same footer line. */
             @bottom-right {
               content: "INVOICE ${escapeCssString(invoice.id)} — ${escapeCssString(invoice.kepada_yth)}";
-              font-family: Arial, sans-serif;
+              font-family: ${fonts.main};
               font-size: 10px;
               color: #94a3b8;
               /* Inset 20mm from the right, like the left half. */

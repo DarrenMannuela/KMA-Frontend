@@ -30,9 +30,11 @@ export function useScaleToFit(active: boolean) {
       setScale(natural.width > 0 && available > 0 ? Math.min(1, available / natural.width) : 1)
     }
     recompute()
-    // Rescale when the document's size changes (rotation, page breaks).
+    // Rescale when the document's size changes (rotation, page breaks) or
+    // the room for it does (a side panel opening beside it).
     const ro = new ResizeObserver(recompute)
     ro.observe(doc)
+    ro.observe(container)
     window.addEventListener('resize', recompute)
     return () => {
       ro.disconnect()

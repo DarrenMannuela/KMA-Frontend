@@ -464,6 +464,12 @@
     "fitOnTitle": "Perkecil invoice secukupnya agar tercetak di satu halaman",
     "fitOffTitle": "Cetak ukuran penuh (invoice panjang bisa lebih dari satu halaman)",
     "fitOffBreaks": "(nonaktif selama ada pemisah halaman manual)",
-    "tooLong": "Terlalu panjang untuk satu halaman meski 70%: tercetak di beberapa halaman"
+    "tooLong": "Terlalu panjang untuk satu halaman meski 70%: tercetak di beberapa halaman",
+    "fold": "Lipat ukuran jadi satu baris",
+    "unfold": "Tampilkan tiap ukuran",
+    "foldAll": "Lipat semua barang",
+    "unfoldAll": "Buka semua barang",
+    "resizeHint": "Seret untuk mengubah lebar kolom; klik dua kali untuk menyesuaikan dengan isinya",
+    "resetWidths": "Kembalikan lebar kolom"
   }
 }

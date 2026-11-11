@@ -1,0 +1,45 @@
+{
+  "printLayout": {
+    "button": "Layout",
+    "print": "Print / Save PDF",
+    "title": "Layout: {{doc}}",
+    "doc": {
+      "invoice": "Invoice",
+      "kwitansi": "Kwitansi",
+      "sj": "Surat Jalan",
+      "do": "Delivery Order"
+    },
+    "sharedNote": "Saved for everyone: every computer prints this document the same way.",
+    "font": "Font",
+    "fontDefault": "Document's own (Arial)",
+    "fontDefaultInvoice": "Document's own (Arial, Cambria for the title and notes)",
+    "logo": "Logo",
+    "logoLeft": "Left",
+    "logoCenter": "Centre",
+    "logoRight": "Right",
+    "logoNone": "Hide",
+    "logoHint": {
+      "invoice": "Left, centre or right of the page, above the company name. Hiding it keeps the name.",
+      "kwitansi": "Centre puts it above KWITANSI. Hiding it keeps the company name.",
+      "sj": "Beside the company name, or centred above it.",
+      "do": "Beside the company name, or centred above it. The Rekap page follows it too."
+    },
+    "logoSize": "Logo size",
+    "textSizes": "Text sizes",
+    "companySize": "Company name",
+    "titleSize": "Document title",
+    "kwitansiTitleHint": "KWITANSI and the amount (RP.)",
+    "detailsSize": "Details (client, dates, numbers)",
+    "bodySize": "Table and text",
+    "footerSize": "Signatures and notes",
+    "spacing": "Spacing",
+    "spacingHint": "The gaps between the parts of the page.",
+    "reset": "Reset to default",
+    "discard": "Discard changes",
+    "save": "Save for everyone",
+    "saving": "Saving…",
+    "saved": "Layout saved: every computer now prints with it.",
+    "unsaved": "Not saved yet. Only this page shows these changes, and they'll be on the paper if you print now.",
+    "unsavedShort": "Unsaved changes"
+  }
+}

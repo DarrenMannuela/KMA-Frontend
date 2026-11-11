@@ -318,5 +318,12 @@
     "chipChange": "{{design}} — klik untuk mengganti",
     "pickDesign_other": "Pilih desain ({{count}})",
     "changeDesign": "Ganti desain"
+  },
+  "errorScreen": {
+    "title": "Terjadi kesalahan",
+    "body": "Halaman ini mengalami kesalahan yang tidak terduga. Data Anda aman — coba muat ulang.",
+    "reload": "Muat ulang halaman",
+    "home": "Ke Dasbor",
+    "details": "Detail teknis"
   }
 }

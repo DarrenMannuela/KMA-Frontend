@@ -472,6 +472,12 @@
     "fitOnTitle": "Scale the invoice down just enough to print on one page",
     "fitOffTitle": "Print at full size (a long invoice may take more pages)",
     "fitOffBreaks": "(off while a page break is placed by hand)",
-    "tooLong": "Too long for one page even at 70%: prints on more pages"
+    "tooLong": "Too long for one page even at 70%: prints on more pages",
+    "fold": "Fold the sizes into one line",
+    "unfold": "Show each size",
+    "foldAll": "Fold all items",
+    "unfoldAll": "Unfold all items",
+    "resizeHint": "Drag to resize the column; double-click to fit it to its contents",
+    "resetWidths": "Reset column widths"
   }
 }

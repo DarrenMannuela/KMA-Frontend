@@ -1,0 +1,45 @@
+{
+  "printLayout": {
+    "button": "Tata letak",
+    "print": "Cetak / Simpan PDF",
+    "title": "Tata letak: {{doc}}",
+    "doc": {
+      "invoice": "Invoice",
+      "kwitansi": "Kwitansi",
+      "sj": "Surat Jalan",
+      "do": "Delivery Order"
+    },
+    "sharedNote": "Disimpan untuk semua: setiap komputer mencetak dokumen ini dengan cara yang sama.",
+    "font": "Huruf",
+    "fontDefault": "Bawaan dokumen (Arial)",
+    "fontDefaultInvoice": "Bawaan dokumen (Arial, Cambria untuk judul dan catatan)",
+    "logo": "Logo",
+    "logoLeft": "Kiri",
+    "logoCenter": "Tengah",
+    "logoRight": "Kanan",
+    "logoNone": "Sembunyi",
+    "logoHint": {
+      "invoice": "Di kiri, tengah atau kanan halaman, di atas nama perusahaan. Jika disembunyikan, namanya tetap ada.",
+      "kwitansi": "Tengah menaruhnya di atas KWITANSI. Jika disembunyikan, nama perusahaan tetap ada.",
+      "sj": "Di samping nama perusahaan, atau di tengah di atasnya.",
+      "do": "Di samping nama perusahaan, atau di tengah di atasnya. Halaman Rekap ikut juga."
+    },
+    "logoSize": "Ukuran logo",
+    "textSizes": "Ukuran teks",
+    "companySize": "Nama perusahaan",
+    "titleSize": "Judul dokumen",
+    "kwitansiTitleHint": "KWITANSI dan jumlah uang (RP.)",
+    "detailsSize": "Detail (klien, tanggal, nomor)",
+    "bodySize": "Tabel dan teks",
+    "footerSize": "Tanda tangan dan catatan",
+    "spacing": "Jarak",
+    "spacingHint": "Jarak antar bagian halaman.",
+    "reset": "Kembalikan ke bawaan",
+    "discard": "Batalkan perubahan",
+    "save": "Simpan untuk semua",
+    "saving": "Menyimpan…",
+    "saved": "Tata letak disimpan: semua komputer kini mencetak dengannya.",
+    "unsaved": "Belum disimpan. Perubahan ini hanya tampil di halaman ini, dan ikut tercetak jika Anda mencetak sekarang.",
+    "unsavedShort": "Perubahan belum disimpan"
+  }
+}
