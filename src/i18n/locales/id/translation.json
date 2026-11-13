@@ -501,5 +501,10 @@
     "formatCells": "Format sel",
     "done": "Selesai",
     "tapACell": "Ketuk sel tabel untuk memformatnya, barisnya atau kolomnya."
+  },
+  "invoiceExcel": {
+    "button": "Excel",
+    "title": "Unduh invoice ini sebagai file Excel, dengan tata letak seperti cetakan",
+    "making": "Membuat…"
   }
 }

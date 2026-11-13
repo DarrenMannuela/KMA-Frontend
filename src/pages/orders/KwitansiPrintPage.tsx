@@ -318,7 +318,7 @@ export function KwitansiPrintPage() {
          so it doesn't widen the toolbar. Printing uses the real size. */}
       <div className={`p-3 dock:p-8 print:p-0 overflow-x-auto print:overflow-visible ${layoutOpen ? `${PANEL_ROOM_CLASS} pb-[57vh] lg:pb-8` : ''}`} ref={scaleContainerRef}>
         <div
-          className="scale-wrap"
+          className="scale-wrap mx-auto"
           style={{ width: scaledWidth || undefined, height: scaledHeight || undefined, overflow: 'hidden' }}
         >
         <div

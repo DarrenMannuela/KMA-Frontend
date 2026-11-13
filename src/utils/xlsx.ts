@@ -24,7 +24,7 @@ function crc32(data: Uint8Array): number {
 }
 
 /** A zip of the given files, stored without compression. */
-function zip(files: { name: string; data: Uint8Array }[]): Uint8Array<ArrayBuffer> {
+export function zip(files: { name: string; data: Uint8Array }[]): Uint8Array<ArrayBuffer> {
   const enc = new TextEncoder()
   const chunks: Uint8Array[] = []
   const central: Uint8Array[] = []
@@ -144,12 +144,12 @@ export interface SheetSpec {
   totals?: Record<number, Cell>
 }
 
-const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
+export const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
   // Characters XML 1.0 doesn't allow at all.
   // eslint-disable-next-line no-control-regex -- deliberate: stripping exactly these makes the generated xlsx's XML valid
   .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')
 
-function colName(i: number): string {
+export function colName(i: number): string {
   let s = ''
   for (i++; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + ((i - 1) % 26)) + s
   return s

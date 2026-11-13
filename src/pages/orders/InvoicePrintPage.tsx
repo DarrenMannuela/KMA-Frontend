@@ -8,7 +8,7 @@ import i18n from '@/i18n/config'
 import { friendlyError } from '@/utils/friendlyError'
 import { parseDate } from '@/utils/tableText'
 import type { Invoice, Item } from '@/types'
-import { Receipt, Plus, PackageSearch, X, Rows3, Paintbrush } from 'lucide-react'
+import { Receipt, Plus, PackageSearch, X, Rows3, Paintbrush, FileSpreadsheet } from 'lucide-react'
 import { format } from 'date-fns'
 import { invoicesApi, ordersApi, itemsApi } from '@/api'
 import { formatRp, FormField, ConfirmDialog } from '@/components/ui'
@@ -27,6 +27,8 @@ import { PrintToolbar, ZoomButton } from '@/components/print/PrintToolbar'
 import { usePreviewZoom } from '@/hooks/usePreviewZoom'
 import { printFontStacks } from '@/utils/printLayout'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
+import { downloadBlob } from '@/utils/xlsx'
+import { buildInvoiceXlsx, loadLogo } from './invoiceExcel'
 
 // The five item-table columns with a natural, content-driven width — every
 // one except KETERANGAN, which stays flexible and absorbs whatever width
@@ -365,6 +367,8 @@ export function InvoicePrintPage() {
   const dpPaidLabel = useUppercaseField('LUNAS')
   // A free note beside TOTAL (the Excel's "* khusus"), for this print only.
   const [totalNote, setTotalNote] = useState('')
+  // Making the Excel file (it fetches the logo first).
+  const [excelBusy, setExcelBusy] = useState(false)
   // J/T (due date): filled from invoice.due_date, editable for this printed copy
   // only (e.g. "J/T : SAAT PENGIRIMAN").
   const jatuhTempo = useUppercaseField('')
@@ -1214,6 +1218,44 @@ export function InvoicePrintPage() {
     ? (formatMode && <InvoiceFormatBar variant="panel" target={formatTarget} scope={formatScope} onScope={setFormatScope} {...formatHandlers} onClose={endFormatMode} />)
     : (formatTarget && <InvoiceFormatBar target={formatTarget} scope={formatScope} onScope={setFormatScope} {...formatHandlers} onClose={() => setSelectedCell(null)} />)
 
+  // The print view as an Excel file: the same layout and formatting, with
+  // JUMLAH and the totals as formulas (see invoiceExcel.ts).
+  const downloadExcel = async () => {
+    if (excelBusy) return
+    setExcelBusy(true)
+    try {
+      const startProduksi = invoice.start_produksi
+        ? (/^\d{4}-\d{2}-\d{2}/.test(invoice.start_produksi) ? formatDate(invoice.start_produksi) : invoice.start_produksi.toUpperCase())
+        : ''
+      const blob = buildInvoiceXlsx({
+        invoice,
+        header: {
+          kepada: invoice.kepada_yth, untuk: invoice.untuk ?? '', alamat: invoice.alamat ?? '',
+          telp: invoice.telp ?? '', email: invoice.email ?? '', tanggal: formatDate(invoice.tanggal),
+          po: order?.po_number ?? '', lamaProduksi: (invoice.lama_produksi ?? '').toUpperCase(), mulaiProduksi: startProduksi,
+        },
+        groups, isFolded, extraGapRows, sheet: layout, print: PL, fonts,
+        columnWidths, columnTexts, tableWidthPx, ketMinPx: KETERANGAN_MIN_PX,
+        rowHeightPx: ROW_HEIGHT_PX * PL.bodySize / BASE_FONT_PX,
+        measure: measureTextWidth,
+        totalNote,
+        dp: { show: hasDp, percent: dpPercent, amount: liveDownPayment, paidLabel: invoice.type === 'pelunasan' ? dpPaidLabel.value : null },
+        balance: liveBalanceDue,
+        jatuhTempo: jatuhTempo.value,
+        notes,
+        rekening,
+        signatory: { name: signatoryName.value, title: signatoryTitle.value },
+        logo: await loadLogo(),
+      })
+      const safe = (v: string) => v.replace(/[\\/:*?"<>|]+/g, '-').trim()
+      downloadBlob(blob, `Invoice ${safe(invoice.id)} ${safe(invoice.kepada_yth)}.xlsx`)
+    } catch (e) {
+      toast.error(friendlyError(e as Error))
+    } finally {
+      setExcelBusy(false)
+    }
+  }
+
   // Plain native print; see the multi-page policy at the top.
   const handlePrint = () => {
     window.print()
@@ -1276,6 +1318,16 @@ export function InvoicePrintPage() {
           {hasFormatting && (
             <button type="button" onClick={() => { clearAllFormatting(); setSelectedCell(null) }} className="text-xs text-slate-400 hover:text-slate-600 underline">{t('invoiceFormat.clearAll')}</button>
           )}
+        </div>
+        {/* The print view as an Excel file. */}
+        <div>
+          <button type="button" onClick={downloadExcel} disabled={excelBusy} data-close-tools
+            title={t('invoiceExcel.title')}
+            className={isMobile
+              ? 'btn-secondary !justify-start gap-2'
+              : 'px-2 py-1 rounded text-xs font-medium border bg-white text-slate-500 border-slate-200 hover:border-slate-300 disabled:opacity-50 flex items-center gap-1.5'}>
+            <FileSpreadsheet size={isMobile ? 16 : 13} aria-hidden /> {excelBusy ? t('invoiceExcel.making') : t('invoiceExcel.button')}
+          </button>
         </div>
         {/* Add Row: a toolbar dropdown, so it never pushes the document down. Closed
            only by its own buttons. */}
@@ -1513,7 +1565,7 @@ export function InvoicePrintPage() {
          it to fit) so it doesn't widen the toolbar. Printing uses the real size. */}
       <div className={`p-3 dock:p-8 print:p-0 overflow-x-auto print:overflow-visible ${layoutOpen ? `${PANEL_ROOM_CLASS} pb-[57vh] lg:pb-8` : formatMode ? 'pb-[57vh]' : ''}`} ref={scaleContainerRef}>
         <div
-          className="scale-wrap"
+          className="scale-wrap mx-auto"
           style={{ width: scaledWidth || undefined, height: scaledHeight || undefined, overflow: 'hidden' }}
         >
         <div
