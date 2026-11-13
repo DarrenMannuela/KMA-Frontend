@@ -8,7 +8,7 @@ import i18n from '@/i18n/config'
 import { friendlyError } from '@/utils/friendlyError'
 import { parseDate } from '@/utils/tableText'
 import type { Invoice, Item } from '@/types'
-import { Receipt, Plus, PackageSearch, X, Highlighter, Rows3 } from 'lucide-react'
+import { Receipt, Plus, PackageSearch, X, Rows3, Paintbrush } from 'lucide-react'
 import { format } from 'date-fns'
 import { invoicesApi, ordersApi, itemsApi } from '@/api'
 import { formatRp, FormField, ConfirmDialog } from '@/components/ui'
@@ -19,7 +19,8 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 import { useScaleToFit } from '@/hooks/useScaleToFit'
 import { usePrintLightBody } from '@/hooks/usePrintLightBody'
 import { usePaperFormat, PAPER_FORMATS, type PaperFormat } from '@/utils/PaperFormatStore'
-import { useInvoiceLayout } from '@/utils/InvoiceLayoutStore'
+import { useInvoiceLayout, resolveFormat, type FormatColumn, type FormatScope } from '@/utils/InvoiceLayoutStore'
+import { InvoiceFormatBar, type FormatTarget } from './InvoiceFormatBar'
 import { usePrintLayout } from '@/hooks/usePrintLayout'
 import { PrintLayoutPanel, PANEL_ROOM_CLASS } from '@/components/print/PrintLayoutPanel'
 import { PrintToolbar, ZoomButton } from '@/components/print/PrintToolbar'
@@ -80,17 +81,6 @@ function measureTextWidth(text: string, font: string): number {
 // which clips its text rather than overflowing.
 const AUTOFIT_PADDING = 4 + 4 + 6
 
-// Muted pastels for the highlight picker (including the D/P vs Pelunasan sage).
-const HIGHLIGHT_PALETTE = [
-  { name: 'Sage',      value: '#d4e6c3' },
-  { name: 'Dusty Blue', value: '#c3d9e6' },
-  { name: 'Wheat',     value: '#e6dcc3' },
-  { name: 'Terracotta', value: '#e6c3c3' },
-  { name: 'Dusty Rose', value: '#e6c3d9' },
-  { name: 'Lavender',  value: '#d9c3e6' },
-  { name: 'Muted Teal', value: '#c3e6da' },
-  { name: 'Warm Gray', value: '#dcdcd4' },
-] as const
 
 // "11 APRIL 2019", as KMA's own invoices write it.
 function formatDate(date: string | Date | null | undefined) {
@@ -397,26 +387,16 @@ export function InvoicePrintPage() {
   const addNote = () => {
     setNotes(prev => [...prev, ''])
   }
-  const [highlightChoice, setHighlightChoice] = useState<string>(HIGHLIGHT_PALETTE[0].value)
-  // Row colors by row key. Clicking a row with the selected swatch paints it;
-  // clicking again clears it. The header follows highlightChoice.
-  const [rowHighlights, setRowHighlights] = useState<Record<string, string>>({})
-  // Rows only take highlight clicks while the Highlight tool is on; existing
-  // highlights stay visible either way.
-  const [highlightToolActive, setHighlightToolActive] = useState(false)
-  const toggleRowHighlight = (key: string) => {
-    setRowHighlights(prev => {
-      const next = { ...prev }
-      if (next[key] === highlightChoice) delete next[key]
-      else next[key] = highlightChoice
-      return next
-    })
-  }
-  // Click handling and cursor for a highlightable row, in one place.
-  const highlightRowHandlers = (key: string) => ({
-    onClick: () => { if (highlightToolActive) toggleRowHighlight(key) },
-    className: highlightToolActive ? 'cursor-pointer print:cursor-default' : undefined,
-  })
+  // The selected cell of the item table, for the Format bar: what's
+  // formatted is it, its whole row or its whole column (formatScope).
+  const [selectedCell, setSelectedCell] = useState<{ row: string; col: FormatColumn } | null>(null)
+  const [formatScope, setFormatScope] = useState<FormatScope>('cell')
+  // Phones: Format cells mode — a tap selects a cell (instead of starting to
+  // type in it) and the format panel sits at the bottom until Done.
+  const [formatMode, setFormatMode] = useState(false)
+  // How the selected cell looks now (read from the page, so it includes the
+  // invoice's own defaults, like a bold KETERANGAN), for the bar's buttons.
+  const [selectedLook, setSelectedLook] = useState<{ bold: boolean; italic: boolean; align: 'left' | 'center' | 'right' }>({ bold: false, italic: false, align: 'left' })
 
   // Compact: tightens row height, font size, and the gaps between blocks, so
   // an invoice sitting just over one page — mostly whitespace, not real
@@ -541,7 +521,38 @@ export function InvoicePrintPage() {
   // this isn't a shared preference the way column widths are.
   const [paperFormat, setPaperFormat] = usePaperFormat(invoice?.id)
   // Column widths dragged by hand and items folded to one line, per invoice.
-  const { layout, setWidth, resetWidths, toggleFold, setFolded } = useInvoiceLayout(invoice?.id)
+  const { layout, setWidth, resetWidths, toggleFold, setFolded, setFormat, clearFormat, clearAllFormatting, hasFormatting } = useInvoiceLayout(invoice?.id)
+  // The selected cell's look, read from the page after each render.
+  useLayoutEffect(() => {
+    if (!selectedCell) return
+    const td = document.querySelector<HTMLElement>('#invoice [data-sel="cell"]')
+    if (!td) return
+    const cs = getComputedStyle(td.querySelector<HTMLElement>('.sheet-cell') ?? td)
+    const align = cs.textAlign === 'center' ? 'center' : cs.textAlign === 'right' || cs.textAlign === 'end' ? 'right' : 'left'
+    const next = { bold: Number(cs.fontWeight) >= 600, italic: cs.fontStyle === 'italic', align } as const
+    setSelectedLook(prev => (prev.bold === next.bold && prev.italic === next.italic && prev.align === next.align ? prev : next))
+  }, [selectedCell, layout, formatScope])
+  // Ctrl/⌘+B and +I format the selection, as in Excel; Esc or a click away
+  // from the table and the bar lets go of it.
+  useEffect(() => {
+    if (!selectedCell) return
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return
+      const k = e.key.toLowerCase()
+      if (k !== 'b' && k !== 'i') return
+      e.preventDefault()
+      setFormat(formatScope, selectedCell.row, selectedCell.col, k === 'b' ? { bold: !selectedLook.bold } : { italic: !selectedLook.italic })
+    }
+    const onDown = (e: MouseEvent) => {
+      const el = e.target as HTMLElement
+      if (el.closest('#invoice table') || el.closest('[data-format-bar]') || el.closest('[role="dialog"]') || el.closest('[data-print-toolbar]')) return
+      if (formatMode) return
+      setSelectedCell(null)
+    }
+    window.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onDown)
+    return () => { window.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onDown) }
+  }, [selectedCell, formatScope, selectedLook, setFormat, formatMode])
   const isFolded = (name: string) => layout.folded.includes(name)
   const { widthMm: pageWidthMm, heightMm: pageHeightMm } = PAPER_FORMATS[paperFormat]
   const pageHeightPx = pageHeightMm * MM_TO_PX
@@ -1137,6 +1148,72 @@ export function InvoicePrintPage() {
   // Running row number for the table's cells, counted as it renders.
   const sheetRow = { n: 0 }
 
+  // A table cell's style with its formatting (column, then row, then the
+  // cell's own; see InvoiceLayoutStore), and selecting it for the Format
+  // bar. The editable text inside follows the cell's alignment and weight
+  // through the data-fmt-* attributes (see the sheet CSS below).
+  const cellProps = (rowKey: string, col: FormatColumn, base: React.CSSProperties) => {
+    const f = resolveFormat(layout, rowKey, col)
+    const isSel = selectedCell?.row === rowKey && selectedCell.col === col
+    const inScope = !!selectedCell && (formatScope === 'row' ? selectedCell.row === rowKey : formatScope === 'column' ? selectedCell.col === col : isSel)
+    return {
+      style: {
+        ...base,
+        ...(f.align ? { textAlign: f.align } : {}),
+        ...(f.bold != null ? { fontWeight: f.bold ? 'bold' : 'normal' } : {}),
+        ...(f.italic ? { fontStyle: 'italic' as const } : {}),
+        ...(f.fill ? { background: f.fill } : {}),
+        ...(f.height ? { height: `${sz(f.height)}px` } : {}),
+      },
+      'data-fmt-align': f.align ? '' : undefined,
+      'data-fmt-bold': f.bold != null ? '' : undefined,
+      'data-sel': inScope ? (isSel ? 'cell' : 'scope') : undefined,
+      onMouseDownCapture: () => setSelectedCell({ row: rowKey, col }),
+      onFocusCapture: () => setSelectedCell({ row: rowKey, col }),
+    }
+  }
+
+  // The Format bar, while a cell is selected.
+  const baseRowHeight = Math.round(ROW_HEIGHT_PX * PL.bodySize / BASE_FONT_PX)
+  const COLUMN_NAMES: Record<FormatColumn, string> = { no: 'ITEM', ket: 'KETERANGAN', size: 'SIZE', qty: 'QTY', hargaNet: 'HARGA NET', jumlah: 'JUMLAH' }
+  const rowName = (rowKey: string) => {
+    if (rowKey === 'head') return t('invoiceFormat.headerRow')
+    if (rowKey === 'total') return 'TOTAL'
+    if (rowKey === 'dp') return 'D/P'
+    if (rowKey === 'pelunasan') return 'PELUNASAN'
+    if (rowKey.startsWith('item-')) {
+      const it = items.find(i => `item-${i.id}` === rowKey)
+      return it ? `${it.item_name}${it.size ? ` ${it.size}` : ''}` : ''
+    }
+    if (rowKey.startsWith('fold-')) return rowKey.slice(5)
+    return t('invoiceFormat.blankRow')
+  }
+  const formatTarget: FormatTarget | null = selectedCell && (() => {
+    const { row, col } = selectedCell
+    const scopeFormat = formatScope === 'column' ? layout.cols[col] : formatScope === 'row' ? layout.rows[row] : layout.cells[`${row}|${col}`]
+    return {
+      where: formatScope === 'column' ? COLUMN_NAMES[col] : formatScope === 'row' ? rowName(row) : `${COLUMN_NAMES[col]} · ${rowName(row)}`,
+      current: selectedLook,
+      fill: scopeFormat?.fill,
+      height: layout.rows[row]?.height ?? baseRowHeight,
+      baseHeight: baseRowHeight,
+    }
+  })()
+  const formatHandlers = selectedCell ? {
+    onBold: () => setFormat(formatScope, selectedCell.row, selectedCell.col, { bold: !selectedLook.bold }),
+    onItalic: () => setFormat(formatScope, selectedCell.row, selectedCell.col, { italic: !selectedLook.italic }),
+    onAlign: (a: 'left' | 'center' | 'right') => setFormat(formatScope, selectedCell.row, selectedCell.col, { align: a }),
+    onFill: (c: string | null) => setFormat(formatScope, selectedCell.row, selectedCell.col, { fill: c ?? undefined }),
+    onHeight: (h: number | null) => setFormat('row', selectedCell.row, selectedCell.col, { height: h ?? undefined }),
+    onClear: () => clearFormat(formatScope, selectedCell.row, selectedCell.col),
+  } : { onBold: () => {}, onItalic: () => {}, onAlign: () => {}, onFill: () => {}, onHeight: () => {}, onClear: () => {} }
+  const endFormatMode = () => { setFormatMode(false); setSelectedCell(null) }
+  // Computer: the bar under the toolbar while a cell is selected. Phone: the
+  // panel at the bottom while Format cells is on.
+  const formatBar = isMobile
+    ? (formatMode && <InvoiceFormatBar variant="panel" target={formatTarget} scope={formatScope} onScope={setFormatScope} {...formatHandlers} onClose={endFormatMode} />)
+    : (formatTarget && <InvoiceFormatBar target={formatTarget} scope={formatScope} onScope={setFormatScope} {...formatHandlers} onClose={() => setSelectedCell(null)} />)
+
   // Plain native print; see the multi-page policy at the top.
   const handlePrint = () => {
     window.print()
@@ -1160,6 +1237,14 @@ export function InvoicePrintPage() {
           )}
         </>}
         tools={<>
+        {isMobile && (
+          <div>
+            <button type="button" data-close-tools onClick={() => { setFormatMode(true); setSelectedCell(null) }}
+              className="btn-secondary !justify-start gap-2">
+              <Paintbrush size={16} aria-hidden /> {t('invoiceFormat.formatCells')}
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-1.5">
           {/* Fit to 1 page (on by default): scales the whole invoice down just
              enough to fit one page, never below 70%. See fitOnePage. */}
@@ -1188,42 +1273,8 @@ export function InvoicePrintPage() {
           {Object.keys(layout.widths).length > 0 && (
             <button type="button" onClick={resetWidths} className="text-xs text-slate-400 hover:text-slate-600 underline">{t('invoiceSheet.resetWidths')}</button>
           )}
-          {/* On/off like the page-break pills. */}
-          <button
-            type="button"
-            onClick={() => setHighlightToolActive(a => !a)}
-            title={highlightToolActive ? 'Turn off row highlighting' : 'Highlight rows'}
-            className={`px-2 py-1 rounded text-xs font-medium border transition-colors flex items-center gap-1.5 ${
-              highlightToolActive
-                ? 'bg-navy-900 text-white border-navy-900'
-                : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
-            }`}
-          >
-            <Highlighter size={13} /> Highlight
-          </button>
-          {/* Swatches only while the tool is on. */}
-          {highlightToolActive && HIGHLIGHT_PALETTE.map(c => (
-            <button
-              key={c.value}
-              type="button"
-              onClick={() => setHighlightChoice(c.value)}
-              title={c.name}
-              aria-label={c.name}
-              className="w-10 h-10 !min-h-0 dock:w-5 dock:h-5 rounded-full shrink-0"
-              style={{
-                background: c.value,
-                border: highlightChoice === c.value ? '2px solid #1e293b' : '1px solid #cbd5e1',
-              }}
-            />
-          ))}
-          {Object.keys(rowHighlights).length > 0 && (
-            <button
-              type="button"
-              onClick={() => setRowHighlights({})}
-              className="text-xs text-slate-400 hover:text-slate-600 underline ml-1"
-            >
-              Clear
-            </button>
+          {hasFormatting && (
+            <button type="button" onClick={() => { clearAllFormatting(); setSelectedCell(null) }} className="text-xs text-slate-400 hover:text-slate-600 underline">{t('invoiceFormat.clearAll')}</button>
           )}
         </div>
         {/* Add Row: a toolbar dropdown, so it never pushes the document down. Closed
@@ -1427,7 +1478,7 @@ export function InvoicePrintPage() {
           <Receipt size={14} /> Kwitansi
         </button>
         </>}
-        below={groupNames.length > 1 ? (
+        below={<>{!isMobile && formatBar}{groupNames.length > 1 ? (
         <div className="print:hidden bg-white border-b border-slate-200 px-6 py-2 flex items-center gap-1.5 flex-wrap">
           <span className="text-xs text-slate-400 mr-0.5">Start a new page before:</span>
           {groupNames.map(name => (
@@ -1454,13 +1505,13 @@ export function InvoicePrintPage() {
             </button>
           )}
         </div>
-        ) : undefined}
+        ) : null}</>}
       />
       <PrintLayoutPanel docType="invoice" state={printLayout} open={layoutOpen} onClose={() => setLayoutOpen(false)} />
 
       {/* The page is a fixed physical width: it scrolls here (and .scale-wrap shrinks
          it to fit) so it doesn't widen the toolbar. Printing uses the real size. */}
-      <div className={`p-3 dock:p-8 print:p-0 overflow-x-auto print:overflow-visible ${layoutOpen ? `${PANEL_ROOM_CLASS} pb-[57vh] lg:pb-8` : ''}`} ref={scaleContainerRef}>
+      <div className={`p-3 dock:p-8 print:p-0 overflow-x-auto print:overflow-visible ${layoutOpen ? `${PANEL_ROOM_CLASS} pb-[57vh] lg:pb-8` : formatMode ? 'pb-[57vh]' : ''}`} ref={scaleContainerRef}>
         <div
           className="scale-wrap"
           style={{ width: scaledWidth || undefined, height: scaledHeight || undefined, overflow: 'hidden' }}
@@ -1571,17 +1622,21 @@ export function InvoicePrintPage() {
           {/* Items table: black outer frame and column lines, light row lines, an
               orange double rule under the heading, a double line to close it.
               table-layout fixed makes the auto-fit <th> widths authoritative. */}
-          <table onPaste={onSheetPaste} style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0', fontSize: `${fontPx}px`, lineHeight: 1.2, tableLayout: 'fixed', border: FRAME, borderBottom: '3px double #000' }}>
+          <table onPaste={onSheetPaste}
+            // Format cells mode (phone): a tap only selects the cell (see
+            // cellProps); it doesn't start typing, fold an item or delete a line.
+            onClickCapture={formatMode ? e => { e.stopPropagation(); e.preventDefault() } : undefined}
+            style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0', fontSize: `${fontPx}px`, lineHeight: 1.2, tableLayout: 'fixed', border: FRAME, borderBottom: '3px double #000' }}>
             <thead ref={theadRef}>
               <tr>
-                <th style={{ ...headCell, width: `${columnWidths.no}px` }}>ITEM{resizeHandle('no', 'right')}</th>
+                <th {...cellProps('head', 'no', { ...headCell, width: `${columnWidths.no}px` })}>ITEM{resizeHandle('no', 'right')}</th>
                 {/* KETERANGAN takes the remaining width and may wrap (long item names). */}
-                <th style={headCell}>KETERANGAN</th>
-                <th style={{ ...headCell, width: `${columnWidths.size}px` }}>SIZE{resizeHandle('size', 'left')}</th>
-                <th style={{ ...headCell, width: `${columnWidths.qty}px` }}>QTY / SET{resizeHandle('qty', 'left')}</th>
+                <th {...cellProps('head', 'ket', headCell)}>KETERANGAN</th>
+                <th {...cellProps('head', 'size', { ...headCell, width: `${columnWidths.size}px` })}>SIZE{resizeHandle('size', 'left')}</th>
+                <th {...cellProps('head', 'qty', { ...headCell, width: `${columnWidths.qty}px` })}>QTY / SET{resizeHandle('qty', 'left')}</th>
                 {/* Fitted to the longest amount; no ellipsis, so a sizing bug would show. */}
-                <th style={{ ...headCell, width: `${columnWidths.hargaNet}px` }}>HARGA NET / PCS{resizeHandle('hargaNet', 'left')}</th>
-                <th style={{ ...headCell, width: `${columnWidths.jumlah}px` }}>JUMLAH (Rp){resizeHandle('jumlah', 'left')}</th>
+                <th {...cellProps('head', 'hargaNet', { ...headCell, width: `${columnWidths.hargaNet}px` })}>HARGA NET / PCS{resizeHandle('hargaNet', 'left')}</th>
+                <th {...cellProps('head', 'jumlah', { ...headCell, width: `${columnWidths.jumlah}px` })}>JUMLAH (Rp){resizeHandle('jumlah', 'left')}</th>
               </tr>
             </thead>
 
@@ -1643,44 +1698,43 @@ export function InvoicePrintPage() {
                       const sum = group.rows.reduce((n, i) => n + i.sub_total, 0)
                       const prices = [...new Set(group.rows.map(i => i.price))].sort((a, b) => a - b)
                       return (
-                        <tr key={key} {...highlightRowHandlers(key)} style={{ background: rowHighlights[key] }} className="sheet-row">
-                          <td style={{ ...bodyCell, textAlign: 'center', position: 'relative' }}>
+                        <tr key={key} className="sheet-row">
+                          <td {...cellProps(key, 'no', { ...bodyCell, textAlign: 'center', position: 'relative' })}>
                             {groupIdx + 1}
                             {foldButton(group.name)}
                           </td>
-                          <td style={{ ...bodyCell, whiteSpace: 'normal' }}>
+                          <td {...cellProps(key, 'ket', { ...bodyCell, whiteSpace: 'normal' })}>
                             <SheetCell value={group.name.toUpperCase()} onSave={v => saveItemCell(group.rows[0], 'name', v, group.rows)} align="center" bold cellRef={sheetRef(r, 0)} onMove={sheetMove(r, 0)} />
                           </td>
-                          <td style={{ ...bodyCell, textAlign: 'center', whiteSpace: 'normal' }}>{group.rows.map(i => i.size || '-').join(', ')}</td>
-                          <td style={{ ...bodyCell, textAlign: 'right' }}>{num(qty)}</td>
-                          <td style={{ ...bodyCell, textAlign: 'right', whiteSpace: prices.length > 1 ? 'normal' : 'nowrap' }}>
+                          <td {...cellProps(key, 'size', { ...bodyCell, textAlign: 'center', whiteSpace: 'normal' })}>{group.rows.map(i => i.size || '-').join(', ')}</td>
+                          <td {...cellProps(key, 'qty', { ...bodyCell, textAlign: 'right' })}>{num(qty)}</td>
+                          <td {...cellProps(key, 'hargaNet', { ...bodyCell, textAlign: 'right', whiteSpace: prices.length > 1 ? 'normal' : 'nowrap' })}>
                             {prices.length === 1
                               ? <SheetCell value={prices[0]} numeric onSave={v => saveGroupPrice(group.rows, v)} align="right" cellRef={sheetRef(r, 3)} onMove={sheetMove(r, 3)} />
                               : `${num(prices[0])} – ${num(prices[prices.length - 1])}`}
                           </td>
-                          <td style={{ ...bodyCell, textAlign: 'right' }}>{num(sum)}</td>
+                          <td {...cellProps(key, 'jumlah', { ...bodyCell, textAlign: 'right' })}>{num(sum)}</td>
                         </tr>
                       )
                     })() : group.rows.map((item, rowIdx) => {
                       const key = `item-${item.id}`
-                      const bg = rowHighlights[key]
                       const r = sheetRow.n++
                       return (
-                        <tr key={key} {...highlightRowHandlers(key)} style={{ background: bg }} className="sheet-row">
-                          <td style={{ ...bodyCell, textAlign: 'center', position: 'relative' }}>
+                        <tr key={key} className="sheet-row">
+                          <td {...cellProps(key, 'no', { ...bodyCell, textAlign: 'center', position: 'relative' })}>
                             {rowIdx === 0 ? groupIdx + 1 : ''}
                             {rowIdx === 0 && group.rows.length > 1 && foldButton(group.name)}
                             {/* Delete this line (screen only, shows on hover or focus). */}
                             <button type="button" className="sheet-del print:hidden" title={t('invoiceSheet.deleteRow')} aria-label={t('invoiceSheet.deleteRowNamed', { name: `${item.item_name} ${item.size ?? ''}`.trim() })}
                               onClick={e => { e.stopPropagation(); setConfirmDeleteItem(item) }}>×</button>
                           </td>
-                          <td style={{ ...bodyCell, whiteSpace: 'normal' }}>
+                          <td {...cellProps(key, 'ket', { ...bodyCell, whiteSpace: 'normal' })}>
                             <SheetCell value={rowIdx === 0 ? item.item_name.toUpperCase() : ''} onSave={v => saveItemCell(item, 'name', v, rowIdx === 0 ? group.rows : null)} align="center" bold cellRef={sheetRef(r, 0)} onMove={sheetMove(r, 0)} />
                           </td>
-                          <td style={{ ...bodyCell, textAlign: 'center' }}><SheetCell value={item.size ?? ''} onSave={v => saveItemCell(item, 'size', v, null)} align="center" placeholder="-" cellRef={sheetRef(r, 1)} onMove={sheetMove(r, 1)} /></td>
-                          <td style={{ ...bodyCell, textAlign: 'right' }}><SheetCell value={item.amount} numeric onSave={v => saveItemCell(item, 'qty', v, null)} align="right" cellRef={sheetRef(r, 2)} onMove={sheetMove(r, 2)} /></td>
-                          <td style={{ ...bodyCell, textAlign: 'right' }}><SheetCell value={item.price} numeric onSave={v => saveItemCell(item, 'price', v, null)} align="right" cellRef={sheetRef(r, 3)} onMove={sheetMove(r, 3)} /></td>
-                          <td style={{ ...bodyCell, textAlign: 'right' }}>{num(item.sub_total)}</td>
+                          <td {...cellProps(key, 'size', { ...bodyCell, textAlign: 'center' })}><SheetCell value={item.size ?? ''} onSave={v => saveItemCell(item, 'size', v, null)} align="center" placeholder="-" cellRef={sheetRef(r, 1)} onMove={sheetMove(r, 1)} /></td>
+                          <td {...cellProps(key, 'qty', { ...bodyCell, textAlign: 'right' })}><SheetCell value={item.amount} numeric onSave={v => saveItemCell(item, 'qty', v, null)} align="right" cellRef={sheetRef(r, 2)} onMove={sheetMove(r, 2)} /></td>
+                          <td {...cellProps(key, 'hargaNet', { ...bodyCell, textAlign: 'right' })}><SheetCell value={item.price} numeric onSave={v => saveItemCell(item, 'price', v, null)} align="right" cellRef={sheetRef(r, 3)} onMove={sheetMove(r, 3)} /></td>
+                          <td {...cellProps(key, 'jumlah', { ...bodyCell, textAlign: 'right' })}>{num(item.sub_total)}</td>
                         </tr>
                       )
                     })}
@@ -1692,18 +1746,18 @@ export function InvoicePrintPage() {
                       return Array.from({ length: totalGapRows }, (_, gapIdx) => {
                         const key = `gap-${group.name}-${gapIdx}`
                         const isLastGapRow = gapIdx === totalGapRows - 1
-                        const cellStyle = { ...bodyCell, background: rowHighlights[key] }
+                        const cellStyle = bodyCell
                         const r = sheetRow.n++
                         // Typing here adds a line: a new size of the item above,
                         // or a new item when a KETERANGAN is typed.
                         return (
-                          <tr key={key} {...highlightRowHandlers(key)}>
-                            <td style={cellStyle} />
-                            <td style={cellStyle}><SheetCell value="" onSave={v => saveBlankCell(null, 'name', v)} align="center" bold placeholder={gapIdx === 0 ? t('invoiceSheet.newItem') : ''} cellRef={sheetRef(r, 0)} onMove={sheetMove(r, 0)} /></td>
-                            <td style={{ ...cellStyle, textAlign: 'center' }}><SheetCell value="" onSave={v => saveBlankCell(group.name, 'size', v)} align="center" placeholder={gapIdx === 0 ? t('invoiceSheet.newSize') : ''} cellRef={sheetRef(r, 1)} onMove={sheetMove(r, 1)} /></td>
-                            <td style={cellStyle}><SheetCell value="" numeric onSave={v => saveBlankCell(group.name, 'qty', v)} align="right" cellRef={sheetRef(r, 2)} onMove={sheetMove(r, 2)} /></td>
-                            <td style={cellStyle}><SheetCell value="" numeric onSave={v => saveBlankCell(group.name, 'price', v)} align="right" cellRef={sheetRef(r, 3)} onMove={sheetMove(r, 3)} /></td>
-                            <td style={{ ...cellStyle, textAlign: 'right' }}>
+                          <tr key={key}>
+                            <td {...cellProps(key, 'no', cellStyle)} />
+                            <td {...cellProps(key, 'ket', cellStyle)}><SheetCell value="" onSave={v => saveBlankCell(null, 'name', v)} align="center" bold placeholder={gapIdx === 0 ? t('invoiceSheet.newItem') : ''} cellRef={sheetRef(r, 0)} onMove={sheetMove(r, 0)} /></td>
+                            <td {...cellProps(key, 'size', { ...cellStyle, textAlign: 'center' })}><SheetCell value="" onSave={v => saveBlankCell(group.name, 'size', v)} align="center" placeholder={gapIdx === 0 ? t('invoiceSheet.newSize') : ''} cellRef={sheetRef(r, 1)} onMove={sheetMove(r, 1)} /></td>
+                            <td {...cellProps(key, 'qty', cellStyle)}><SheetCell value="" numeric onSave={v => saveBlankCell(group.name, 'qty', v)} align="right" cellRef={sheetRef(r, 2)} onMove={sheetMove(r, 2)} /></td>
+                            <td {...cellProps(key, 'hargaNet', cellStyle)}><SheetCell value="" numeric onSave={v => saveBlankCell(group.name, 'price', v)} align="right" cellRef={sheetRef(r, 3)} onMove={sheetMove(r, 3)} /></td>
+                            <td {...cellProps(key, 'jumlah', { ...cellStyle, textAlign: 'right' })}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
                                 {isLastGapRow && (
                                   <span className="print:hidden" onClick={e => e.stopPropagation()} style={{ display: 'inline-flex', gap: '3px', marginRight: 'auto' }}>
@@ -1757,35 +1811,35 @@ export function InvoicePrintPage() {
                 beside TOTAL, the LUNAS mark beside a paid D/P, and the payment terms
                 (J/T, or e.g. CASH ON DELIVERY) beside PELUNASAN. */}
             <tbody ref={totalsRef} style={{ pageBreakInside: 'avoid' }}>
-              <tr {...highlightRowHandlers('total')}>
-                <td colSpan={3} style={{ ...openCell, borderTop: LINE }}>
+              <tr>
+                <td colSpan={3} {...cellProps('total', 'ket', { ...openCell, borderTop: LINE })}>
                   <div style={{ paddingLeft: '10px' }}><SheetCell value={totalNote} onSave={setTotalNote} uppercase={false} /></div>
                 </td>
-                <td style={{ ...sumCell, borderTop: LINE, textAlign: 'right', background: rowHighlights['total'] }}>{num(items.reduce((s, i) => s + i.amount, 0))}</td>
-                <td style={{ ...sumCell, borderTop: LINE, textAlign: 'center', background: rowHighlights['total'] }}>TOTAL</td>
-                <td style={{ ...sumCell, borderTop: LINE, textAlign: 'right', background: rowHighlights['total'] }}>{num(invoice.total)}</td>
+                <td {...cellProps('total', 'qty', { ...sumCell, borderTop: LINE, textAlign: 'right' })}>{num(items.reduce((s, i) => s + i.amount, 0))}</td>
+                <td {...cellProps('total', 'hargaNet', { ...sumCell, borderTop: LINE, textAlign: 'center' })}>TOTAL</td>
+                <td {...cellProps('total', 'jumlah', { ...sumCell, borderTop: LINE, textAlign: 'right' })}>{num(invoice.total)}</td>
               </tr>
               {hasDp && (
-                <tr {...highlightRowHandlers('dp')}>
-                  <td colSpan={3} style={openCell} />
-                  <td style={{ ...sumCell, textAlign: 'right', background: rowHighlights['dp'] }}>
+                <tr>
+                  <td colSpan={3} {...cellProps('dp', 'ket', openCell)} />
+                  <td {...cellProps('dp', 'qty', { ...sumCell, textAlign: 'right' })}>
                     {invoice.type === 'pelunasan' && (
                       <span style={{ fontWeight: 'normal' }}><SheetCell value={dpPaidLabel.value} onSave={dpPaidLabel.setValue} align="right" /></span>
                     )}
                   </td>
-                  <td style={{ ...sumCell, fontWeight: 'normal', textAlign: 'center', background: rowHighlights['dp'] }}>D/P - {dpPercent} %</td>
-                  <td style={{ ...sumCell, textAlign: 'right', background: rowHighlights['dp'] }}>
+                  <td {...cellProps('dp', 'hargaNet', { ...sumCell, fontWeight: 'normal', textAlign: 'center' })}>D/P - {dpPercent} %</td>
+                  <td {...cellProps('dp', 'jumlah', { ...sumCell, textAlign: 'right' })}>
                     {/* Already paid on a Pelunasan, so taken off, in brackets. */}
                     {invoice.type === 'pelunasan' ? `(${num(liveDownPayment)})` : num(liveDownPayment)}
                   </td>
                 </tr>
               )}
-              <tr {...highlightRowHandlers('pelunasan')}>
-                <td colSpan={4} style={{ ...openCell, textAlign: 'right' }}>
+              <tr>
+                <td colSpan={4} {...cellProps('pelunasan', 'ket', { ...openCell, textAlign: 'right' })}>
                   <SheetCell value={jatuhTempo.value} onSave={jatuhTempo.setValue} align="right" bold placeholder="J/T : —" />
                 </td>
-                <td style={{ ...sumCell, textAlign: 'center', background: rowHighlights['pelunasan'] }}>PELUNASAN</td>
-                <td style={{ ...sumCell, textAlign: 'right', background: rowHighlights['pelunasan'] }}>
+                <td {...cellProps('pelunasan', 'hargaNet', { ...sumCell, textAlign: 'center' })}>PELUNASAN</td>
+                <td {...cellProps('pelunasan', 'jumlah', { ...sumCell, textAlign: 'right' })}>
                   {/* The balance after discount, live — see liveBalanceDue above. */}
                   {num(liveBalanceDue)}
                 </td>
@@ -1910,7 +1964,8 @@ export function InvoicePrintPage() {
         />
       )}
 
-      <ZoomButton zoom={zoom} hidden={layoutOpen} />
+      <ZoomButton zoom={zoom} hidden={layoutOpen || formatMode} />
+      {isMobile && formatBar}
 
       {/* Print styles */}
       <style>{`
@@ -1925,6 +1980,15 @@ export function InvoicePrintPage() {
         /* The invoice's cells: plain text on paper, Excel-like on screen. */
         .sheet-cell { width: 100%; border: 0; background: transparent; font: inherit; color: inherit; padding: 0; margin: 0; outline: none; }
         .sheet-ph { color: #94a3b8; font-weight: normal; font-style: italic; }
+        /* A formatted cell's editable text takes the cell's alignment and weight. */
+        [data-fmt-align] .sheet-cell { text-align: inherit !important; }
+        [data-fmt-bold] .sheet-cell { font-weight: inherit !important; }
+        @media screen {
+          /* The cell selected for the Format bar, and the row or column it's
+             formatting when that's the scope. */
+          [data-sel="cell"] { outline: 2px solid #3e4f8f; outline-offset: -2px; }
+          [data-sel="scope"] { box-shadow: inset 0 0 0 999px rgba(62, 79, 143, 0.07); }
+        }
         @media screen {
           .sheet-cell:focus { outline: 2px solid #2563eb; outline-offset: 1px; border-radius: 1px; }
           .sheet-editing { background: #fffbe6; }

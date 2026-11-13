@@ -222,8 +222,8 @@ export function OrdersPage() {
       onRetry={refetch}
       searchKeys={['company', 'po_number']}
       columns={[
-        { header: t('orders.columns.orderId'),  key: 'id',         render: r => <span className="id-chip">{r.id}</span> },
-        { header: t('orders.columns.company'),   key: 'company',     edit: { type: 'text', uppercase: true }, render: r => (
+        { header: t('orders.columns.orderId'),  key: 'id', card: 'meta',         render: r => <span className="id-chip">{r.id}</span> },
+        { header: t('orders.columns.company'),   key: 'company', card: 'title',     edit: { type: 'text', uppercase: true }, render: r => (
           // The client link sits beside the name on desktop, where the Client
           // column is left out to keep the table on screen.
           <span className="flex items-center gap-1.5 min-w-[8.5rem]">
@@ -253,9 +253,9 @@ export function OrdersPage() {
             </button>
           ) : <span className="text-slate-400 dark:text-slate-500" title={t('orders.notLinked')}>—</span> },
         { header: t('orders.columns.poNumber'), key: 'po_number',   secondary: true, edit: { type: 'text', uppercase: true, value: r => r.po_number ?? '' }, render: r => <span className="font-mono text-xs whitespace-nowrap">{r.po_number ?? '—'}</span> },
-        { header: t('orders.columns.date'),      key: 'date',        edit: { type: 'date', value: r => r.date ? r.date.slice(0, 10) : '' }, render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
-        { header: t('orders.columns.value'),     key: 'value', render: r => value.get(r.id) ? <span className="font-mono tabular-nums whitespace-nowrap">{formatRp(value.get(r.id)!)}</span> : <span className="text-slate-500 text-xs dark:text-navy-300">{t('orders.noItems')}</span> },
-        { header: t('orders.columns.payment'),   key: 'payment', render: r => {
+        { header: t('orders.columns.date'),      key: 'date', card: 'meta',        edit: { type: 'date', value: r => r.date ? r.date.slice(0, 10) : '' }, render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
+        { header: t('orders.columns.value'),     key: 'value', card: 'amount', render: r => value.get(r.id) ? <span className="font-mono tabular-nums whitespace-nowrap">{formatRp(value.get(r.id)!)}</span> : <span className="text-slate-500 text-xs dark:text-navy-300">{t('orders.noItems')}</span> },
+        { header: t('orders.columns.payment'),   key: 'payment', card: 'badge', render: r => {
             const st = orderPaymentStatus(r.id, invoices)
             return <span className={`badge ${st.className}`}>{st.label}</span>
           } },

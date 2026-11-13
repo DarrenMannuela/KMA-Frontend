@@ -94,10 +94,10 @@ export function SuppliersPage() {
         </button>
       )}
       columns={[
-        { header: t('orders.id'), key: 'id' },
-        { header: t('suppliersArea.name'), key: 'supplier_name',     primary: true, edit: { type: 'text', uppercase: true },
+        { header: t('orders.id'), key: 'id', card: 'hide' },
+        { header: t('suppliersArea.name'), key: 'supplier_name', card: 'title',     primary: true, edit: { type: 'text', uppercase: true },
           render: r => <span className="font-medium text-navy-900 dark:text-slate-100">{r.supplier_name}</span> },
-        { header: t('suppliersArea.category'), key: 'supplier_category', edit: { type: 'select', options: SUPPLIER_CATEGORIES.map(c => ({ value: c, label: CATEGORY_LABELS[c] })) },
+        { header: t('suppliersArea.category'), key: 'supplier_category', card: 'badge', edit: { type: 'select', options: SUPPLIER_CATEGORIES.map(c => ({ value: c, label: CATEGORY_LABELS[c] })) },
           render: r => (
           <span className={`badge ${CATEGORY_BADGE[r.supplier_category] ?? 'badge-slate'}`}>
             {CATEGORY_LABELS[r.supplier_category] ?? r.supplier_category}

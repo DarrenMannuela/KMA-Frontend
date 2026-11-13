@@ -100,11 +100,11 @@ export function InvoiceListPage() {
         </div>
       }
       columns={[
-        { header: t('common.invoiceNo'), key: 'id',
+        { header: t('common.invoiceNo'), key: 'id', card: 'meta',
           render: r => <span className="id-chip font-mono">{r.id}</span> },
         { header: t('common.orderId'), key: 'order_id',          secondary: true,
           render: r => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.order_id}</span> },
-        { header: t('common.client'), key: 'kepada_yth',
+        { header: t('common.client'), key: 'kepada_yth', card: 'title',
           render: r => <span className="font-medium">{r.kepada_yth}</span> },
         { header: t('common.type'), key: 'type',              secondary: true,
           render: r => {
@@ -115,22 +115,26 @@ export function InvoiceListPage() {
               </span>
             )
           }},
-        { header: t('dashboard.amountDue'), key: 'total',
+        { header: t('dashboard.amountDue'), key: 'total', card: 'amount',
           render: r => {
             // The unfiltered list, not filteredData: a Pelunasan's sibling DP
             // invoice may be 'paid' and hidden under the Unpaid filter, but
             // still needs to be found for the live amount (see invoiceAmount).
             const due = invoiceAmount(r, data)
             return (
-              <div>
+              <div className="whitespace-nowrap">
                 <span className="font-mono">{formatRp(due)}</span>
-                <div className="text-[10px] text-slate-400 dark:text-slate-500">{t('invoiceList.ofTotal', { amount: formatRp(r.total) })}</div>
+                {/* The total only when it differs from what's due (a DP or
+                    Pelunasan is part of it); a full invoice's would repeat it. */}
+                {due !== r.total && <div className="text-[10px] text-slate-400 dark:text-slate-500">{t('invoiceList.ofTotal', { amount: formatRp(r.total) })}</div>}
               </div>
             )
           }},
-        { header: t('common.date'), key: 'tanggal',
+        { header: t('common.date'), key: 'tanggal', card: 'meta',
           render: r => r.tanggal ? <span className="whitespace-nowrap">{format(new Date(r.tanggal), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
-        { header: t('common.status'), key: 'status',
+        { header: t('common.status'), key: 'status', card: 'badge',
+          // The card shows a plain badge; marking paid is in its ⋯ details.
+          cardRender: r => <span className={`badge ${statusBadge(r)}`}>{r.status === 'paid' ? t('common.paid') : isPastDue(r) ? t('dashboardKpi.paymentStatus.overdue') : t('common.unpaid')}</span>,
           render: r => (
             <button
               type="button"

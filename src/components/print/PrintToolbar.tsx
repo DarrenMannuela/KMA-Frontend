@@ -92,8 +92,9 @@ function ToolsSheet({ children, onClose }: { children: React.ReactNode; onClose:
           <h2 className="text-sm font-semibold text-navy-900">{t('printToolbar.tools')}</h2>
           <button onClick={onClose} className="btn-ghost !px-0" aria-label={t('common.close')}><X size={18} /></button>
         </div>
-        {/* The page's own controls, each a full-size row to tap. */}
-        <div className="px-4 pt-3 flex flex-wrap items-center gap-2 [&_button]:min-h-[2.75rem] [&_button]:text-sm [&_select]:min-h-[2.75rem] [&>div]:w-full [&>div]:flex-wrap">
+        {/* The page's own controls, each a full-size row to tap. One marked
+            data-close-tools closes the sheet as it does its job. */}
+        <div onClick={e => { if ((e.target as HTMLElement).closest('[data-close-tools]')) onClose() }} className="px-4 pt-3 flex flex-wrap items-center gap-2 [&_button]:min-h-[2.75rem] [&_button]:text-sm [&_select]:min-h-[2.75rem] [&>div]:w-full [&>div]:flex-wrap">
           {children}
         </div>
       </div>

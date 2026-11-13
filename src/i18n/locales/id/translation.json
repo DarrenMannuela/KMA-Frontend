@@ -475,5 +475,31 @@
   },
   "ordersTabs": {
     "sectionTitle": "Bagian pesanan"
+  },
+  "invoiceFormat": {
+    "title": "Format",
+    "cell": "Sel",
+    "row": "Baris",
+    "column": "Kolom",
+    "applyTo": "Terapkan ke",
+    "bold": "Tebal",
+    "italic": "Miring",
+    "align": "Perataan",
+    "alignLeft": "Rata kiri",
+    "alignCenter": "Tengah",
+    "alignRight": "Rata kanan",
+    "fill": "Warna",
+    "noFill": "Tanpa warna",
+    "rowHeight": "Tinggi baris",
+    "shorter": "Baris lebih pendek",
+    "taller": "Baris lebih tinggi",
+    "clear": "Hapus",
+    "clearTitle": "Hapus format sel, baris atau kolom ini",
+    "clearAll": "Hapus semua format",
+    "headerRow": "Baris judul",
+    "blankRow": "baris kosong",
+    "formatCells": "Format sel",
+    "done": "Selesai",
+    "tapACell": "Ketuk sel tabel untuk memformatnya, barisnya atau kolomnya."
   }
 }

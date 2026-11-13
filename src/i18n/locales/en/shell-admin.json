@@ -337,5 +337,30 @@
     "reload": "Reload page",
     "home": "Go to dashboard",
     "details": "Technical details"
+  },
+  "crud": {
+    "moreFor": "More for {{name}}"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "unread": "Unread",
+    "unreadCount": "{{count}} unread",
+    "markAllRead": "Mark all as read",
+    "bellLabelCount_one": "Notifications, {{count}} unread",
+    "bellLabelCount_other": "Notifications, {{count}} unread",
+    "allClear": "All caught up",
+    "allClearHint": "Nothing overdue, no budgets running out, nothing waiting to be invoiced or posted.",
+    "overdue_one": "Invoice {{id}} is {{count}} day overdue",
+    "overdue_other": "Invoice {{id}} is {{count}} days overdue",
+    "dueToday": "Invoice {{id}} is due today",
+    "dueSoon_one": "Invoice {{id}} is due tomorrow",
+    "dueSoon_other": "Invoice {{id}} is due in {{count}} days",
+    "notInvoiced_one": "Order {{id}} has no invoice yet ({{count}} day old)",
+    "notInvoiced_other": "Order {{id}} has no invoice yet ({{count}} days old)",
+    "budgetNear": "{{label}} budget is at {{percent}}% this month",
+    "budgetOver": "{{label}} budget is used up this month",
+    "budgetDetail": "{{spent}} spent of {{budget}}",
+    "recurring_one": "{{count}} recurring cost to post for {{month}}",
+    "recurring_other": "{{count}} recurring costs to post for {{month}}"
   }
 }

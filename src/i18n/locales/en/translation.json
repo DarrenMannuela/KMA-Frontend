@@ -483,5 +483,31 @@
   },
   "ordersTabs": {
     "sectionTitle": "Orders section"
+  },
+  "invoiceFormat": {
+    "title": "Format",
+    "cell": "Cell",
+    "row": "Row",
+    "column": "Column",
+    "applyTo": "Apply to",
+    "bold": "Bold",
+    "italic": "Italic",
+    "align": "Alignment",
+    "alignLeft": "Align left",
+    "alignCenter": "Centre",
+    "alignRight": "Align right",
+    "fill": "Fill",
+    "noFill": "No fill",
+    "rowHeight": "Row height",
+    "shorter": "Shorter row",
+    "taller": "Taller row",
+    "clear": "Clear",
+    "clearTitle": "Remove this cell's, row's or column's own formatting",
+    "clearAll": "Clear all formatting",
+    "headerRow": "Heading row",
+    "blankRow": "blank row",
+    "formatCells": "Format cells",
+    "done": "Done",
+    "tapACell": "Tap a cell of the table to format it, its row or its column."
   }
 }

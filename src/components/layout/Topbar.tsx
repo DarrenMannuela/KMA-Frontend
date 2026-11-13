@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Zap, AlertCircle, ChevronDown, LogOut, User as UserIcon, KeyRound, ShieldCheck, Menu, Languages, Sun, Moon, Search, Keyboard } from 'lucide-react'
+import { Zap, AlertCircle, ChevronDown, LogOut, User as UserIcon, KeyRound, ShieldCheck, Menu, Languages, Sun, Moon, Search, Keyboard } from 'lucide-react'
 import { format } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
@@ -9,6 +9,7 @@ import { useDateLocale } from '@/i18n/dateLocale'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { Kbd } from '@/components/shortcuts/Kbd'
+import { NotificationBell } from './NotificationBell'
 import { MOD, openJumpTo, openShortcutsHelp } from '@/utils/shortcuts'
 
 // The stub/live route banners are for development builds only.
@@ -133,18 +134,6 @@ function AccountMenu() {
             <span className="flex-1 text-left">{t('shortcuts.title')}</span>
             <Kbd>?</Kbd>
           </button>
-          {/* No handler yet — there's nothing to show here until actual
-              notifications exist (see the overdue-invoices idea). A dead
-              button in the always-visible topbar row was worse than this:
-              listed honestly as not-yet-live, tucked in the menu instead of
-              competing for primary-bar space it wasn't earning. */}
-          <div
-            className="w-full flex items-center gap-2 px-3.5 py-2 text-sm text-slate-400 dark:text-slate-600 cursor-default"
-          >
-            <Bell className="w-4 h-4" />
-            <span className="flex-1 text-left">{t('topbar.notifications')}</span>
-            <span className="text-[9px] uppercase tracking-wide font-semibold text-slate-300 dark:text-slate-700">{t('topbar.comingSoon')}</span>
-          </div>
           <div className="border-t border-slate-100 my-1 dark:border-navy-800" />
           <button
             onClick={() => {
@@ -253,6 +242,8 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
             <span className="hidden md:inline flex-1 text-left text-sm font-normal">{t('jumpTo.button')}</span>
             <span className="hidden md:flex items-center gap-0.5"><Kbd>{MOD}</Kbd><Kbd>K</Kbd></span>
           </button>
+
+          <NotificationBell />
 
           <ThemeToggle />
 

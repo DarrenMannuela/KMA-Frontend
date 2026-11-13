@@ -326,5 +326,30 @@
     "reload": "Muat ulang halaman",
     "home": "Ke Dasbor",
     "details": "Detail teknis"
+  },
+  "crud": {
+    "moreFor": "Lainnya untuk {{name}}"
+  },
+  "notifications": {
+    "title": "Notifikasi",
+    "unread": "Belum dibaca",
+    "unreadCount": "{{count}} belum dibaca",
+    "markAllRead": "Tandai semua dibaca",
+    "bellLabelCount_one": "Notifikasi, {{count}} belum dibaca",
+    "bellLabelCount_other": "Notifikasi, {{count}} belum dibaca",
+    "allClear": "Semua beres",
+    "allClearHint": "Tidak ada yang terlambat, anggaran aman, tidak ada yang menunggu ditagih atau dicatat.",
+    "overdue_one": "Invoice {{id}} terlambat {{count}} hari",
+    "overdue_other": "Invoice {{id}} terlambat {{count}} hari",
+    "dueToday": "Invoice {{id}} jatuh tempo hari ini",
+    "dueSoon_one": "Invoice {{id}} jatuh tempo besok",
+    "dueSoon_other": "Invoice {{id}} jatuh tempo dalam {{count}} hari",
+    "notInvoiced_one": "Pesanan {{id}} belum ada invoice ({{count}} hari)",
+    "notInvoiced_other": "Pesanan {{id}} belum ada invoice ({{count}} hari)",
+    "budgetNear": "Anggaran {{label}} sudah {{percent}}% bulan ini",
+    "budgetOver": "Anggaran {{label}} sudah habis bulan ini",
+    "budgetDetail": "{{spent}} terpakai dari {{budget}}",
+    "recurring_one": "{{count}} biaya rutin perlu dicatat untuk {{month}}",
+    "recurring_other": "{{count}} biaya rutin perlu dicatat untuk {{month}}"
   }
 }

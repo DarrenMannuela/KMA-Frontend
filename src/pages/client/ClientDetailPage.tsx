@@ -178,16 +178,16 @@ export function ClientDetailPage() {
           onRetry={refetchContacts}
           searchKeys={['name', 'role', 'location_label']}
           columns={[
-            { header: t('clientsArea.contact.name'), key: 'name', render: r => (
+            { header: t('clientsArea.contact.name'), key: 'name', card: 'title', render: r => (
               <span className="font-medium text-navy-900 inline-flex items-center gap-1.5 dark:text-slate-100">
                 {r.name}
                 {r.is_primary && <span className="badge bg-amber-50 text-amber-700 text-[10px] dark:bg-amber-500/10 dark:text-amber-400">{t('clientsArea.contact.primary')}</span>}
               </span>
             )},
-            { header: t('clientsArea.contact.role'), key: 'role',           render: r => <span className="text-slate-500 dark:text-slate-400">{r.role ?? '—'}</span> },
-            { header: t('clientsArea.contact.phone'), key: 'phone_number',    render: r => <span className="text-slate-500 dark:text-slate-400">{r.phone_number ?? '—'}</span> },
-            { header: t('clientsArea.contact.email'), key: 'email',           render: r => <span className="text-slate-500 dark:text-slate-400">{r.email ?? '—'}</span> },
-            { header: t('clientsArea.contact.location'), key: 'location_label',  render: r => <span className="text-slate-500 dark:text-slate-400">{r.location_label ?? '—'}</span> },
+            { header: t('clientsArea.contact.role'), key: 'role', card: 'meta',           render: r => <span className="text-slate-500 dark:text-slate-400">{r.role ?? '—'}</span> },
+            { header: t('clientsArea.contact.phone'), key: 'phone_number', card: 'meta',    render: r => <span className="text-slate-500 dark:text-slate-400">{r.phone_number ?? '—'}</span> },
+            { header: t('clientsArea.contact.email'), key: 'email', card: 'sheet',           render: r => <span className="text-slate-500 dark:text-slate-400">{r.email ?? '—'}</span> },
+            { header: t('clientsArea.contact.location'), key: 'location_label', card: 'sheet',  render: r => <span className="text-slate-500 dark:text-slate-400">{r.location_label ?? '—'}</span> },
           ]}
           formTitle={e => e ? t('clientsArea.contact.editContact') : t('clientsArea.contact.addContact')}
           renderForm={(editing, onClose) => <ClientContactForm clientId={clientId} editing={editing} onClose={onClose} />}

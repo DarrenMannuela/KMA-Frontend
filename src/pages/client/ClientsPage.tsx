@@ -75,13 +75,13 @@ export function ClientsPage() {
       rowHref={r => `/clients/${r.id}`}
       undoDeletes
       columns={[
-        { header: t('clientsArea.id'), key: 'id' },
-        { header: t('clientsArea.clientName'), key: 'client_name', primary: true, edit: { type: 'text', uppercase: true },
+        { header: t('clientsArea.id'), key: 'id', card: 'hide' },
+        { header: t('clientsArea.clientName'), key: 'client_name', card: 'title', primary: true, edit: { type: 'text', uppercase: true },
           render: r => <span className="font-medium text-navy-900 dark:text-slate-100">{r.client_name}</span> },
-        { header: t('clientsArea.address'), key: 'address', edit: { type: 'text', uppercase: true, value: r => r.address ?? '' },
+        { header: t('clientsArea.address'), key: 'address', card: 'meta', edit: { type: 'text', uppercase: true, value: r => r.address ?? '' },
           render: r => <span className="text-slate-500 dark:text-slate-400">{r.address ?? '—'}</span> },
         // An actions column; its key must differ from the ID column's.
-        { header: '', key: 'catalogue_link', render: r => (
+        { header: '', key: 'catalogue_link', card: 'hide', render: r => (
           <button
             onClick={(e) => { e.stopPropagation(); navigate(`/clients/${r.id}`) }}
             className="tap inline-flex items-center gap-1 text-sm font-medium text-navy-600 hover:text-navy-800"

@@ -136,6 +136,14 @@ export const supplierDesignApi = {
   deletePhoto: (id: number | string) => http.delete<void>(`/supplier-design/${encodeURIComponent(id)}/photo`).then(r => r.data),
 }
 
+// An invoice's sheet layout and formatting, shared by everyone (see utils/InvoiceLayoutStore).
+export const invoiceSheetApi = {
+  get: (invoiceId: string) =>
+    http.get<{ invoice_id: string; settings: unknown }>(`/invoice-sheet?invoice_id=${encodeURIComponent(invoiceId)}`).then(r => r.data),
+  save: (invoiceId: string, settings: object) =>
+    http.put(`/invoice-sheet?invoice_id=${encodeURIComponent(invoiceId)}`, { settings }).then(r => r.data),
+}
+
 // Print layouts, one per document, shared by everyone (see utils/printLayout).
 export interface SavedPrintLayout { doc_type: string; settings: unknown; updated_at: string }
 export const printLayoutApi = {

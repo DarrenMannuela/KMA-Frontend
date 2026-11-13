@@ -138,14 +138,14 @@ export function ItemsPage() {
       onRetry={refetch}
       searchKeys={['item_name']}
       columns={[
-        { header: t('items.columns.orderId'),  key: 'order_id', secondary: true, render: r => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.order_id}</span> },
+        { header: t('items.columns.orderId'),  key: 'order_id', card: 'meta', secondary: true, render: r => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.order_id}</span> },
         // A key of its own, distinct from the Order ID column's.
         { header: t('items.columns.client'),    key: 'client',   secondary: true, render: r => clientNameByOrderId.get(r.order_id) ?? '—' },
-        { header: t('items.columns.item'),      key: 'item_name', primary: true, render: r => <span className="font-medium">{r.item_name}</span> },
-        { header: t('items.columns.size'),      key: 'size',      render: r => r.size ? <span className="badge-slate">{r.size}</span> : '—' },
-        { header: t('items.columns.qty'),       key: 'amount' },
+        { header: t('items.columns.item'),      key: 'item_name', card: 'title', primary: true, render: r => <span className="font-medium">{r.item_name}</span> },
+        { header: t('items.columns.size'),      key: 'size', card: 'meta', cardRender: r => r.size ? <span className="badge-slate">{r.size}</span> : null, render: r => r.size ? <span className="badge-slate">{r.size}</span> : '—' },
+        { header: t('items.columns.qty'),       key: 'amount', card: 'meta', cardRender: r => `× ${r.amount}` },
         { header: t('items.columns.price'),     key: 'price',     secondary: true, render: r => <span className="currency">{formatRp(r.price)}</span> },
-        { header: t('items.columns.subtotal'),  key: 'sub_total', render: r => <span className="currency font-semibold">{formatRp(r.sub_total)}</span> },
+        { header: t('items.columns.subtotal'),  key: 'sub_total', card: 'amount', render: r => <span className="currency font-semibold">{formatRp(r.sub_total)}</span> },
       ]}
       formTitle={e => e ? t('items.formTitleEdit') : t('items.formTitleNew')}
       renderForm={(editing, onClose) => <ItemForm editing={editing} onClose={onClose} />}

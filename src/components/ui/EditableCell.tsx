@@ -251,10 +251,17 @@ export function EditableCell({
       // doesn't exist; on a mouse/trackpad it only shows on hover, so a dense table
       // of many editable cells doesn't read as a grid of boxes at rest. The focus
       // border marks the active cell.
-      className="px-2.5 py-1.5 min-h-[2rem] cursor-cell border border-transparent [border-bottom-style:dotted] [@media(hover:none)]:border-b-slate-200 dark:[@media(hover:none)]:border-b-navy-700 hover:border-slate-300 hover:bg-slate-50 hover:[border-bottom-style:solid] dark:hover:border-navy-600 dark:hover:bg-white/5 focus:outline-none focus:border-navy-400 focus:bg-navy-50/50 dark:focus:bg-navy-800/50 focus:[border-bottom-style:solid] transition-colors break-words"
+      className="group/cell px-2.5 py-1.5 min-h-[2rem] cursor-cell border border-transparent [border-bottom-style:dotted] [@media(hover:none)]:border-b-slate-200 dark:[@media(hover:none)]:border-b-navy-700 hover:border-slate-300 hover:bg-slate-50 hover:[border-bottom-style:solid] dark:hover:border-navy-600 dark:hover:bg-white/5 focus:outline-none focus:border-navy-400 focus:bg-navy-50/50 dark:focus:bg-navy-800/50 focus:[border-bottom-style:solid] transition-colors break-words"
     >
       {isEmpty
-        ? <span className="text-slate-400 italic whitespace-nowrap dark:text-slate-500">{placeholder ?? t('cells.clickToFill')}</span>
+        ? placeholder != null
+          ? <span className="text-slate-400 italic whitespace-nowrap dark:text-slate-500">{placeholder}</span>
+          // No placeholder of its own: a faint dash at rest (a column of
+          // "click to fill" read as clutter), the hint on hover or focus.
+          : <>
+              <span aria-hidden className="text-slate-300 group-hover/cell:hidden group-focus/cell:hidden dark:text-navy-600">—</span>
+              <span className="hidden group-hover/cell:inline group-focus/cell:inline text-slate-400 italic whitespace-nowrap dark:text-slate-500">{t('cells.clickToFill')}</span>
+            </>
         : (format ? format(initialValue) : initialValue)}
     </div>
   )

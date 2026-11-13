@@ -3,7 +3,7 @@ import { useDeferredValue, useEffect, useRef, useState } from 'react'
 import { Kbd } from '@/components/shortcuts/Kbd'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Search, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, MoreVertical, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Modal } from '@/components/ui/Modal'
@@ -13,6 +13,7 @@ import { useCreateOnArrival } from '@/hooks/useCreateOnArrival'
 import { undoLastDelete } from '@/hooks/crud'
 import { isTyping } from '@/utils/isTyping'
 import { useRovingCells } from '@/hooks/useRovingCells'
+import { useDialog } from '@/hooks/useDialog'
 
 const PAGE_ROWS = 100
 import { ScrollX } from './ScrollX'
@@ -34,6 +35,15 @@ interface Column<T> {
   /** Mobile cards only: left out of the desktop table (whose other cells
    *  already carry it), so a wide table fits the screen. */
   mobileOnly?: boolean
+  /** Where the column goes on a phone's card: `title` (bold, first line),
+   *  `meta` (the muted line under it, joined with ·), `amount` (right, in
+   *  mono), `badge` (right, under the amount), `sheet` (only in the ⋯
+   *  sheet's details) or `hide`. Unset: the title column is the title,
+   *  `secondary` columns go in the sheet, the rest on the meta line. */
+  card?: 'title' | 'meta' | 'amount' | 'badge' | 'sheet' | 'hide'
+  /** What the card shows for this column, if not its usual render (e.g.
+   *  "× 20" for a bare quantity). */
+  cardRender?: (row: T) => React.ReactNode
   /** Desktop table only: click the cell (or arrow onto it and type) to edit
    *  in place, like the finance Ledger, instead of needing the Add/Edit
    *  modal for this field. Needs `onCellEdit` on CrudPage itself — a column
@@ -93,6 +103,8 @@ export function CrudPage<T extends { id: string | number }>({
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<T | null>(null)
   const [confirmRow, setConfirmRow] = useState<T | null>(null)
+  // Phones: the row whose ⋯ sheet (details and actions) is open.
+  const [sheetRow, setSheetRow] = useState<T | null>(null)
   // The search survives opening a row and coming back (sessionStorage, keyed
   // by the page title).
   const searchStorageKey = `crud-search:${title}`
@@ -212,74 +224,62 @@ export function CrudPage<T extends { id: string | number }>({
                 action={<button className="btn-secondary btn-sm" onClick={() => setSearch('')}>{t('common.clearSearch')}</button>} />
             : <EmptyState icon={Icon} title={t('common.noItemsYet', { items: title.toLowerCase() })} subtitle={t('common.clickAddNew')} />
         ) : isMobile ? (
-          // Phone width: one card per row (title column first, the rest as
-          // label: value), with the row actions as icons underneath. Columns
-          // marked `secondary` sit behind a "Show more" toggle instead of
-          // printing on every card — the desktop table still shows all of
-          // them unconditionally, since it isn't the one doing the scrolling.
+          // Phone width: a compact card per row — the title in bold with the
+          // amount on the right, one muted line under it (id, date…) with the
+          // status badge — and tapping it opens the row. Everything else (the
+          // remaining details, the row's actions, Edit, Delete) is behind one
+          // ⋯ button, instead of label: value lines, "Show more" and a row of
+          // icons on every card.
           <div className="divide-y divide-slate-100 dark:divide-navy-800">
             {pageRows.map(row => {
-              const renderLine = (c: Column<typeof row>) => {
-                const rendered = c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—')
-                return (
-                  <div key={String(c.key)} className="flex items-baseline gap-1.5 text-sm">
-                    {c.header && <span className="text-slate-500 text-xs shrink-0 dark:text-slate-400">{c.header}:</span>}
-                    <span className="text-slate-700 truncate dark:text-slate-300">{rendered}</span>
-                  </div>
-                )
-              }
-              const visibleCols = columns.filter(c => c.key !== titleKey && !c.secondary)
-              const hiddenCols = columns.filter(c => c.key !== titleKey && c.secondary)
-              const titleCol = columns.find(c => c.key === titleKey)
+              const cell = (c: Column<typeof row>, forCard = true) => (forCard && c.cardRender)
+                ? c.cardRender(row)
+                : c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—')
+              const titleCol = columns.find(c => c.card === 'title') ?? columns.find(c => c.key === titleKey)
+              const placeOf = (c: Column<typeof row>) => c === titleCol ? 'title' : c.card ?? (c.secondary ? 'sheet' : 'meta')
+              const metaCols = columns.filter(c => placeOf(c) === 'meta')
+              const amountCol = columns.find(c => placeOf(c) === 'amount')
+              const badgeCol = columns.find(c => placeOf(c) === 'badge')
               const href = rowHref?.(row)
+              const open = () => (href ? navigate(href) : openEdit(row))
               return (
-              <div
-                key={row.id}
-                className={`px-5 py-3 ${href ? 'cursor-pointer active:bg-slate-50 dark:active:bg-navy-800/50' : ''}`}
-                onClick={href ? e => {
-                  // Buttons, links and "Show more" inside the card keep their own job.
-                  if ((e.target as HTMLElement).closest('a,button,input,select,textarea,summary,label')) return
-                  navigate(href)
-                } : undefined}
-              >
-                <div className="space-y-0.5">
-                  {titleCol && (
-                    <div className="flex items-center gap-2 text-sm font-medium text-navy-900 dark:text-slate-100">
-                      <div className="min-w-0 flex-1">
-                        {titleCol.render ? titleCol.render(row) : String((row as Record<string, unknown>)[titleCol.key as string] ?? '—')}
+                <div
+                  key={row.id}
+                  className="flex items-start gap-1 pl-4 pr-1 py-3 cursor-pointer active:bg-slate-50 dark:active:bg-navy-800/50"
+                  onClick={e => {
+                    // Buttons and links inside the card keep their own job.
+                    if ((e.target as HTMLElement).closest('a,button,input,select,textarea,label')) return
+                    open()
+                  }}
+                >
+                  {/* Left: the title and the muted line (id, date…), wrapping
+                      as a whole; right: the amount over the status badge. */}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[15px] font-medium leading-snug text-navy-900 break-words dark:text-slate-50">
+                      {titleCol ? cell(titleCol) : String(row.id)}
+                    </div>
+                    {metaCols.length > 0 && (
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                        {/* An empty value (a bare "—") is left off the line. */}
+                        {metaCols.map(c => [c, cell(c)] as const).filter(([, v]) => v !== '—' && v !== '' && v != null).map(([c, v]) => <span key={String(c.key)} className="min-w-0 truncate">{v}</span>)}
                       </div>
-                      {href && <ChevronRight className="w-4 h-4 shrink-0 text-slate-400 dark:text-slate-500" aria-hidden />}
+                    )}
+                  </div>
+                  {(amountCol || badgeCol) && (
+                    <div className="shrink-0 flex flex-col items-end gap-1.5 pl-2">
+                      {amountCol && <div className="font-mono font-semibold text-sm tabular-nums text-navy-900 whitespace-nowrap text-right dark:text-slate-50">{cell(amountCol)}</div>}
+                      {badgeCol && <div>{cell(badgeCol)}</div>}
                     </div>
                   )}
-                  {visibleCols.map(renderLine)}
-                  {hiddenCols.length > 0 && (
-                    <details className="group">
-                      <summary className="flex items-center gap-1 text-xs text-navy-500 dark:text-navy-300 cursor-pointer select-none [&::-webkit-details-marker]:hidden [&::marker]:content-none pt-0.5">
-                        <ChevronDown className="w-3 h-3 transition-transform group-open:rotate-180" />
-                        {t('common.showMore')}
-                      </summary>
-                      <div className="space-y-0.5 pt-0.5">
-                        {hiddenCols.map(renderLine)}
-                      </div>
-                    </details>
-                  )}
-                </div>
-                {/* 40px targets, and Delete set apart from Edit, so a thumb
-                   reaching for one doesn't land on the other. */}
-                <div className="flex items-center justify-end gap-1 mt-1.5 [&_button]:min-h-10 [&_button]:min-w-10 [&_button]:justify-center">
-                  {rowActions && rowActions(row)}
-                  <button className="btn-ghost btn-sm !px-2" onClick={() => openEdit(row)} aria-label={t('common.edit')}>
-                    <Pencil className="w-4 h-4" />
-                  </button>
                   <button
-                    className="btn-ghost btn-sm !px-1.5 ml-3 hover:!text-red-600"
-                    onClick={() => setConfirmRow(row)}
-                    aria-label={t('common.delete')}
+                    type="button"
+                    onClick={() => setSheetRow(row)}
+                    className="shrink-0 w-11 h-11 -my-1.5 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5"
+                    aria-label={t('crud.moreFor', { name: titleCol ? String((row as Record<string, unknown>)[titleCol.key as string] ?? row.id) : String(row.id) })}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <MoreVertical className="w-5 h-5" />
                   </button>
                 </div>
-              </div>
               )
             })}
           </div>
@@ -300,7 +300,7 @@ export function CrudPage<T extends { id: string | number }>({
           </thead>
           <tbody onFocus={onGridFocus}>
             {pageRows.map(row => (
-              <tr key={row.id}>
+              <tr key={row.id} className="group/row">
                 {tableColumns.map((c, ci) => (
                   <td key={String(c.key)} className={onCellEdit ? 'px-1 py-0.5' : undefined}>
                     {!onCellEdit ? (
@@ -334,7 +334,10 @@ export function CrudPage<T extends { id: string | number }>({
                   </td>
                 ))}
                 <td className="text-right sticky right-0 z-[1] bg-white dark:bg-navy-900 [[data-fade-right]_&]:shadow-[-8px_0_12px_-6px_rgba(15,23,42,0.22)] [tr:hover>&]:bg-slate-50 dark:[tr:hover>&]:bg-[#1f2539]">
-                  <div className="flex items-center justify-end gap-1">
+                  {/* Quiet until the row is pointed at or tabbed into, so a
+                      column of icons doesn't compete with the data; still
+                      visible (and on touch screens, full strength). */}
+                  <div className="flex items-center justify-end gap-1 transition-opacity [@media(hover:hover)]:opacity-40 group-hover/row:opacity-100 focus-within:!opacity-100">
                     {rowActions && rowActions(row)}
                     <button className="btn-ghost btn-sm !px-2" onClick={() => openEdit(row)} aria-label={t('common.edit')}>
                       <Pencil className="w-3.5 h-3.5" />
@@ -375,6 +378,24 @@ export function CrudPage<T extends { id: string | number }>({
         </Modal>
       )}
 
+      {/* Phones: a row's details and actions. */}
+      {sheetRow && (() => {
+        const row = sheetRow
+        const titleCol = columns.find(c => c.card === 'title') ?? columns.find(c => c.key === titleKey)
+        const details = columns.filter(c => c !== titleCol && c.card !== 'hide' && c.header)
+        const value = (c: Column<T>) => c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key as string] ?? '—')
+        return (
+          <RowSheet
+            title={titleCol ? value(titleCol) : String(row.id)}
+            onClose={() => setSheetRow(null)}
+            details={details.map(c => ({ label: c.header, value: value(c) }))}
+            actions={rowActions?.(row)}
+            onEdit={() => { setSheetRow(null); openEdit(row) }}
+            onDelete={() => { setSheetRow(null); setConfirmRow(row) }}
+          />
+        )
+      })()}
+
       {/* Confirm delete */}
       {confirmRow && (
         <ConfirmDialog
@@ -383,6 +404,51 @@ export function CrudPage<T extends { id: string | number }>({
           onCancel={() => setConfirmRow(null)}
         />
       )}
+    </div>
+  )
+}
+
+/** Phones: a list row's ⋯ sheet — its details, then its actions by name
+ *  (the page's own, Edit, and Delete set apart at the bottom). */
+function RowSheet({ title, details, actions, onEdit, onDelete, onClose }: {
+  title: React.ReactNode
+  details: { label: string; value: React.ReactNode }[]
+  actions?: React.ReactNode
+  onEdit: () => void
+  onDelete: () => void
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const panelRef = useRef<HTMLDivElement>(null)
+  useDialog(panelRef, onClose)
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-navy-950/30 backdrop-blur-sm fade-in" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div ref={panelRef} role="dialog" aria-modal="true" tabIndex={-1}
+        className="w-full max-h-[85vh] overflow-y-auto bg-white rounded-t-2xl shadow-2xl slide-up outline-none pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:bg-navy-900">
+        <div className="sticky top-0 z-[1] flex items-start gap-3 bg-white px-4 pt-4 pb-3 border-b border-slate-100 dark:bg-navy-900 dark:border-navy-800">
+          <div className="flex-1 min-w-0 text-base font-semibold text-navy-900 break-words dark:text-slate-50">{title}</div>
+          <button type="button" onClick={onClose} className="btn-ghost !px-0 -mt-2 -mr-1" aria-label={t('common.close')}><X className="w-5 h-5" /></button>
+        </div>
+        {details.length > 0 && (
+          <dl className="px-4 py-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+            {details.map(d => (
+              <div key={d.label} className="contents">
+                <dt className="text-slate-500 dark:text-slate-400">{d.label}</dt>
+                <dd className="text-navy-900 min-w-0 break-words dark:text-slate-100">{d.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {/* The page's own actions are icon buttons; here each shows its
+            name (its aria-label) beside the icon, as a full-width row. */}
+        <div className="px-2 pt-1 border-t border-slate-100 dark:border-navy-800
+          [&_button]:!w-full [&_button]:!justify-start [&_button]:!gap-3 [&_button]:!px-3 [&_button]:!min-h-[3rem] [&_button]:!text-sm [&_button]:text-navy-800 dark:[&_button]:text-slate-100
+          [&_.row-action_button]:after:content-[attr(aria-label)] [&_.row-action_div]:!flex [&_.row-action_div]:!flex-col [&_.row-action_div]:!items-stretch [&_.row-action_div]:!gap-0">
+          {actions && <div className="row-action">{actions}</div>}
+          <button type="button" className="btn-ghost" onClick={onEdit}><Pencil className="w-4 h-4" /> {t('common.edit')}</button>
+          <button type="button" className="btn-ghost !text-red-600 dark:!text-red-400" onClick={onDelete}><Trash2 className="w-4 h-4" /> {t('common.delete')}</button>
+        </div>
+      </div>
     </div>
   )
 }

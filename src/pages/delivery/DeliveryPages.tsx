@@ -425,8 +425,8 @@ export function DeliveryPage() {
       onRetry={refetch}
       searchKeys={['company', 'address', 'contact_person', 'po_number']}
       columns={[
-        { header: t('delivery.columns.deliveryId'),     key: 'id',             render: r => <span className="id-chip">{r.id}</span> },
-        { header: t('delivery.columns.company'),         key: 'company',        render: r => <span className="font-semibold text-navy-900 dark:text-slate-50">{r.company ?? '—'}</span> },
+        { header: t('delivery.columns.deliveryId'),     key: 'id', card: 'meta',             render: r => <span className="id-chip">{r.id}</span> },
+        { header: t('delivery.columns.company'),         key: 'company', card: 'title',        render: r => <span className="font-semibold text-navy-900 dark:text-slate-50">{r.company ?? '—'}</span> },
         { header: t('delivery.columns.client'),          key: 'client_id',      secondary: true, render: r => r.client_id ? (
             <button
               onClick={(e) => { e.stopPropagation(); navigate(`/clients/${r.client_id}`) }}
@@ -436,7 +436,7 @@ export function DeliveryPage() {
               <Building2 size={12} /> {t('common.view')} <ArrowRight size={12} />
             </button>
           ) : <span className="text-slate-300 text-xs dark:text-navy-700">{t('delivery.notLinked')}</span> },
-        { header: t('delivery.columns.address'),         key: 'address',        render: r => <span className="font-medium">{r.address}</span> },
+        { header: t('delivery.columns.address'),         key: 'address', card: 'sheet',        render: r => <span className="font-medium">{r.address}</span> },
         { header: t('delivery.columns.contact'),         key: 'contact_person', secondary: true, render: r => r.contact_person || r.phone_number ? (
             <div className="leading-tight">
               {r.contact_person && <div>{r.contact_person}</div>}
@@ -444,7 +444,7 @@ export function DeliveryPage() {
             </div>
           ) : '—' },
         { header: t('delivery.columns.po'),              key: 'po_number',      secondary: true, render: r => <span className="font-mono text-xs whitespace-nowrap">{r.po_number ?? '—'}</span> },
-        { header: t('delivery.columns.date'),            key: 'date',           render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
+        { header: t('delivery.columns.date'),            key: 'date', card: 'meta',           render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
       ]}
       formTitle={e => e ? t('delivery.formTitleEdit') : t('delivery.formTitleNew')}
       renderForm={(editing, onClose) => <DeliveryForm editing={editing} onClose={onClose} />}
