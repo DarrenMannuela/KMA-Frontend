@@ -1,3 +1,4 @@
+import { changeLabel } from '@/utils/changeLabel'
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -5,7 +6,7 @@ import toast from 'react-hot-toast'
 import { Trans, useTranslation } from 'react-i18next'
 import {
   ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, FileUp, Link2, Plus, Printer, Rows2, Rows3, Search, Trash2, X,
-  ArrowRightLeft, Tag, Copy, CheckSquare, BookOpen, Images,
+  ArrowRightLeft, Tag, Copy, CheckSquare, BookOpen, Images, SlidersHorizontal,
 } from 'lucide-react'
 import { EditableCell, TableSkeleton, formatRp } from '@/components/ui'
 import { ErrorState } from '@/components/ui/Page'
@@ -243,6 +244,10 @@ export function Ledger({ kind, initial, title }: {
     try { localStorage.setItem(DENSITY_KEY, d) } catch { /* private mode: just not remembered */ }
   }
   const filtersActive = !!filters.q || !!filters.group || filters.order !== 'any'
+  // Phone: the three dropdowns sit behind one Filter button (so the sheet's
+  // first rows are on the first screen); it says how many are set.
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const dropdownsSet = (filters.group ? 1 : 0) + (filters.order !== 'any' ? 1 : 0) + (filters.groupBy !== 'kasbon' ? 1 : 0)
   const clearFilters = () => { setFilters(f => ({ ...f, q: '', group: '', order: 'any' })); setLimit(PAGE) }
   const searchRef = useRef<HTMLInputElement>(null)
   const lastClicked = useRef<number | null>(null)
@@ -807,7 +812,7 @@ export function Ledger({ kind, initial, title }: {
             </span>
             {change != null && Number.isFinite(change) && (
               <span className={`text-xs font-medium ${change > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                {t('ledger.vsPrevious', { arrow: change > 0 ? '▲' : '▼', percent: Math.abs(change), period: prevName })}
+                {t('ledger.vsPrevious', { arrow: change > 0 ? '▲' : '▼', change: changeLabel(Math.abs(change), change > 0), period: prevName })}
               </span>
             )}
           </div>
@@ -820,14 +825,14 @@ export function Ledger({ kind, initial, title }: {
               <span className={total > budget ? 'text-red-600 font-medium dark:text-red-400' : ''}>{Math.round((total / budget) * 100)}%</span>
             </span>
           )}
-          {/* On a phone: New Kas Bon across the card, and Import, Export and
-              Print under it, each named and with a larger icon, rather than
-              three bare icons side by side that were easy to mix up. */}
-          <div className={isMobile ? 'grid grid-cols-3 gap-2 w-full' : 'flex flex-wrap items-center gap-2 ml-auto'}>
+          {/* On a phone: one row, New Kas Bon then Import, Export and Print,
+              each still named (under its icon) so they aren't mixed up. */}
+          <div className={isMobile ? 'grid grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-1.5 w-full' : 'flex flex-wrap items-center gap-2 ml-auto'}>
             {(() => {
               const icon = isMobile ? 18 : 14
-              const label = (text: string) => <span className={isMobile ? '' : 'hidden min-[1400px]:inline'}>{text}</span>
-              const side = isMobile ? 'btn-secondary justify-center !px-2' : 'btn-secondary btn-sm'
+              const label = (text: string) => <span className={isMobile ? 'text-[11px] leading-none' : 'hidden min-[1400px]:inline'}>{text}</span>
+              // Phone: icon over its name, so all three fit beside New Kas Bon.
+              const side = isMobile ? 'btn-secondary !flex-col !gap-0.5 justify-center !px-2.5 !py-1' : 'btn-secondary btn-sm'
               const printKasBon = () => {
                 const p = filters.period
                 const qs = p.mode === 'range'
@@ -840,7 +845,7 @@ export function Ledger({ kind, initial, title }: {
                 <button className={side} onClick={() => setImportGrid(null)} title={t('ledger.importTitle')} aria-label={t('ledger.import')}><FileUp size={icon} />{label(t('ledger.import'))}</button>
                 <button className={side} onClick={() => exportRows(sorted)} disabled={!visible.length} title={t('ledger.exportTitle')} aria-label={t('ledger.export')}><Download size={icon} />{label(t('ledger.export'))}</button>
                 <button className={side} disabled={!visible.length} title={t('ledger.printTitle')} aria-label={t('ledger.print')} onClick={printKasBon}><Printer size={icon} />{label(t('ledger.print'))}</button>
-                <button className={isMobile ? 'btn-primary justify-center col-span-3 order-first' : 'btn-primary btn-sm'} onClick={() => setForm({})} title={t('ledger.newKasBonTitle')} data-kbd="new" aria-keyshortcuts="n"><Plus size={isMobile ? 18 : 14} /> {t('ledger.newKasBon')}</button>
+                <button className={isMobile ? 'btn-primary justify-center order-first' : 'btn-primary btn-sm'} onClick={() => setForm({})} title={t('ledger.newKasBonTitle')} data-kbd="new" aria-keyshortcuts="n"><Plus size={isMobile ? 18 : 14} /> {t('ledger.newKasBon')}</button>
               </>
             })()}
           </div>
@@ -861,6 +866,12 @@ export function Ledger({ kind, initial, title }: {
             />
             {filters.q && <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-300" onClick={() => setFilter('q', '')} aria-label={t('ledger.clearSearch')}><X size={14} /></button>}
           </div>
+          {isMobile && (
+            <button type="button" className={`btn-secondary !py-1.5 gap-1.5 ${dropdownsSet ? '!border-navy-300 dark:!border-slate-400' : ''}`} aria-expanded={filtersOpen} onClick={() => setFiltersOpen(o => !o)}>
+              <SlidersHorizontal size={15} aria-hidden /> {t('ledger.filters')}
+              {dropdownsSet > 0 && <span className="min-w-5 h-5 px-1 rounded-full bg-navy-900 text-white text-[11px] font-semibold inline-flex items-center justify-center dark:bg-gold-500 dark:text-navy-950">{dropdownsSet}</span>}
+            </button>
+          )}
           <PeriodPicker value={filters.period} onChange={p => setFilter('period', p)} />
           {/* A deliberate 2-up grid below `sm:`, Group-by spanning the full
              second row — the three selects used to each land alone on their
@@ -869,7 +880,7 @@ export function Ledger({ kind, initial, title }: {
              empty space trailing it. `sm:contents` drops this wrapper from
              layout entirely from `sm:` up, so desktop is exactly as before:
              each select flows inline in the filter bar's own flex-wrap row. */}
-          <div className="grid grid-cols-2 gap-2 w-full sm:contents">
+          <div className={`grid-cols-2 gap-2 w-full sm:contents ${isMobile && !filtersOpen ? 'hidden' : 'grid'}`}>
             <select className="field !w-full sm:!w-36 !py-1.5 text-xs" value={filters.group} onChange={e => setFilter('group', e.target.value)} aria-label={kind === 'production' ? t('ledger.columns.supplier') : t('ledger.columns.category')}>
               <option value="">{kind === 'production' ? t('ledger.allSuppliers') : t('ledger.allCategories')}</option>
               {groupOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}

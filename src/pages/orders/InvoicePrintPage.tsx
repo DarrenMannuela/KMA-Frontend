@@ -1,5 +1,5 @@
 import { liveDownPayment as resolveLiveDownPayment, balanceDue } from '@/utils/invoiceAmount'
-import { useRef, useLayoutEffect, useEffect, useState, Fragment } from 'react'
+import { useRef, useLayoutEffect, useEffect, useState, useCallback, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -8,7 +8,7 @@ import i18n from '@/i18n/config'
 import { friendlyError } from '@/utils/friendlyError'
 import { parseDate } from '@/utils/tableText'
 import type { Invoice, Item } from '@/types'
-import { Receipt, Plus, PackageSearch, X, Rows3, Paintbrush, FileSpreadsheet } from 'lucide-react'
+import { Receipt, Plus, PackageSearch, X, Rows3, Paintbrush, FileSpreadsheet, PanelLeftOpen, PanelLeftClose, ListTree } from 'lucide-react'
 import { format } from 'date-fns'
 import { invoicesApi, ordersApi, itemsApi } from '@/api'
 import { formatRp, FormField, ConfirmDialog } from '@/components/ui'
@@ -19,7 +19,7 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 import { useScaleToFit } from '@/hooks/useScaleToFit'
 import { usePrintLightBody } from '@/hooks/usePrintLightBody'
 import { usePaperFormat, PAPER_FORMATS, type PaperFormat } from '@/utils/PaperFormatStore'
-import { useInvoiceLayout, resolveFormat, type FormatColumn, type FormatScope } from '@/utils/InvoiceLayoutStore'
+import { useInvoiceLayout, resolveFormat, BORDER_PRESETS, type BorderPreset, type BorderLine, type FormatColumn, type FormatPatch, type FormatScope } from '@/utils/InvoiceLayoutStore'
 import { InvoiceFormatBar, type FormatTarget } from './InvoiceFormatBar'
 import { usePrintLayout } from '@/hooks/usePrintLayout'
 import { PrintLayoutPanel, PANEL_ROOM_CLASS } from '@/components/print/PrintLayoutPanel'
@@ -354,7 +354,10 @@ function PageBreakGap({
   )
 }
 
-export function InvoicePrintPage() {
+export function InvoicePrintPage({ invoiceList }: {
+  /** The list of other invoices beside the page (see InvoicePrintRoute). */
+  invoiceList?: { open: boolean; onToggle: () => void }
+} = {}) {
   usePrintLightBody()
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
@@ -400,7 +403,16 @@ export function InvoicePrintPage() {
   const [formatMode, setFormatMode] = useState(false)
   // How the selected cell looks now (read from the page, so it includes the
   // invoice's own defaults, like a bold KETERANGAN), for the bar's buttons.
-  const [selectedLook, setSelectedLook] = useState<{ bold: boolean; italic: boolean; align: 'left' | 'center' | 'right' }>({ bold: false, italic: false, align: 'left' })
+  const [selectedLook, setSelectedLook] = useState<FormatTarget['current']>({ bold: false, italic: false, align: 'left', size: 11.5, color: '#000000' })
+  // The other corner of a block of cells: Shift+click (or, on a phone,
+  // Select more then a tap) selects everything between it and selectedCell.
+  const [rangeEnd, setRangeEnd] = useState<{ row: string; col: FormatColumn } | null>(null)
+  const [extendMode, setExtendMode] = useState(false)
+  // Dragging a row's bottom edge: Fit to 1 page holds still until it's let go.
+  const rowDragRef = useRef(false)
+  const [rowDragging, setRowDragging] = useState(false)
+  // The Format bar's actions, for the Ctrl+B / Ctrl+I keys.
+  const formatKeysRef = useRef<{ onBold: () => void; onItalic: () => void }>({ onBold: () => {}, onItalic: () => {} })
 
   // Compact: tightens row height, font size, and the gaps between blocks, so
   // an invoice sitting just over one page — mostly whitespace, not real
@@ -525,7 +537,11 @@ export function InvoicePrintPage() {
   // this isn't a shared preference the way column widths are.
   const [paperFormat, setPaperFormat] = usePaperFormat(invoice?.id)
   // Column widths dragged by hand and items folded to one line, per invoice.
-  const { layout, setWidth, resetWidths, toggleFold, setFolded, setFormat, clearFormat, clearAllFormatting, hasFormatting } = useInvoiceLayout(invoice?.id)
+  // Whether a row key is still on the invoice (set once its items load, below),
+  // so formatting of a deleted item isn't kept on the server.
+  const rowAliveRef = useRef<((rowKey: string) => boolean) | null>(null)
+  const rowAlive = useCallback((rowKey: string) => rowAliveRef.current?.(rowKey) ?? true, [])
+  const { layout, setWidth, resetWidths, toggleFold, setFolded, setFormat, clearFormat, clearAllFormatting, hasFormatting, setText, mergeCells, unmerge } = useInvoiceLayout(invoice?.id, rowAlive)
   // The selected cell's look, read from the page after each render.
   useLayoutEffect(() => {
     if (!selectedCell) return
@@ -533,9 +549,13 @@ export function InvoicePrintPage() {
     if (!td) return
     const cs = getComputedStyle(td.querySelector<HTMLElement>('.sheet-cell') ?? td)
     const align = cs.textAlign === 'center' ? 'center' : cs.textAlign === 'right' || cs.textAlign === 'end' ? 'right' : 'left'
-    const next = { bold: Number(cs.fontWeight) >= 600, italic: cs.fontStyle === 'italic', align } as const
-    setSelectedLook(prev => (prev.bold === next.bold && prev.italic === next.italic && prev.align === next.align ? prev : next))
-  }, [selectedCell, layout, formatScope])
+    // The size at full size (Fit to 1 page may be shrinking it now).
+    const size = Math.round((parseFloat(cs.fontSize) / (fit || 1)) * 2) / 2
+    const rgb = cs.color.match(/\d+/g)?.slice(0, 3).map(Number) ?? [0, 0, 0]
+    const color = `#${rgb.map(n => n.toString(16).padStart(2, '0')).join('')}`
+    const next = { bold: Number(cs.fontWeight) >= 600, italic: cs.fontStyle === 'italic', align, size, color } as const
+    setSelectedLook(prev => ((Object.keys(next) as (keyof typeof next)[]).every(k => prev[k] === next[k]) ? prev : next))
+  }, [selectedCell, layout, formatScope, fit])
   // Ctrl/⌘+B and +I format the selection, as in Excel; Esc or a click away
   // from the table and the bar lets go of it.
   useEffect(() => {
@@ -545,18 +565,20 @@ export function InvoicePrintPage() {
       const k = e.key.toLowerCase()
       if (k !== 'b' && k !== 'i') return
       e.preventDefault()
-      setFormat(formatScope, selectedCell.row, selectedCell.col, k === 'b' ? { bold: !selectedLook.bold } : { italic: !selectedLook.italic })
+      if (k === 'b') formatKeysRef.current.onBold()
+      else formatKeysRef.current.onItalic()
     }
     const onDown = (e: MouseEvent) => {
       const el = e.target as HTMLElement
       if (el.closest('#invoice table') || el.closest('[data-format-bar]') || el.closest('[role="dialog"]') || el.closest('[data-print-toolbar]')) return
       if (formatMode) return
       setSelectedCell(null)
+      setRangeEnd(null)
     }
     window.addEventListener('keydown', onKey)
     document.addEventListener('mousedown', onDown)
     return () => { window.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onDown) }
-  }, [selectedCell, formatScope, selectedLook, setFormat, formatMode])
+  }, [selectedCell, formatMode])
   const isFolded = (name: string) => layout.folded.includes(name)
   const { widthMm: pageWidthMm, heightMm: pageHeightMm } = PAPER_FORMATS[paperFormat]
   const pageHeightPx = pageHeightMm * MM_TO_PX
@@ -576,11 +598,20 @@ export function InvoicePrintPage() {
     enabled: !!invoice?.order_id,
   })
 
-  const { data: items = [], refetch: refetchItems } = useQuery({
+  const { data: items = [], refetch: refetchItems, isSuccess: itemsLoaded } = useQuery({
     queryKey: ['items', invoice?.order_id],
     queryFn: () => itemsApi.getByOrder(invoice!.order_id),
     enabled: !!invoice?.order_id,
   })
+  {
+    const itemKeys = new Set(items.map(i => `item-${i.id}`))
+    const names = new Set(items.map(i => i.item_name))
+    rowAliveRef.current = !itemsLoaded ? null : (k: string) =>
+      k.startsWith('item-') ? itemKeys.has(k)
+        : k.startsWith('fold-') ? names.has(k.slice(5))
+        : k.startsWith('gap-') ? names.has(k.slice(4).replace(/-\d+$/, ''))
+        : true // the heading and totals rows are always there
+  }
 
   // All invoices, so liveDownPayment/balanceDue below can find this order's DP
   // invoice by order_id. A Pelunasan's own down_payment is a snapshot from
@@ -611,7 +642,8 @@ export function InvoicePrintPage() {
     let r = row + dr, c = Math.min(3, Math.max(0, col + dc))
     for (let i = 0; i < 400; i++) {
       const el = sheetCells.current.get(`${r}:${c}`)
-      if (el) { el.focus(); return }
+      // A cell hidden under a merged one is skipped.
+      if (el && el.offsetParent !== null) { el.focus(); return }
       if (dr) r += dr
       else if (dc) { c += dc; if (c < 0 || c > 3) return }
       else return
@@ -895,6 +927,9 @@ export function InvoicePrintPage() {
   const fitContentKey = JSON.stringify([invoice, items, layout, PL, pageWidthMm, pageHeightMm, notes, extraGapRows, manualBreaks.size, fitOnePage])
   const fitGuard = useRef({ key: '', overflowed: false, passes: 0 })
   useLayoutEffect(() => {
+    // Not while a row's edge is being dragged: the page would shrink under
+    // the pointer. It settles once the drag ends.
+    if (rowDragRef.current) return
     const printed = measurePrinted()
     if (printed == null) return
     const guard = fitGuard.current
@@ -1152,14 +1187,91 @@ export function InvoicePrintPage() {
   // Running row number for the table's cells, counted as it renders.
   const sheetRow = { n: 0 }
 
+  // ─── The table's grid, for selecting blocks of cells and merging ──────
+  // Every row in the order it's drawn, which item it belongs to (a merge
+  // can't reach past one item's rows: each item is its own <tbody>), and the
+  // columns it has (TOTAL, D/P and PELUNASAN start with a wide cell).
+  const COLS: FormatColumn[] = ['no', 'ket', 'size', 'qty', 'hargaNet', 'jumlah']
+  const rowOrder: { key: string; group: string; cols: FormatColumn[] }[] = [{ key: 'head', group: 'head', cols: COLS }]
+  groups.forEach(g => {
+    if (isFolded(g.name)) rowOrder.push({ key: `fold-${g.name}`, group: g.name, cols: COLS })
+    else g.rows.forEach(it => rowOrder.push({ key: `item-${it.id}`, group: g.name, cols: COLS }))
+    for (let k = 0; k < 1 + (extraGapRows[g.name] ?? 0); k++) rowOrder.push({ key: `gap-${g.name}-${k}`, group: g.name, cols: COLS })
+  })
+  rowOrder.push({ key: 'total', group: 'totals', cols: ['ket', 'qty', 'hargaNet', 'jumlah'] })
+  if (hasDp) rowOrder.push({ key: 'dp', group: 'totals', cols: ['ket', 'qty', 'hargaNet', 'jumlah'] })
+  rowOrder.push({ key: 'pelunasan', group: 'totals', cols: ['ket', 'hargaNet', 'jumlah'] })
+  const rowIndex = new Map(rowOrder.map((r, i) => [r.key, i]))
+  const splitKey = (k: string) => { const at = k.lastIndexOf('|'); return { row: k.slice(0, at), col: k.slice(at + 1) as FormatColumn } }
+
+  // Merged cells as drawn: each merge's block (cut short where its item
+  // ends), the top-left cell's spans, and the cells under it, hidden.
+  const mergeBlocks: { anchor: string; r0: number; r1: number; c0: number; c1: number }[] = []
+  const spans = new Map<string, { rowSpan: number; colSpan: number }>()
+  const covered = new Set<string>()
+  for (const [anchor, m] of Object.entries(layout.merges)) {
+    const { row, col } = splitKey(anchor)
+    const r0 = rowIndex.get(row), c0 = COLS.indexOf(col)
+    if (r0 == null || c0 < 0 || rowOrder[r0].group === 'totals') continue
+    let r1 = r0
+    while (r1 + 1 < rowOrder.length && r1 - r0 + 1 < m.rows && rowOrder[r1 + 1].group === rowOrder[r0].group) r1++
+    const c1 = Math.min(COLS.length - 1, c0 + m.cols - 1)
+    const cellsOf = (fn: (k: string) => void) => { for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) fn(`${rowOrder[r].key}|${COLS[c]}`) }
+    let clash = false
+    cellsOf(k => { if (covered.has(k) || spans.has(k)) clash = true })
+    if (clash || (r1 === r0 && c1 === c0)) continue
+    mergeBlocks.push({ anchor, r0, r1, c0, c1 })
+    cellsOf(k => { if (k !== anchor) covered.add(k) })
+    spans.set(anchor, { rowSpan: r1 - r0 + 1, colSpan: c1 - c0 + 1 })
+  }
+
+  // The selected block: from selectedCell to rangeEnd, or just the cell.
+  const selBox = (() => {
+    if (!selectedCell) return null
+    const a = { r: rowIndex.get(selectedCell.row) ?? -1, c: COLS.indexOf(selectedCell.col) }
+    const b = rangeEnd ? { r: rowIndex.get(rangeEnd.row) ?? -1, c: COLS.indexOf(rangeEnd.col) } : a
+    if (a.r < 0 || b.r < 0) return null
+    return { r0: Math.min(a.r, b.r), r1: Math.max(a.r, b.r), c0: Math.min(a.c, b.c), c1: Math.max(a.c, b.c) }
+  })()
+  const selCells: { row: string; col: FormatColumn }[] = []
+  if (selBox) {
+    for (let r = selBox.r0; r <= selBox.r1; r++) {
+      for (let c = selBox.c0; c <= selBox.c1; c++) {
+        const col = COLS[c]
+        if (rowOrder[r].cols.includes(col) && !covered.has(`${rowOrder[r].key}|${col}`)) selCells.push({ row: rowOrder[r].key, col })
+      }
+    }
+  }
+  const inSelBox = (rowKey: string, col: FormatColumn) => {
+    if (!selBox) return false
+    const r = rowIndex.get(rowKey) ?? -1, c = COLS.indexOf(col)
+    return r >= selBox.r0 && r <= selBox.r1 && c >= selBox.c0 && c <= selBox.c1
+  }
+  // Merging: a block within one item's rows (or within the heading row).
+  const canMerge = !!selBox && selCells.length > 1 && (() => {
+    const g = rowOrder[selBox.r0].group
+    if (g === 'totals') return false
+    for (let r = selBox.r0; r <= selBox.r1; r++) if (rowOrder[r].group !== g) return false
+    return true
+  })()
+
+  // A cell edge, as CSS. "none" is hidden, so the neighbour's line goes too.
+  const borderCss = (line: BorderLine) =>
+    line === 'none' ? 'hidden' : line === 'thick' ? '2px solid #000' : line === 'double' ? '3px double #000' : '1px solid #000'
+
   // A table cell's style with its formatting (column, then row, then the
-  // cell's own; see InvoiceLayoutStore), and selecting it for the Format
-  // bar. The editable text inside follows the cell's alignment and weight
-  // through the data-fmt-* attributes (see the sheet CSS below).
+  // cell's own; see InvoiceLayoutStore), its merge, and selecting it for the
+  // Format bar. The editable text inside follows the cell's alignment and
+  // weight through the data-fmt-* attributes (see the sheet CSS below).
   const cellProps = (rowKey: string, col: FormatColumn, base: React.CSSProperties) => {
     const f = resolveFormat(layout, rowKey, col)
+    const key = `${rowKey}|${col}`
     const isSel = selectedCell?.row === rowKey && selectedCell.col === col
-    const inScope = !!selectedCell && (formatScope === 'row' ? selectedCell.row === rowKey : formatScope === 'column' ? selectedCell.col === col : isSel)
+    const inScope = !!selectedCell && (formatScope === 'row' ? selCells.some(c => c.row === rowKey)
+      : formatScope === 'column' ? selCells.some(c => c.col === col)
+      : inSelBox(rowKey, col))
+    const span = spans.get(key)
+    const b = f.borders
     return {
       style: {
         ...base,
@@ -1168,14 +1280,77 @@ export function InvoicePrintPage() {
         ...(f.italic ? { fontStyle: 'italic' as const } : {}),
         ...(f.fill ? { background: f.fill } : {}),
         ...(f.height ? { height: `${sz(f.height)}px` } : {}),
+        ...(f.size ? { fontSize: `${sz(f.size)}px` } : {}),
+        ...(f.color ? { color: f.color } : {}),
+        ...(b?.top ? { borderTop: borderCss(b.top) } : {}),
+        ...(b?.right ? { borderRight: borderCss(b.right) } : {}),
+        ...(b?.bottom ? { borderBottom: borderCss(b.bottom) } : {}),
+        ...(b?.left ? { borderLeft: borderCss(b.left) } : {}),
+        ...(covered.has(key) ? { display: 'none' } : {}),
+        ...(span ? { verticalAlign: 'middle' as const } : {}),
       },
+      ...(span ? { rowSpan: span.rowSpan, colSpan: span.colSpan } : {}),
       'data-fmt-align': f.align ? '' : undefined,
       'data-fmt-bold': f.bold != null ? '' : undefined,
       'data-sel': inScope ? (isSel ? 'cell' : 'scope') : undefined,
-      onMouseDownCapture: () => setSelectedCell({ row: rowKey, col }),
-      onFocusCapture: () => setSelectedCell({ row: rowKey, col }),
+      // Shift+click (or Select more on a phone) stretches the selection to
+      // here, without starting to type in the cell.
+      onMouseDownCapture: (e: React.MouseEvent) => {
+        if (selectedCell && (e.shiftKey || (formatMode && extendMode))) {
+          e.preventDefault()
+          setRangeEnd({ row: rowKey, col })
+          return
+        }
+        setSelectedCell({ row: rowKey, col })
+        setRangeEnd(null)
+      },
+      onFocusCapture: () => {
+        if (isSel) return
+        setSelectedCell({ row: rowKey, col })
+        setRangeEnd(null)
+      },
     }
   }
+
+  // Text typed over a cell that's otherwise fixed (a heading, an ITEM
+  // number, a label, a blank). Typing its own text again goes back to it.
+  const freeText = (rowKey: string, col: FormatColumn, own: string, align: 'left' | 'center' | 'right' = 'left') => {
+    const typed = layout.texts[`${rowKey}|${col}`]
+    return <SheetCell value={typed ?? own} uppercase={false} align={align} onSave={v => setText(rowKey, col, v === own ? undefined : v)} />
+  }
+
+  // A row's bottom edge, dragged up or down to set its height like Excel;
+  // a double-click puts it back. Computer only (on a phone it's Row height
+  // in the Format panel).
+  const rowHandle = (rowKey: string) => (
+    <span
+      className="row-resize print:hidden"
+      style={{ width: `${tableWidthPx}px` }}
+      title={t('invoiceSheet.rowResizeHint')}
+      onDoubleClick={e => { e.stopPropagation(); setFormat('row', rowKey, 'no', { height: undefined }) }}
+      onPointerDown={e => {
+        e.preventDefault(); e.stopPropagation()
+        const tr = (e.currentTarget as HTMLElement).closest('tr')
+        if (!tr) return
+        const k = (scale || 1) * (fit || 1)
+        const h0 = tr.getBoundingClientRect().height / k
+        const y0 = e.clientY
+        rowDragRef.current = true
+        setRowDragging(true)
+        const onMove = (ev: PointerEvent) => {
+          setFormat('row', rowKey, 'no', { height: Math.max(8, Math.min(200, Math.round(h0 + (ev.clientY - y0) / k))) })
+        }
+        const onUp = () => {
+          window.removeEventListener('pointermove', onMove)
+          window.removeEventListener('pointerup', onUp)
+          rowDragRef.current = false
+          setRowDragging(false)
+        }
+        window.addEventListener('pointermove', onMove)
+        window.addEventListener('pointerup', onUp)
+      }}
+    />
+  )
 
   // The Format bar, while a cell is selected.
   const baseRowHeight = Math.round(ROW_HEIGHT_PX * PL.bodySize / BASE_FONT_PX)
@@ -1192,31 +1367,66 @@ export function InvoicePrintPage() {
     if (rowKey.startsWith('fold-')) return rowKey.slice(5)
     return t('invoiceFormat.blankRow')
   }
+  const selectedKey = selectedCell ? `${selectedCell.row}|${selectedCell.col}` : ''
   const formatTarget: FormatTarget | null = selectedCell && (() => {
     const { row, col } = selectedCell
-    const scopeFormat = formatScope === 'column' ? layout.cols[col] : formatScope === 'row' ? layout.rows[row] : layout.cells[`${row}|${col}`]
+    const scopeFormat = formatScope === 'column' ? layout.cols[col] : formatScope === 'row' ? layout.rows[row] : layout.cells[selectedKey]
+    const many = selCells.length > 1
     return {
-      where: formatScope === 'column' ? COLUMN_NAMES[col] : formatScope === 'row' ? rowName(row) : `${COLUMN_NAMES[col]} · ${rowName(row)}`,
+      where: formatScope === 'column' ? [...new Set(selCells.map(c => COLUMN_NAMES[c.col]))].join(', ')
+        : formatScope === 'row' ? (many ? t('invoiceFormat.rowsSelected', { count: new Set(selCells.map(c => c.row)).size }) : rowName(row))
+        : many ? t('invoiceFormat.cellsSelected', { count: selCells.length }) : `${COLUMN_NAMES[col]} · ${rowName(row)}`,
       current: selectedLook,
       fill: scopeFormat?.fill,
       height: layout.rows[row]?.height ?? baseRowHeight,
       baseHeight: baseRowHeight,
+      cells: selCells.length,
+      canMerge,
+      merged: !many && spans.has(selectedKey),
+      customText: !many && layout.texts[selectedKey] !== undefined,
     }
   })()
-  const formatHandlers = selectedCell ? {
-    onBold: () => setFormat(formatScope, selectedCell.row, selectedCell.col, { bold: !selectedLook.bold }),
-    onItalic: () => setFormat(formatScope, selectedCell.row, selectedCell.col, { italic: !selectedLook.italic }),
-    onAlign: (a: 'left' | 'center' | 'right') => setFormat(formatScope, selectedCell.row, selectedCell.col, { align: a }),
-    onFill: (c: string | null) => setFormat(formatScope, selectedCell.row, selectedCell.col, { fill: c ?? undefined }),
-    onHeight: (h: number | null) => setFormat('row', selectedCell.row, selectedCell.col, { height: h ?? undefined }),
-    onClear: () => clearFormat(formatScope, selectedCell.row, selectedCell.col),
-  } : { onBold: () => {}, onItalic: () => {}, onAlign: () => {}, onFill: () => {}, onHeight: () => {}, onClear: () => {} }
-  const endFormatMode = () => { setFormatMode(false); setSelectedCell(null) }
+  // Each action applies to the whole selection: its cells, their rows, or
+  // their columns, as the scope says.
+  const applyFormat = (patch: FormatPatch) => {
+    if (formatScope === 'row') new Set(selCells.map(c => c.row)).forEach(r => setFormat('row', r, 'no', patch))
+    else if (formatScope === 'column') new Set(selCells.map(c => c.col)).forEach(c => setFormat('column', '', c, patch))
+    else selCells.forEach(c => setFormat('cell', c.row, c.col, patch))
+  }
+  const formatHandlers = {
+    onBold: () => applyFormat({ bold: !selectedLook.bold }),
+    onItalic: () => applyFormat({ italic: !selectedLook.italic }),
+    onAlign: (a: 'left' | 'center' | 'right') => applyFormat({ align: a }),
+    onSize: (px: number | null) => applyFormat({ size: px ?? undefined }),
+    onColor: (c: string | null) => applyFormat({ color: c ?? undefined }),
+    onFill: (c: string | null) => applyFormat({ fill: c ?? undefined }),
+    onBorders: (preset: BorderPreset) => applyFormat({ borders: preset === 'reset' ? null : BORDER_PRESETS[preset] }),
+    onHeight: (h: number | null) => new Set(selCells.map(c => c.row)).forEach(r => setFormat('row', r, 'no', { height: h ?? undefined })),
+    onClear: () => {
+      if (formatScope === 'row') new Set(selCells.map(c => c.row)).forEach(r => clearFormat('row', r, 'no'))
+      else if (formatScope === 'column') new Set(selCells.map(c => c.col)).forEach(c => clearFormat('column', '', c))
+      else selCells.forEach(c => clearFormat('cell', c.row, c.col))
+    },
+    onMerge: () => {
+      if (!selBox || !canMerge) return
+      const anchor = { row: rowOrder[selBox.r0].key, col: COLS[selBox.c0] }
+      const overlaps = mergeBlocks.filter(m => m.r0 <= selBox.r1 && m.r1 >= selBox.r0 && m.c0 <= selBox.c1 && m.c1 >= selBox.c0).map(m => m.anchor)
+      mergeCells(anchor.row, anchor.col, { rows: selBox.r1 - selBox.r0 + 1, cols: selBox.c1 - selBox.c0 + 1 }, overlaps)
+      setSelectedCell(anchor)
+      setRangeEnd(null)
+      setExtendMode(false)
+    },
+    onUnmerge: () => unmerge(selectedKey),
+    onResetText: () => selectedCell && setText(selectedCell.row, selectedCell.col, undefined),
+  }
+  formatKeysRef.current = formatHandlers
+  const endFormatMode = () => { setFormatMode(false); setSelectedCell(null); setRangeEnd(null); setExtendMode(false) }
   // Computer: the bar under the toolbar while a cell is selected. Phone: the
   // panel at the bottom while Format cells is on.
   const formatBar = isMobile
-    ? (formatMode && <InvoiceFormatBar variant="panel" target={formatTarget} scope={formatScope} onScope={setFormatScope} {...formatHandlers} onClose={endFormatMode} />)
-    : (formatTarget && <InvoiceFormatBar target={formatTarget} scope={formatScope} onScope={setFormatScope} {...formatHandlers} onClose={() => setSelectedCell(null)} />)
+    ? (formatMode && <InvoiceFormatBar variant="panel" target={formatTarget} scope={formatScope} onScope={setFormatScope} {...formatHandlers} onClose={endFormatMode}
+        extend={extendMode} onExtend={() => setExtendMode(x => !x)} />)
+    : (formatTarget && <InvoiceFormatBar target={formatTarget} scope={formatScope} onScope={setFormatScope} {...formatHandlers} onClose={() => { setSelectedCell(null); setRangeEnd(null) }} />)
 
   // The print view as an Excel file: the same layout and formatting, with
   // JUMLAH and the totals as formulas (see invoiceExcel.ts).
@@ -1235,6 +1445,7 @@ export function InvoicePrintPage() {
           po: order?.po_number ?? '', lamaProduksi: (invoice.lama_produksi ?? '').toUpperCase(), mulaiProduksi: startProduksi,
         },
         groups, isFolded, extraGapRows, sheet: layout, print: PL, fonts,
+        merges: mergeBlocks.map(m => ({ row: rowOrder[m.r0].key, col: COLS[m.c0], rows: m.r1 - m.r0 + 1, cols: m.c1 - m.c0 + 1 })),
         columnWidths, columnTexts, tableWidthPx, ketMinPx: KETERANGAN_MIN_PX,
         rowHeightPx: ROW_HEIGHT_PX * PL.bodySize / BASE_FONT_PX,
         measure: measureTextWidth,
@@ -1255,6 +1466,9 @@ export function InvoicePrintPage() {
       setExcelBusy(false)
     }
   }
+
+  // The invoice list down the left (computer): the page moves over for it.
+  const sideListOpen = !isMobile && !!invoiceList?.open
 
   // Plain native print; see the multi-page policy at the top.
   const handlePrint = () => {
@@ -1278,7 +1492,21 @@ export function InvoicePrintPage() {
             </span>
           )}
         </>}
+        leading={invoiceList && (
+          <button type="button" onClick={invoiceList.onToggle} aria-pressed={invoiceList.open}
+            className={`btn-secondary flex items-center gap-1.5 text-sm ${invoiceList.open ? '!bg-navy-50 !border-navy-200 text-navy-900' : ''}`}
+            title={t(invoiceList.open ? 'invoiceSwitcher.hide' : 'invoiceSwitcher.show')}>
+            {invoiceList.open ? <PanelLeftClose size={14} aria-hidden /> : <PanelLeftOpen size={14} aria-hidden />} {t('invoiceSwitcher.title')}
+          </button>
+        )}
         tools={<>
+        {isMobile && invoiceList && (
+          <div>
+            <button type="button" data-close-tools onClick={invoiceList.onToggle} className="btn-secondary !justify-start gap-2">
+              <ListTree size={16} aria-hidden /> {t('invoiceSwitcher.other')}
+            </button>
+          </div>
+        )}
         {isMobile && (
           <div>
             <button type="button" data-close-tools onClick={() => { setFormatMode(true); setSelectedCell(null) }}
@@ -1530,8 +1758,9 @@ export function InvoicePrintPage() {
           <Receipt size={14} /> Kwitansi
         </button>
         </>}
-        below={<>{!isMobile && formatBar}{groupNames.length > 1 ? (
-        <div className="print:hidden bg-white border-b border-slate-200 px-6 py-2 flex items-center gap-1.5 flex-wrap">
+        pinned={!isMobile && formatBar}
+        below={<>{groupNames.length > 1 ? (
+        <div className={`print:hidden bg-white border-b border-slate-200 px-6 py-2 flex items-center gap-1.5 flex-wrap ${sideListOpen ? 'dock:pl-[19.5rem]' : ''}`}>
           <span className="text-xs text-slate-400 mr-0.5">Start a new page before:</span>
           {groupNames.map(name => (
             <button
@@ -1563,7 +1792,7 @@ export function InvoicePrintPage() {
 
       {/* The page is a fixed physical width: it scrolls here (and .scale-wrap shrinks
          it to fit) so it doesn't widen the toolbar. Printing uses the real size. */}
-      <div className={`p-3 dock:p-8 print:p-0 overflow-x-auto print:overflow-visible ${layoutOpen ? `${PANEL_ROOM_CLASS} pb-[57vh] lg:pb-8` : formatMode ? 'pb-[57vh]' : ''}`} ref={scaleContainerRef}>
+      <div className={`p-3 dock:p-8 print:p-0 overflow-x-auto print:overflow-visible ${sideListOpen ? 'dock:pl-[20rem] print:!pl-0' : ''} ${layoutOpen ? `${PANEL_ROOM_CLASS} pb-[57vh] lg:pb-8` : formatMode ? 'pb-[57vh]' : ''}`} ref={scaleContainerRef}>
         <div
           className="scale-wrap mx-auto"
           style={{ width: scaledWidth || undefined, height: scaledHeight || undefined, overflow: 'hidden' }}
@@ -1678,17 +1907,27 @@ export function InvoicePrintPage() {
             // Format cells mode (phone): a tap only selects the cell (see
             // cellProps); it doesn't start typing, fold an item or delete a line.
             onClickCapture={formatMode ? e => { e.stopPropagation(); e.preventDefault() } : undefined}
-            style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0', fontSize: `${fontPx}px`, lineHeight: 1.2, tableLayout: 'fixed', border: FRAME, borderBottom: '3px double #000' }}>
+            style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0', fontSize: `${fontPx}px`, lineHeight: 1.2, tableLayout: 'fixed', border: FRAME, borderBottom: '3px double #000', cursor: rowDragging ? 'row-resize' : undefined }}>
+            {/* The column widths, here rather than on the headings, so a merged
+                heading doesn't change them. */}
+            <colgroup>
+              <col style={{ width: `${columnWidths.no}px` }} />
+              <col />
+              <col style={{ width: `${columnWidths.size}px` }} />
+              <col style={{ width: `${columnWidths.qty}px` }} />
+              <col style={{ width: `${columnWidths.hargaNet}px` }} />
+              <col style={{ width: `${columnWidths.jumlah}px` }} />
+            </colgroup>
             <thead ref={theadRef}>
               <tr>
-                <th {...cellProps('head', 'no', { ...headCell, width: `${columnWidths.no}px` })}>ITEM{resizeHandle('no', 'right')}</th>
+                <th {...cellProps('head', 'no', headCell)}>{freeText('head', 'no', 'ITEM', 'center')}{resizeHandle('no', 'right')}{rowHandle('head')}</th>
                 {/* KETERANGAN takes the remaining width and may wrap (long item names). */}
-                <th {...cellProps('head', 'ket', headCell)}>KETERANGAN</th>
-                <th {...cellProps('head', 'size', { ...headCell, width: `${columnWidths.size}px` })}>SIZE{resizeHandle('size', 'left')}</th>
-                <th {...cellProps('head', 'qty', { ...headCell, width: `${columnWidths.qty}px` })}>QTY / SET{resizeHandle('qty', 'left')}</th>
+                <th {...cellProps('head', 'ket', headCell)}>{freeText('head', 'ket', 'KETERANGAN', 'center')}</th>
+                <th {...cellProps('head', 'size', headCell)}>{freeText('head', 'size', 'SIZE', 'center')}{resizeHandle('size', 'left')}</th>
+                <th {...cellProps('head', 'qty', headCell)}>{freeText('head', 'qty', 'QTY / SET', 'center')}{resizeHandle('qty', 'left')}</th>
                 {/* Fitted to the longest amount; no ellipsis, so a sizing bug would show. */}
-                <th {...cellProps('head', 'hargaNet', { ...headCell, width: `${columnWidths.hargaNet}px` })}>HARGA NET / PCS{resizeHandle('hargaNet', 'left')}</th>
-                <th {...cellProps('head', 'jumlah', { ...headCell, width: `${columnWidths.jumlah}px` })}>JUMLAH (Rp){resizeHandle('jumlah', 'left')}</th>
+                <th {...cellProps('head', 'hargaNet', headCell)}>{freeText('head', 'hargaNet', 'HARGA NET / PCS', 'center')}{resizeHandle('hargaNet', 'left')}</th>
+                <th {...cellProps('head', 'jumlah', headCell)}>{freeText('head', 'jumlah', 'JUMLAH (Rp)', 'center')}{resizeHandle('jumlah', 'left')}</th>
               </tr>
             </thead>
 
@@ -1752,13 +1991,14 @@ export function InvoicePrintPage() {
                       return (
                         <tr key={key} className="sheet-row">
                           <td {...cellProps(key, 'no', { ...bodyCell, textAlign: 'center', position: 'relative' })}>
-                            {groupIdx + 1}
+                            {freeText(key, 'no', String(groupIdx + 1), 'center')}
                             {foldButton(group.name)}
+                            {rowHandle(key)}
                           </td>
                           <td {...cellProps(key, 'ket', { ...bodyCell, whiteSpace: 'normal' })}>
                             <SheetCell value={group.name.toUpperCase()} onSave={v => saveItemCell(group.rows[0], 'name', v, group.rows)} align="center" bold cellRef={sheetRef(r, 0)} onMove={sheetMove(r, 0)} />
                           </td>
-                          <td {...cellProps(key, 'size', { ...bodyCell, textAlign: 'center', whiteSpace: 'normal' })}>{group.rows.map(i => i.size || '-').join(', ')}</td>
+                          <td {...cellProps(key, 'size', { ...bodyCell, textAlign: 'center', whiteSpace: 'normal' })}>{freeText(key, 'size', group.rows.map(i => i.size || '-').join(', '), 'center')}</td>
                           <td {...cellProps(key, 'qty', { ...bodyCell, textAlign: 'right' })}>{num(qty)}</td>
                           <td {...cellProps(key, 'hargaNet', { ...bodyCell, textAlign: 'right', whiteSpace: prices.length > 1 ? 'normal' : 'nowrap' })}>
                             {prices.length === 1
@@ -1774,7 +2014,8 @@ export function InvoicePrintPage() {
                       return (
                         <tr key={key} className="sheet-row">
                           <td {...cellProps(key, 'no', { ...bodyCell, textAlign: 'center', position: 'relative' })}>
-                            {rowIdx === 0 ? groupIdx + 1 : ''}
+                            {freeText(key, 'no', rowIdx === 0 ? String(groupIdx + 1) : '', 'center')}
+                            {rowHandle(key)}
                             {rowIdx === 0 && group.rows.length > 1 && foldButton(group.name)}
                             {/* Delete this line (screen only, shows on hover or focus). */}
                             <button type="button" className="sheet-del print:hidden" title={t('invoiceSheet.deleteRow')} aria-label={t('invoiceSheet.deleteRowNamed', { name: `${item.item_name} ${item.size ?? ''}`.trim() })}
@@ -1804,7 +2045,7 @@ export function InvoicePrintPage() {
                         // or a new item when a KETERANGAN is typed.
                         return (
                           <tr key={key}>
-                            <td {...cellProps(key, 'no', cellStyle)} />
+                            <td {...cellProps(key, 'no', { ...cellStyle, position: 'relative' })}>{freeText(key, 'no', '', 'center')}{rowHandle(key)}</td>
                             <td {...cellProps(key, 'ket', cellStyle)}><SheetCell value="" onSave={v => saveBlankCell(null, 'name', v)} align="center" bold placeholder={gapIdx === 0 ? t('invoiceSheet.newItem') : ''} cellRef={sheetRef(r, 0)} onMove={sheetMove(r, 0)} /></td>
                             <td {...cellProps(key, 'size', { ...cellStyle, textAlign: 'center' })}><SheetCell value="" onSave={v => saveBlankCell(group.name, 'size', v)} align="center" placeholder={gapIdx === 0 ? t('invoiceSheet.newSize') : ''} cellRef={sheetRef(r, 1)} onMove={sheetMove(r, 1)} /></td>
                             <td {...cellProps(key, 'qty', cellStyle)}><SheetCell value="" numeric onSave={v => saveBlankCell(group.name, 'qty', v)} align="right" cellRef={sheetRef(r, 2)} onMove={sheetMove(r, 2)} /></td>
@@ -1819,7 +2060,7 @@ export function InvoicePrintPage() {
                                     <button type="button" title="Add blank row" onClick={() => addGapRow(group.name)} style={gapButton}>+</button>
                                   </span>
                                 )}
-                                <span>-</span>
+                                <div style={{ flex: 1, minWidth: 0 }}>{freeText(key, 'jumlah', '-', 'right')}</div>
                               </div>
                             </td>
                           </tr>
@@ -1864,22 +2105,23 @@ export function InvoicePrintPage() {
                 (J/T, or e.g. CASH ON DELIVERY) beside PELUNASAN. */}
             <tbody ref={totalsRef} style={{ pageBreakInside: 'avoid' }}>
               <tr>
-                <td colSpan={3} {...cellProps('total', 'ket', { ...openCell, borderTop: LINE })}>
+                <td colSpan={3} {...cellProps('total', 'ket', { ...openCell, borderTop: LINE, position: 'relative' })}>
                   <div style={{ paddingLeft: '10px' }}><SheetCell value={totalNote} onSave={setTotalNote} uppercase={false} /></div>
+                  {rowHandle('total')}
                 </td>
                 <td {...cellProps('total', 'qty', { ...sumCell, borderTop: LINE, textAlign: 'right' })}>{num(items.reduce((s, i) => s + i.amount, 0))}</td>
-                <td {...cellProps('total', 'hargaNet', { ...sumCell, borderTop: LINE, textAlign: 'center' })}>TOTAL</td>
+                <td {...cellProps('total', 'hargaNet', { ...sumCell, borderTop: LINE, textAlign: 'center' })}>{freeText('total', 'hargaNet', 'TOTAL', 'center')}</td>
                 <td {...cellProps('total', 'jumlah', { ...sumCell, borderTop: LINE, textAlign: 'right' })}>{num(invoice.total)}</td>
               </tr>
               {hasDp && (
                 <tr>
-                  <td colSpan={3} {...cellProps('dp', 'ket', openCell)} />
+                  <td colSpan={3} {...cellProps('dp', 'ket', { ...openCell, position: 'relative' })}>{freeText('dp', 'ket', '')}{rowHandle('dp')}</td>
                   <td {...cellProps('dp', 'qty', { ...sumCell, textAlign: 'right' })}>
-                    {invoice.type === 'pelunasan' && (
-                      <span style={{ fontWeight: 'normal' }}><SheetCell value={dpPaidLabel.value} onSave={dpPaidLabel.setValue} align="right" /></span>
-                    )}
+                    {invoice.type === 'pelunasan'
+                      ? <span style={{ fontWeight: 'normal' }}><SheetCell value={dpPaidLabel.value} onSave={dpPaidLabel.setValue} align="right" /></span>
+                      : freeText('dp', 'qty', '', 'right')}
                   </td>
-                  <td {...cellProps('dp', 'hargaNet', { ...sumCell, fontWeight: 'normal', textAlign: 'center' })}>D/P - {dpPercent} %</td>
+                  <td {...cellProps('dp', 'hargaNet', { ...sumCell, fontWeight: 'normal', textAlign: 'center' })}>{freeText('dp', 'hargaNet', `D/P - ${dpPercent} %`, 'center')}</td>
                   <td {...cellProps('dp', 'jumlah', { ...sumCell, textAlign: 'right' })}>
                     {/* Already paid on a Pelunasan, so taken off, in brackets. */}
                     {invoice.type === 'pelunasan' ? `(${num(liveDownPayment)})` : num(liveDownPayment)}
@@ -1887,10 +2129,11 @@ export function InvoicePrintPage() {
                 </tr>
               )}
               <tr>
-                <td colSpan={4} {...cellProps('pelunasan', 'ket', { ...openCell, textAlign: 'right' })}>
+                <td colSpan={4} {...cellProps('pelunasan', 'ket', { ...openCell, textAlign: 'right', position: 'relative' })}>
                   <SheetCell value={jatuhTempo.value} onSave={jatuhTempo.setValue} align="right" bold placeholder="J/T : —" />
+                  {rowHandle('pelunasan')}
                 </td>
-                <td {...cellProps('pelunasan', 'hargaNet', { ...sumCell, textAlign: 'center' })}>PELUNASAN</td>
+                <td {...cellProps('pelunasan', 'hargaNet', { ...sumCell, textAlign: 'center' })}>{freeText('pelunasan', 'hargaNet', 'PELUNASAN', 'center')}</td>
                 <td {...cellProps('pelunasan', 'jumlah', { ...sumCell, textAlign: 'right' })}>
                   {/* The balance after discount, live — see liveBalanceDue above. */}
                   {num(liveBalanceDue)}
@@ -2051,6 +2294,10 @@ export function InvoicePrintPage() {
         .sheet-fold:hover, .sheet-fold:focus-visible { background: #e2e8f0; color: #0f172a; outline: none; }
         .col-resize { position: absolute; top: 0; bottom: 0; width: 8px; cursor: col-resize; z-index: 2; touch-action: none; }
         .col-resize:hover { background: rgba(37, 99, 235, 0.35); }
+        /* A row's bottom edge, dragged to set its height (see rowHandle). */
+        .row-resize { position: absolute; left: 0; bottom: -3px; height: 6px; cursor: row-resize; z-index: 3; touch-action: none; }
+        .row-resize:hover { background: rgba(37, 99, 235, 0.35); }
+        @media (pointer: coarse) { .row-resize { display: none; } }
         @media (pointer: coarse) { .sheet-del { opacity: 0.8; } }
 
         @media print {

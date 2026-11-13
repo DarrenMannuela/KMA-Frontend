@@ -103,7 +103,10 @@ export function BuktiKasPage() {
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="kma-table">
+                    {/* Fixed column widths (from dock up), so Order and Amount
+                        sit in the same place in every Bukti Kas down the page. */}
+                    <table className="kma-table dock:table-fixed">
+                      <colgroup><col /><col className="dock:w-[32%]" /><col className="dock:w-44" /><col className="dock:w-24" /></colgroup>
                       <thead>
                         <tr><th>{t('buktiKas.description')}</th><th>{t('buktiKas.order')}</th><th className="!text-right">{t('buktiKas.amount')}</th><th /></tr>
                       </thead>

@@ -1,3 +1,5 @@
+import { format } from 'date-fns'
+import { currentDateLocale } from '@/i18n/dateLocale'
 import i18n from '@/i18n/config'
 
 export function isInMonth(dateStr: string | null | undefined, year: number, month: number): boolean {
@@ -30,7 +32,8 @@ export function monthLabel(year: number, month: number): string {
  *  from the all-caps MONTH_NAMES below (used for date formatting), since
  *  chart labels read better in normal case, not shouty-caps. */
 export function shortMonthLabel(month: number): string {
-  return new Date(2000, month, 1).toLocaleDateString('en-US', { month: 'short' })
+  // date-fns, like the dashboard's charts, so both say Agt / Okt in Indonesian.
+  return format(new Date(2000, month, 1), 'MMM', { locale: currentDateLocale() })
 }
 
 export function todayISODate(): string {

@@ -37,7 +37,8 @@
       "addContact": "Add Contact",
       "editContact": "Edit Contact",
       "removeConfirm": "Remove contact \"{{name}}\"?"
-    }
+    },
+    "printPriceListEmpty": "Nothing to print yet: add items under Catalogue & Pricing first"
   },
   "catalogue": {
     "catalogue": "Catalogue",
@@ -270,5 +271,49 @@
     "deleteConfirm": "Delete invoice {{id}}?",
     "viewInvoice": "View invoice",
     "printKwitansi": "Print kwitansi/receipt"
+  },
+  "orderJourney": {
+    "title": "Order journey",
+    "nextStep": "next: {{step}}",
+    "allDone": "all steps done",
+    "steps": {
+      "order": "Order",
+      "production": "Production",
+      "delivery": "Delivered",
+      "payment": "Payment"
+    },
+    "state": {
+      "done": "done",
+      "now": "in progress",
+      "late": "overdue",
+      "todo": "not started"
+    },
+    "items_one": "{{count}} item",
+    "items_other": "{{count}} items",
+    "notInvoiced": "not invoiced yet",
+    "paid": "paid {{date}}",
+    "due": "due {{date}}",
+    "unpaid": "unpaid",
+    "overdue_one": "{{count}} day overdue",
+    "overdue_other": "{{count}} days overdue",
+    "kasBon_one": "{{count}} Kas Bon line",
+    "kasBon_other": "{{count}} Kas Bon lines",
+    "noKasBon": "no Kas Bon linked yet",
+    "noDelivery": "no DO / SJ yet",
+    "more": "+{{count}} more",
+    "next": {
+      "makeDp": "create the DP invoice",
+      "waitDp": "wait for the DP",
+      "chaseDp": "chase the DP",
+      "recordProduction": "record production on a Kas Bon",
+      "ship": "finish production and deliver",
+      "makeDelivery": "create the DO / Surat Jalan",
+      "makePelunasan": "create the Pelunasan invoice",
+      "makeInvoice": "create the invoice (DP or COD)",
+      "waitPayment": "wait for payment",
+      "chasePayment": "chase the payment",
+      "addItems": "add the order's items"
+    },
+    "noItems": "no items yet"
   }
 }

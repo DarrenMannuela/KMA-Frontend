@@ -6,7 +6,7 @@
 // again. A4 portrait, fitted to one page wide.
 
 import type { Invoice, Item } from '@/types'
-import { resolveFormat, type FormatColumn, type InvoiceLayout } from '@/utils/InvoiceLayoutStore'
+import { resolveFormat, type BorderLine, type FormatColumn, type InvoiceLayout } from '@/utils/InvoiceLayoutStore'
 import type { PrintLayout } from '@/utils/printLayout'
 import { colName } from '@/utils/xlsx'
 import { buildStyledXlsx, colPx, pxToCol, type XBorder, type XCell, type XRow, type XStyle } from '@/utils/xlsxStyled'
@@ -22,8 +22,10 @@ export interface InvoiceExcelInput {
   groups: { name: string; rows: Item[] }[]
   isFolded: (name: string) => boolean
   extraGapRows: Record<string, number>
-  /** The cell formatting saved for this invoice. */
+  /** The cell formatting, typed text and merges saved for this invoice. */
   sheet: InvoiceLayout
+  /** Merged cells as the page draws them (cut short where an item ends). */
+  merges: { row: string; col: FormatColumn; rows: number; cols: number }[]
   print: PrintLayout
   /** CSS font stacks; the first family is used. */
   fonts: { main: string; serif: string }
@@ -152,16 +154,33 @@ export function buildInvoiceXlsx(x: InvoiceExcelInput): Blob {
   // ── The item table. ──
   const sides = (c: number) => ({ left: c === 0 ? FRAME : LINE, right: c === 5 ? FRAME : LINE })
   // The cell's own look, then the formatting set for its column, row and itself.
+  const edge = (line: BorderLine): XBorder | undefined =>
+    line === 'none' ? undefined : line === 'thick' ? FRAME : line === 'double' ? FOOT : LINE
   const fmt = (rowKey: string, col: FormatColumn, s: XStyle): XStyle => {
     const f = resolveFormat(x.sheet, rowKey, col)
-    return {
+    const out: XStyle = {
       ...s,
       ...(f.align ? { h: f.align } : {}),
       ...(f.bold != null ? { bold: f.bold } : {}),
       ...(f.italic ? { italic: true } : {}),
       ...(f.fill ? { fill: f.fill } : {}),
+      ...(f.size ? { size: ptOf(f.size) } : {}),
+      ...(f.color ? { color: f.color } : {}),
     }
+    if (f.borders) {
+      const border = { ...s.border }
+      for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+        const line = f.borders[side]
+        if (line) border[side] = edge(line)
+      }
+      out.border = border
+    }
+    return out
   }
+  // Text typed over a fixed cell, or the cell's own.
+  const txt = (rowKey: string, col: FormatColumn, own: string) => x.sheet.texts[`${rowKey}|${col}`] ?? own
+  // Each table row's sheet row, for the merges.
+  const rowOf = new Map<string, number>()
   // A row height set in the Format bar is a minimum, as on the page: a
   // wrapping name still makes its row taller.
   const setHeight = (rowKey: string, fallback: number) => {
@@ -174,7 +193,8 @@ export function buildInvoiceXlsx(x: InvoiceExcelInput): Blob {
     border: { top: FRAME, bottom: { style: 'double', color: '#e26b0a' }, ...sides(c) },
   })
   const heads = ['ITEM', 'KETERANGAN', 'SIZE', 'QTY / SET', 'HARGA NET / PCS', 'JUMLAH (Rp)']
-  add(heads.map((v, c) => ({ v, s: fmt('head', COLS[c], headStyle(c)) })), setHeight('head', ptOf((P.bodySize - 1) * 1.15 * 2 + 14)))
+  rowOf.set('head', next())
+  add(heads.map((v, c) => ({ v: txt('head', COLS[c], v), s: fmt('head', COLS[c], headStyle(c)) })), setHeight('head', ptOf((P.bodySize - 1) * 1.15 * 2 + 14)))
 
   const body = (c: number, s: XStyle = {}): XStyle => ({
     font: MAIN, size: ptOf(P.bodySize), v: 'center',
@@ -191,9 +211,11 @@ export function buildInvoiceXlsx(x: InvoiceExcelInput): Blob {
       const qty = g.rows.reduce((n, i) => n + i.amount, 0)
       const sum = g.rows.reduce((n, i) => n + i.sub_total, 0)
       const prices = [...new Set(g.rows.map(i => i.price))].sort((a, b) => a - b)
-      const sizes = g.rows.map(i => i.size || '-').join(', ')
+      const sizes = txt(key, 'size', g.rows.map(i => i.size || '-').join(', '))
+      const no = txt(key, 'no', String(gi + 1))
+      rowOf.set(key, next())
       add([
-        { v: gi + 1, s: fmt(key, 'no', body(0, { h: 'center' })) },
+        { v: /^\d+$/.test(no) ? Number(no) : no, s: fmt(key, 'no', body(0, { h: 'center' })) },
         { v: g.name.toUpperCase(), s: fmt(key, 'ket', body(1, { h: 'center', bold: true, wrap: true })) },
         { v: sizes, s: fmt(key, 'size', body(2, { h: 'center', wrap: true })) },
         { v: qty, s: fmt(key, 'qty', body(3, { h: 'right', numFmt: MONEY })) },
@@ -206,9 +228,11 @@ export function buildInvoiceXlsx(x: InvoiceExcelInput): Blob {
       g.rows.forEach((it, ri) => {
         const key = `item-${it.id}`
         const r = next()
+        rowOf.set(key, r)
         const formula = it.sub_total === it.amount * it.price
+        const no = txt(key, 'no', ri === 0 ? String(gi + 1) : '')
         add([
-          { v: ri === 0 ? gi + 1 : '', s: fmt(key, 'no', body(0, { h: 'center' })) },
+          { v: /^\d+$/.test(no) ? Number(no) : no, s: fmt(key, 'no', body(0, { h: 'center' })) },
           { v: ri === 0 ? it.item_name.toUpperCase() : '', s: fmt(key, 'ket', body(1, { h: 'center', bold: true, wrap: true })) },
           { v: it.size ?? '', s: fmt(key, 'size', body(2, { h: 'center' })) },
           { v: it.amount, s: fmt(key, 'qty', body(3, { h: 'right', numFmt: MONEY })) },
@@ -220,7 +244,8 @@ export function buildInvoiceXlsx(x: InvoiceExcelInput): Blob {
     // The blank row(s) after each item, a dash under JUMLAH.
     for (let k = 0; k < 1 + (x.extraGapRows[g.name] ?? 0); k++) {
       const key = `gap-${g.name}-${k}`
-      add(COLS.map((col, c) => ({ v: c === 5 ? '-' : '', s: fmt(key, col, body(c, { h: c === 5 ? 'right' : undefined })) })), setHeight(key, baseRow))
+      rowOf.set(key, next())
+      add(COLS.map((col, c) => ({ v: c === 0 ? txt(key, 'no', '') : c === 5 ? txt(key, 'jumlah', '-') : '', s: fmt(key, col, body(c, { h: c === 5 ? 'right' : c === 0 ? 'center' : undefined })) })), setHeight(key, baseRow))
     }
   })
   if (!x.groups.length) add(COLS.map((_, c) => ({ s: body(c) })), baseRow)
@@ -244,7 +269,7 @@ export function buildInvoiceXlsx(x: InvoiceExcelInput): Blob {
     { s: fmt('total', 'ket', open(1, {}, { top: LINE })) },
     { s: fmt('total', 'ket', open(2, {}, { top: LINE })) },
     { v: qtyTotal, f: hasItems ? `SUM(D${firstItem}:D${lastItem})` : undefined, s: fmt('total', 'qty', sum(3, { h: 'right', numFmt: MONEY })) },
-    { v: 'TOTAL', s: fmt('total', 'hargaNet', sum(4, { h: 'center' })) },
+    { v: txt('total', 'hargaNet', 'TOTAL'), s: fmt('total', 'hargaNet', sum(4, { h: 'center' })) },
     { v: x.invoice.total, f: hasItems && Math.abs(itemsTotal - x.invoice.total) < 1 ? `SUM(F${firstItem}:F${lastItem})` : undefined, s: fmt('total', 'jumlah', sum(5, { h: 'right', numFmt: MONEY })) },
   ], setHeight('total', sumRow))
   merge(totalRow, 0, 2)
@@ -253,9 +278,9 @@ export function buildInvoiceXlsx(x: InvoiceExcelInput): Blob {
   if (x.dp.show) {
     dpRow = next()
     add([
-      { s: fmt('dp', 'ket', open(0)) }, { s: fmt('dp', 'ket', open(1)) }, { s: fmt('dp', 'ket', open(2)) },
-      { v: x.dp.paidLabel ?? '', s: fmt('dp', 'qty', sum(3, { h: 'right', bold: false })) },
-      { v: `D/P - ${x.dp.percent} %`, s: fmt('dp', 'hargaNet', sum(4, { h: 'center', bold: false })) },
+      { v: txt('dp', 'ket', ''), s: fmt('dp', 'ket', open(0)) }, { s: fmt('dp', 'ket', open(1)) }, { s: fmt('dp', 'ket', open(2)) },
+      { v: x.dp.paidLabel ?? txt('dp', 'qty', ''), s: fmt('dp', 'qty', sum(3, { h: 'right', bold: false })) },
+      { v: txt('dp', 'hargaNet', `D/P - ${x.dp.percent} %`), s: fmt('dp', 'hargaNet', sum(4, { h: 'center', bold: false })) },
       // A Pelunasan shows the paid D/P in brackets.
       { v: x.dp.amount, s: fmt('dp', 'jumlah', sum(5, { h: 'right', numFmt: x.dp.paidLabel != null ? '(#,##0)' : MONEY })) },
     ], setHeight('dp', sumRow))
@@ -270,10 +295,28 @@ export function buildInvoiceXlsx(x: InvoiceExcelInput): Blob {
     { s: fmt('pelunasan', 'ket', open(1, {}, { bottom: FOOT })) },
     { s: fmt('pelunasan', 'ket', open(2, {}, { bottom: FOOT })) },
     { s: fmt('pelunasan', 'ket', open(3, {}, { bottom: FOOT })) },
-    { v: 'PELUNASAN', s: fmt('pelunasan', 'hargaNet', sum(4, { h: 'center' }, { bottom: FOOT })) },
+    { v: txt('pelunasan', 'hargaNet', 'PELUNASAN'), s: fmt('pelunasan', 'hargaNet', sum(4, { h: 'center' }, { bottom: FOOT })) },
     { v: x.balance, f: balanceFormula, s: fmt('pelunasan', 'jumlah', sum(5, { h: 'right', numFmt: MONEY }, { bottom: FOOT })) },
   ], setHeight('pelunasan', sumRow))
   merge(lastRow, 0, 3)
+
+  // Cells merged on the page: one cell in Excel too, keeping the top-left
+  // one's content (the others' is left out, as Excel would).
+  for (const m of x.merges) {
+    const r0 = rowOf.get(m.row)
+    const c0 = COLS.indexOf(m.col)
+    if (r0 == null || c0 < 0) continue
+    const r1 = r0 + m.rows - 1, c1 = c0 + m.cols - 1
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        const cell = rows[r - 1]?.cells[c]
+        if (cell && (r !== r0 || c !== c0)) { cell.v = ''; delete cell.f }
+      }
+    }
+    merges.push(`${colName(c0)}${r0}:${colName(c1)}${r1}`)
+    const anchor = rows[r0 - 1]?.cells[c0]
+    if (anchor?.s && m.rows > 1) anchor.s = { ...anchor.s, v: 'center', wrap: true }
+  }
 
   // ── CATATAN, with the bank details as the last point. ──
   space(gap(12))

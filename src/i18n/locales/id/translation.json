@@ -471,7 +471,8 @@
     "foldAll": "Lipat semua barang",
     "unfoldAll": "Buka semua barang",
     "resizeHint": "Seret untuk mengubah lebar kolom; klik dua kali untuk menyesuaikan dengan isinya",
-    "resetWidths": "Kembalikan lebar kolom"
+    "resetWidths": "Kembalikan lebar kolom",
+    "rowResizeHint": "Seret untuk mengubah tinggi baris; klik dua kali untuk mengembalikan"
   },
   "ordersTabs": {
     "sectionTitle": "Bagian pesanan"
@@ -500,11 +501,46 @@
     "blankRow": "baris kosong",
     "formatCells": "Format sel",
     "done": "Selesai",
-    "tapACell": "Ketuk sel tabel untuk memformatnya, barisnya atau kolomnya."
+    "tapACell": "Ketuk sel tabel untuk memformatnya, barisnya, atau kolomnya. Pilih lagi, lalu ketuk sel lain, untuk memilih satu blok (misalnya untuk digabung).",
+    "cells_one": "{{count}} sel",
+    "cells_other": "{{count}} sel",
+    "cellsSelected_one": "{{count}} sel",
+    "cellsSelected_other": "{{count}} sel",
+    "rowsSelected_one": "{{count}} baris",
+    "rowsSelected_other": "{{count}} baris",
+    "textSize": "Ukuran",
+    "smallerText": "Teks lebih kecil",
+    "biggerText": "Teks lebih besar",
+    "textColor": "Warna teks",
+    "borders": "Garis",
+    "borderAll": "Semua garis",
+    "borderBox": "Kotak tebal",
+    "borderBottom": "Bawah",
+    "borderBottomThick": "Bawah tebal",
+    "borderBottomDouble": "Bawah ganda",
+    "borderTop": "Atas",
+    "borderNone": "Tanpa garis",
+    "borderReset": "Garis bawaan tabel",
+    "merge": "Gabung",
+    "mergeTitle": "Gabungkan sel yang dipilih menjadi satu, dengan teks sel kiri atas",
+    "mergeNo": "Hanya sel dalam baris satu item (atau dalam baris judul) yang bisa digabung",
+    "unmerge": "Pisahkan",
+    "unmergeTitle": "Pisahkan sel gabungan ini kembali menjadi sel-sel terpisah",
+    "resetText": "Teks asli",
+    "resetTextTitle": "Kembalikan teks asli sel, bukan yang diketik",
+    "selectMore": "Pilih lagi"
   },
   "invoiceExcel": {
     "button": "Excel",
     "title": "Unduh invoice ini sebagai file Excel, dengan tata letak seperti cetakan",
     "making": "Membuat…"
+  },
+  "invoiceSwitcher": {
+    "title": "Invoice",
+    "search": "Cari nomor, klien atau order…",
+    "empty": "Tidak ada invoice yang cocok",
+    "show": "Tampilkan daftar invoice",
+    "hide": "Sembunyikan daftar invoice",
+    "other": "Invoice lainnya"
   }
 }

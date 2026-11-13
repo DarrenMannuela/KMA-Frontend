@@ -16,6 +16,7 @@ import { orderPaymentStatus, isPastDue } from '@/utils/orderStatus'
 import { GenerateInvoiceForm } from './GenerateInvoiceForm'
 import { Modal } from '@/components/ui/Modal'
 import { OrderCosts } from '@/components/finance/OrderCosts'
+import { OrderJourney } from '@/components/orders/OrderJourney'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
 import { priceForYear } from '@/utils/PriceHistory'
 
@@ -437,7 +438,9 @@ export function OrderDetailPage() {
         </button>
         <div className="min-w-0">
           <h1 className="font-display font-semibold text-navy-900 leading-tight dark:text-slate-50">{order.id}</h1>
-          <p className="text-slate-400 text-xs truncate dark:text-slate-500">
+          {/* Wraps on a phone (it used to be cut off, hiding the PO number
+              and the client link); one line from dock up. */}
+          <p className="text-slate-500 text-xs dock:truncate dark:text-slate-400">
             {order.company} · {order.date ? format(new Date(order.date), 'dd MMM yyyy', { locale: dateLocale }) : '—'}
             {order.po_number && <> · PO <span className="font-mono">{order.po_number}</span></>}
             {order.client_id && (
@@ -454,6 +457,14 @@ export function OrderDetailPage() {
           </p>
         </div>
       </div>
+
+      <OrderJourney
+        orderId={order.id}
+        orderDate={order.date}
+        itemCount={orderItems.length}
+        dpInvoice={dpInvoice}
+        pelunasanInvoice={pelunasanInvoice}
+      />
 
       <OrderPayment
         orderId={order.id}

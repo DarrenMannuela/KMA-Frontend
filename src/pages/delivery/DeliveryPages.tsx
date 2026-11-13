@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { Truck, Eye, RotateCcw, Printer, Building2, ArrowRight } from 'lucide-react'
+import { Truck, Eye, RotateCcw, Printer, Building2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useTranslation } from 'react-i18next'
 import { CrudPage } from '@/components/ui/CrudPage'
@@ -426,20 +426,23 @@ export function DeliveryPage() {
       searchKeys={['company', 'address', 'contact_person', 'po_number']}
       columns={[
         { header: t('delivery.columns.deliveryId'),     key: 'id', card: 'meta',             render: r => <span className="id-chip">{r.id}</span> },
-        { header: t('delivery.columns.company'),         key: 'company', card: 'title',        render: r => <span className="font-semibold text-navy-900 dark:text-slate-50">{r.company ?? '—'}</span> },
+        { header: t('delivery.columns.company'),         key: 'company', card: 'title',        render: r => <span className="block font-semibold text-navy-900 xl:min-w-[13.5rem] dark:text-slate-50">{r.company ?? '—'}</span> },
         { header: t('delivery.columns.client'),          key: 'client_id',      secondary: true, render: r => r.client_id ? (
             <button
               onClick={(e) => { e.stopPropagation(); navigate(`/clients/${r.client_id}`) }}
-              className="inline-flex items-center gap-1 text-sm font-medium text-navy-600 hover:text-navy-800"
+              // An icon, as on Orders: "View →" on every row made this one
+              // of the widest columns, squeezing the address onto three lines.
+              className="btn-ghost btn-sm !px-2 text-navy-600 dark:text-navy-300"
               title={t('delivery.viewClientRecord')}
+              aria-label={t('delivery.viewClientRecord')}
             >
-              <Building2 size={12} /> {t('common.view')} <ArrowRight size={12} />
+              <Building2 size={14} />
             </button>
           ) : <span className="text-slate-300 text-xs dark:text-navy-700">{t('delivery.notLinked')}</span> },
-        { header: t('delivery.columns.address'),         key: 'address', card: 'sheet',        render: r => <span className="font-medium">{r.address}</span> },
+        { header: t('delivery.columns.address'),         key: 'address', card: 'sheet',        render: r => <span className="block font-medium xl:min-w-[12rem]">{r.address}</span> },
         { header: t('delivery.columns.contact'),         key: 'contact_person', secondary: true, render: r => r.contact_person || r.phone_number ? (
             <div className="leading-tight">
-              {r.contact_person && <div>{r.contact_person}</div>}
+              {r.contact_person && <div className="whitespace-nowrap">{r.contact_person}</div>}
               {r.phone_number && <div className="font-mono text-xs whitespace-nowrap text-slate-500 dark:text-slate-400">{r.phone_number}</div>}
             </div>
           ) : '—' },

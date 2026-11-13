@@ -207,26 +207,25 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
             <h2 className="font-display font-semibold text-navy-900 text-base truncate dark:text-slate-50">{title}</h2>
             <p className="text-slate-500 text-xs font-mono truncate dark:text-slate-400">
               {/* Short on phones, where the full date was cut off. */}
-              <span className="sm:hidden">{format(new Date(), 'EEE, d MMM yyyy', { locale: dateLocale })}</span>
+              <span className="sm:hidden">{format(new Date(), 'EEE, d MMM', { locale: dateLocale })}</span>
               <span className="hidden sm:inline">{format(new Date(), 'EEEE, d MMMM yyyy', { locale: dateLocale })}</span>
             </p>
           </div>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-          {/* Below sm only the dot shows. */}
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-            isUp === true  ? 'bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400' :
+          {/* Only while something's wrong (offline, or still connecting): a
+              working server isn't news. Below sm only the dot shows. */}
+          {isUp !== true && <div role="status" className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
             isUp === false ? 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'    :
             'bg-slate-100 text-slate-500 dark:bg-white/5 dark:text-slate-400'
           }`}>
             <span className={`w-1.5 h-1.5 rounded-full ${
-              isUp === true ? 'bg-green-500 animate-pulse' :
               isUp === false ? 'bg-red-500' : 'bg-slate-400'
             }`} />
             <span className="hidden sm:inline">
-              {isUp === true ? t('topbar.backendLive') : isUp === false ? t('topbar.backendOffline') : t('topbar.connecting')}
+              {isUp === false ? t('topbar.backendOffline') : t('topbar.connecting')}
             </span>
-          </div>
+          </div>}
 
           {/* Jump to (Ctrl+K / ⌘K): a search-like button on wide screens, an
               icon on phones. */}

@@ -37,7 +37,8 @@
       "addContact": "Tambah Kontak",
       "editContact": "Ubah Kontak",
       "removeConfirm": "Hapus kontak \"{{name}}\"?"
-    }
+    },
+    "printPriceListEmpty": "Belum ada yang bisa dicetak: tambahkan barang di Katalog & Harga dulu"
   },
   "catalogue": {
     "catalogue": "Katalog",
@@ -258,5 +259,49 @@
     "deleteConfirm": "Hapus invoice {{id}}?",
     "viewInvoice": "Lihat invoice",
     "printKwitansi": "Cetak kwitansi"
+  },
+  "orderJourney": {
+    "title": "Perjalanan pesanan",
+    "nextStep": "langkah berikutnya: {{step}}",
+    "allDone": "semua langkah selesai",
+    "steps": {
+      "order": "Pesanan",
+      "production": "Produksi",
+      "delivery": "Dikirim",
+      "payment": "Pembayaran"
+    },
+    "state": {
+      "done": "selesai",
+      "now": "sedang berjalan",
+      "late": "terlambat",
+      "todo": "belum mulai"
+    },
+    "items_one": "{{count}} barang",
+    "items_other": "{{count}} barang",
+    "notInvoiced": "belum ditagih",
+    "paid": "dibayar {{date}}",
+    "due": "jatuh tempo {{date}}",
+    "unpaid": "belum dibayar",
+    "overdue_one": "terlambat {{count}} hari",
+    "overdue_other": "terlambat {{count}} hari",
+    "kasBon_one": "{{count}} baris Kas Bon",
+    "kasBon_other": "{{count}} baris Kas Bon",
+    "noKasBon": "belum ada Kas Bon terhubung",
+    "noDelivery": "belum ada DO / SJ",
+    "more": "+{{count}} lagi",
+    "next": {
+      "makeDp": "buat invoice DP",
+      "waitDp": "tunggu DP masuk",
+      "chaseDp": "tagih DP",
+      "recordProduction": "catat produksi di Kas Bon",
+      "ship": "selesaikan produksi lalu kirim",
+      "makeDelivery": "buat DO / Surat Jalan",
+      "makePelunasan": "buat invoice Pelunasan",
+      "makeInvoice": "buat invoice (DP atau COD)",
+      "waitPayment": "tunggu pembayaran",
+      "chasePayment": "tagih pembayaran",
+      "addItems": "tambahkan barang pesanan"
+    },
+    "noItems": "belum ada barang"
   }
 }

@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import i18n from 'i18next'
 import { id as idLocale, enUS } from 'date-fns/locale'
 
 // date-fns needs its own locale object passed to format() — it doesn't
@@ -9,3 +10,7 @@ export function useDateLocale() {
   const { i18n } = useTranslation()
   return i18n.resolvedLanguage?.startsWith('id') ? idLocale : enUS
 }
+
+/** The same choice outside a component (helpers called while rendering, which
+ *  re-run when the language changes because their caller re-renders). */
+export const currentDateLocale = () => (i18n.resolvedLanguage?.startsWith('id') ? idLocale : enUS)

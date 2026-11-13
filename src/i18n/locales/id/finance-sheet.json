@@ -63,7 +63,7 @@
     "noGroups": "Tanpa kelompok",
     "summary_other": "{{count}} baris · {{kasBon}} Kas Bon · {{period}}",
     "allMonths": "semua bulan",
-    "vsPrevious": "{{arrow}} {{percent}}% dibanding {{period}}",
+    "vsPrevious": "{{arrow}} {{change}} dibanding {{period}}",
     "budget": "Anggaran {{amount}}",
     "showAllAgain": "Tampilkan semua lagi",
     "onlyThisSupplier": "Hanya pemasok ini",
@@ -138,7 +138,8 @@
       "usePrice": "Pakai juga harga dari katalog",
       "currentPrice": "Harga baris ini sekarang: {{price}}",
       "pickFrom": "Pilih dari katalog {{supplier}}"
-    }
+    },
+    "filters": "Filter"
   },
   "kasBon": {
     "restoreDraft": "Pulihkan Kas Bon yang sedang Anda isi sebelumnya?",

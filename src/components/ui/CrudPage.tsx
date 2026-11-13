@@ -154,6 +154,7 @@ export function CrudPage<T extends { id: string | number }>({
   }, [undoDeletes, qc])
   const isMobile = useIsMobile()
   const navigate = useNavigate()
+  const rowOpens = !!rowHref && !onCellEdit
   const titleKey = columns.find(c => c.primary)?.key ?? columns[0]?.key
   const { t } = useTranslation()
 
@@ -300,7 +301,18 @@ export function CrudPage<T extends { id: string | number }>({
           </thead>
           <tbody onFocus={onGridFocus}>
             {pageRows.map(row => (
-              <tr key={row.id} className="group/row">
+              <tr
+                key={row.id}
+                // A list with a page per row and no in-cell editing opens it
+                // from anywhere on the row (not just the small eye icon);
+                // its buttons and links keep their own jobs.
+                className={`group/row ${rowOpens ? 'cursor-pointer' : ''}`}
+                onClick={rowOpens ? e => {
+                  if ((e.target as HTMLElement).closest('a,button,input,select,textarea,label,[role="button"]')) return
+                  if (window.getSelection()?.toString()) return // selecting text to copy isn't a click
+                  navigate(rowHref!(row))
+                } : undefined}
+              >
                 {tableColumns.map((c, ci) => (
                   <td key={String(c.key)} className={onCellEdit ? 'px-1 py-0.5' : undefined}>
                     {!onCellEdit ? (
@@ -337,15 +349,16 @@ export function CrudPage<T extends { id: string | number }>({
                   {/* Quiet until the row is pointed at or tabbed into, so a
                       column of icons doesn't compete with the data; still
                       visible (and on touch screens, full strength). */}
-                  <div className="flex items-center justify-end gap-1 transition-opacity [@media(hover:hover)]:opacity-40 group-hover/row:opacity-100 focus-within:!opacity-100">
+                  <div className="flex items-center justify-end gap-1 transition-opacity [@media(hover:hover)]:opacity-65 group-hover/row:opacity-100 focus-within:!opacity-100">
                     {rowActions && rowActions(row)}
-                    <button className="btn-ghost btn-sm !px-2" onClick={() => openEdit(row)} aria-label={t('common.edit')}>
+                    <button className="btn-ghost btn-sm !px-2" onClick={() => openEdit(row)} aria-label={t('common.edit')} title={t('common.edit')}>
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
                     <button
                       className="btn-ghost btn-sm !px-1.5 hover:!text-red-600"
                       onClick={() => setConfirmRow(row)}
                       aria-label={t('common.delete')}
+                      title={t('common.delete')}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

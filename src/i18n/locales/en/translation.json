@@ -479,7 +479,8 @@
     "foldAll": "Fold all items",
     "unfoldAll": "Unfold all items",
     "resizeHint": "Drag to resize the column; double-click to fit it to its contents",
-    "resetWidths": "Reset column widths"
+    "resetWidths": "Reset column widths",
+    "rowResizeHint": "Drag to change the row's height; double-click to reset"
   },
   "ordersTabs": {
     "sectionTitle": "Orders section"
@@ -508,11 +509,46 @@
     "blankRow": "blank row",
     "formatCells": "Format cells",
     "done": "Done",
-    "tapACell": "Tap a cell of the table to format it, its row or its column."
+    "tapACell": "Tap a cell of the table to format it, its row or its column. Select more, then tap another cell, selects a block (to merge, say).",
+    "cells_one": "{{count}} cell",
+    "cells_other": "{{count}} cells",
+    "cellsSelected_one": "{{count}} cell",
+    "cellsSelected_other": "{{count}} cells",
+    "rowsSelected_one": "{{count}} row",
+    "rowsSelected_other": "{{count}} rows",
+    "textSize": "Size",
+    "smallerText": "Smaller text",
+    "biggerText": "Bigger text",
+    "textColor": "Text colour",
+    "borders": "Borders",
+    "borderAll": "All lines",
+    "borderBox": "Thick box",
+    "borderBottom": "Bottom",
+    "borderBottomThick": "Thick bottom",
+    "borderBottomDouble": "Double bottom",
+    "borderTop": "Top",
+    "borderNone": "No lines",
+    "borderReset": "Table's own",
+    "merge": "Merge",
+    "mergeTitle": "Join the selected cells into one, keeping the top-left cell's text",
+    "mergeNo": "Only cells within one item's rows (or within the heading row) can be merged",
+    "unmerge": "Unmerge",
+    "unmergeTitle": "Split this merged cell back into separate cells",
+    "resetText": "Original text",
+    "resetTextTitle": "Put back the cell's own text instead of what was typed",
+    "selectMore": "Select more"
   },
   "invoiceExcel": {
     "button": "Excel",
     "title": "Download this invoice as an Excel file, laid out as printed",
     "making": "Making…"
+  },
+  "invoiceSwitcher": {
+    "title": "Invoices",
+    "search": "Search number, client or order…",
+    "empty": "No invoices match",
+    "show": "Show the invoice list",
+    "hide": "Hide the invoice list",
+    "other": "Other invoices"
   }
 }

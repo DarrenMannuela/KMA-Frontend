@@ -11,8 +11,9 @@ function isTabActive(pathname: string, tab: SectionTab) {
 /** A section's pages under one tab bar (Orders, Finance), reached from a
  *  single sidebar link. Once docked (`dock:` — see tailwind config), that's
  *  a normal horizontal tab row, stuck to the top. On a phone every page is
- *  on show at once, as a grid of tiles (icon and name, the current one
- *  filled) that scrolls away with the page: a single "current page ▾"
+ *  on show at once, as a grid of compact tiles (icon and name, the current
+ *  one filled; kept short so the page's own content starts sooner) that
+ *  scrolls away with the page: a single "current page ▾"
  *  picker hid the others behind a tap, and a sideways-scrolling row hid
  *  them past the edge. Detail pages (an order, a client) keep their
  *  section's tab lit. */
@@ -36,13 +37,13 @@ export function SectionTabs({ tabs: TABS, labelKey }: { tabs: SectionTab[]; labe
                   to={tab.to}
                   end={tab.end}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex flex-col items-center justify-center gap-1 min-h-[4.25rem] px-1.5 py-2 rounded-xl text-center text-[13px] font-medium leading-tight transition-colors ${
+                  className={`flex flex-col items-center justify-center gap-0.5 min-h-[3.25rem] px-1.5 py-1.5 rounded-xl text-center text-xs font-medium leading-tight transition-colors ${
                     active
                       ? 'bg-navy-900 text-white dark:bg-gold-500 dark:text-navy-950'
                       : 'text-slate-600 active:bg-slate-100 dark:text-slate-300 dark:active:bg-white/5'
                   }`}
                 >
-                  <Icon className={`w-[22px] h-[22px] shrink-0 ${active ? '' : 'text-navy-500 dark:text-navy-300'}`} aria-hidden />
+                  <Icon className={`w-[18px] h-[18px] shrink-0 ${active ? '' : 'text-navy-500 dark:text-navy-300'}`} aria-hidden />
                   <span className="break-words">{t(tab.labelKey)}</span>
                 </NavLink>
               )

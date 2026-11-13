@@ -226,7 +226,7 @@ export function OrdersPage() {
         { header: t('orders.columns.company'),   key: 'company', card: 'title',     edit: { type: 'text', uppercase: true }, render: r => (
           // The client link sits beside the name on desktop, where the Client
           // column is left out to keep the table on screen.
-          <span className="flex items-center gap-1.5 min-w-[8.5rem]">
+          <span className="flex items-center gap-1.5 min-w-[8.5rem] xl:min-w-[16rem]">
             <span className="font-medium text-navy-900 dark:text-slate-50">{r.company ?? '—'}</span>
             {r.client_id != null && !isMobile && (
               <button

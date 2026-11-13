@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Printer, Settings2, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useIsMobile } from '@/hooks/useIsMobile'
@@ -12,35 +12,57 @@ import type { PreviewZoom } from '@/hooks/usePreviewZoom'
  *  one row. On a phone one short row only — back arrow, title, Layout,
  *  Tools, Print — with the page's tools in a sheet from the bottom, so the
  *  page itself keeps the screen instead of five rows of buttons. */
-export function PrintToolbar({ title, onBack, onPrint, layout, tools, below }: {
+export function PrintToolbar({ title, onBack, onPrint, layout, tools, pinned, below, leading }: {
   title: React.ReactNode
+  /** Computer: a control right after Back (the invoice list's toggle). */
+  leading?: React.ReactNode
   onBack: () => void
   onPrint: () => void
   layout?: { state: PrintLayoutState; open: boolean; onToggle: () => void }
   /** The page's own controls: inline on a computer, in Tools on a phone. */
   tools?: React.ReactNode
+  /** Computer: a row that stays stuck under the bar while the page scrolls
+   *  (the invoice's Format bar). */
+  pinned?: React.ReactNode
   /** A second row of controls (the invoice's page breaks): under the bar on
-   *  a computer, at the end of Tools on a phone. */
+   *  a computer, scrolling with the page, and at the end of Tools on a phone. */
   below?: React.ReactNode
 }) {
   const { t } = useTranslation()
   const isMobile = useIsMobile()
   const [toolsOpen, setToolsOpen] = useState(false)
   const hasTools = !!(tools || below)
+  // The bar's height as --print-toolbar-h, for panels fixed just under it
+  // (the invoice list); it's the first thing on the page, so its bottom.
+  const barRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const bar = barRef.current
+    if (!bar) return
+    const root = document.documentElement
+    const update = () => root.style.setProperty('--print-toolbar-h', `${Math.round(bar.offsetHeight)}px`)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(bar)
+    return () => { ro.disconnect(); root.style.removeProperty('--print-toolbar-h') }
+  }, [isMobile])
 
   if (!isMobile) {
     return (
       <>
-        <div data-print-toolbar className="print:hidden sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap">
+        <div ref={barRef} data-print-toolbar className="print:hidden sticky top-0 z-10">
+        <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap">
           <button onClick={onBack} className="btn-secondary flex items-center gap-1.5 text-sm">
             <ArrowLeft size={14} /> {t('printToolbar.back')}
           </button>
+          {leading}
           <span className="text-slate-400 text-sm flex-1 flex items-center gap-1.5 min-w-0">{title}</span>
           {tools}
           {layout && <PrintLayoutToggle state={layout.state} open={layout.open} onToggle={layout.onToggle} />}
           <button onClick={onPrint} className="btn-primary flex items-center gap-2">
             <Printer size={14} /> {t('printLayout.print')}
           </button>
+        </div>
+        {pinned}
         </div>
         {below}
       </>

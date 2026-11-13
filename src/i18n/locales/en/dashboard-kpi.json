@@ -11,11 +11,11 @@
       "pelunasanOverdue": "Pelunasan overdue",
       "overdue": "Overdue"
     },
-    "vsMonth": "{{arrow}} {{percent}}% vs {{month}}",
+    "vsMonth": "{{arrow}} {{change}} vs {{month}}",
     "unchanged": "Same as {{month}}",
     "noComparison": "Nothing in {{month}} to compare",
     "sameDays": "Compared with the same days of {{month}}",
-    "arVsEnd": "{{arrow}} {{percent}}% vs end of {{month}}",
+    "arVsEnd": "{{arrow}} {{change}} vs end of {{month}}",
     "arVsEndTitle": "Owed now, compared with what was owed at the end of {{month}}",
     "unpaidInvoices_one": "{{count}} unpaid invoice",
     "unpaidInvoices_other": "{{count}} unpaid invoices",

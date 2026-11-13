@@ -11,11 +11,11 @@
       "pelunasanOverdue": "Pelunasan terlambat",
       "overdue": "Terlambat"
     },
-    "vsMonth": "{{arrow}} {{percent}}% vs {{month}}",
+    "vsMonth": "{{arrow}} {{change}} vs {{month}}",
     "unchanged": "Sama dengan {{month}}",
     "noComparison": "Belum ada data {{month}} untuk dibandingkan",
     "sameDays": "Dibanding tanggal yang sama di {{month}}",
-    "arVsEnd": "{{arrow}} {{percent}}% vs akhir {{month}}",
+    "arVsEnd": "{{arrow}} {{change}} vs akhir {{month}}",
     "arVsEndTitle": "Piutang sekarang, dibanding piutang di akhir {{month}}",
     "unpaidInvoices_other": "{{count}} invoice belum lunas",
     "overdueAmount": "{{amount}} terlambat",

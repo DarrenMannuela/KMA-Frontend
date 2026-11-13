@@ -1,3 +1,4 @@
+import { changeLabel } from '@/utils/changeLabel'
 import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { invoiceAmount } from '@/utils/invoiceAmount'
 import { orderPaymentStatus } from '@/utils/orderStatus'
@@ -374,7 +375,7 @@ export function DashboardPage() {
     const d = Math.round(((nowAmt - before) / before) * 100)
     if (d === 0) return { text: t('dashboardKpi.unchanged', { month: lastMonthShort }), tone: 'neutral', title }
     const up = d > 0
-    return { text: t(text, { arrow: up ? '▲' : '▼', percent: Math.abs(d), month: lastMonthShort }), tone: up === (risingIs === 'good') ? 'good' : 'bad', title }
+    return { text: t(text, { arrow: up ? '▲' : '▼', change: changeLabel(Math.abs(d), up), month: lastMonthShort }), tone: up === (risingIs === 'good') ? 'good' : 'bad', title }
   }
   const months = Array.from({ length: 6 }, (_, i) => new Date(now.getFullYear(), now.getMonth() - 5 + i, 1))
   const perMonth = <T,>(rows: T[], date: (r: T) => string | null | undefined, value: (r: T) => number) =>

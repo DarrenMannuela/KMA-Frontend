@@ -66,7 +66,7 @@
     "summary_one": "{{count}} line · {{kasBon}} Kas Bon · {{period}}",
     "summary_other": "{{count}} lines · {{kasBon}} Kas Bon · {{period}}",
     "allMonths": "all months",
-    "vsPrevious": "{{arrow}} {{percent}}% vs {{period}}",
+    "vsPrevious": "{{arrow}} {{change}} vs {{period}}",
     "budget": "Budget {{amount}}",
     "showAllAgain": "Show all again",
     "onlyThisSupplier": "Only this supplier",
@@ -148,7 +148,8 @@
       "usePrice": "Also use the catalogue's price",
       "currentPrice": "This line's price now: {{price}}",
       "pickFrom": "Pick from {{supplier}}'s catalogue"
-    }
+    },
+    "filters": "Filters"
   },
   "kasBon": {
     "restoreDraft": "Restore the Kas Bon you were entering before?",

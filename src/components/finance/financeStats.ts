@@ -1,5 +1,6 @@
 import type { Budget, BuktiKasRow, Client, Invoice, Item, Order } from '@/types'
 import { invoiceAmount } from '@/utils/invoiceAmount'
+import { shortMonthLabel } from '@/utils/MonthUtils'
 import { inPeriod, type LedgerRow, type Period } from './ledgerModel'
 
 // The numbers on the Finance page. Money earned is what's invoiced (see
@@ -97,7 +98,7 @@ export function cashFlow(period: Period, invoices: Invoice[], costs: LedgerRow[]
   } else {
     const d = new Date(from.getFullYear(), from.getMonth(), 1)
     while (d <= to) {
-      buckets.push({ key: iso(d), start: iso(d), label: d.toLocaleDateString('en-US', { month: 'short' }) + (from.getFullYear() !== to.getFullYear() ? ` ${String(d.getFullYear()).slice(2)}` : ''), cashIn: 0, cashOut: 0 })
+      buckets.push({ key: iso(d), start: iso(d), label: shortMonthLabel(d.getMonth()) + (from.getFullYear() !== to.getFullYear() ? ` ${String(d.getFullYear()).slice(2)}` : ''), cashIn: 0, cashOut: 0 })
       d.setMonth(d.getMonth() + 1)
     }
   }

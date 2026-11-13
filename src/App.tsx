@@ -18,7 +18,7 @@ import { KeyboardShortcuts } from '@/components/shortcuts/KeyboardShortcuts'
 const DashboardPage = lazy(() => import('@/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const OrdersPage = lazy(() => import('@/pages/orders/OrdersPage').then(m => ({ default: m.OrdersPage })))
 const ItemsPage = lazy(() => import('@/pages/orders/ItemsPage').then(m => ({ default: m.ItemsPage })))
-const InvoicePrintPage = lazy(() => import('@/pages/orders/InvoicePrintPage').then(m => ({ default: m.InvoicePrintPage })))
+const InvoicePrintRoute = lazy(() => import('@/pages/orders/InvoicePrintRoute').then(m => ({ default: m.InvoicePrintRoute })))
 const DeliveryPage = lazy(() => import('@/pages/delivery/DeliveryPages').then(m => ({ default: m.DeliveryPage })))
 const DeliveryDetailPage = lazy(() => import('@/pages/delivery/DeliveryDetailsPages').then(m => ({ default: m.DeliveryDetailPage })))
 const DeliveryPrintPage = lazy(() => import('@/pages/delivery/DeliveryPrintPage').then(m => ({ default: m.DeliveryPrintPage })))
@@ -146,7 +146,7 @@ export default function App() {
 
           {/* Print routes: logged in, no app chrome. A direct hit (typed URL, refresh)
              goes to the dashboard instead; see RedirectDirectAccess. */}
-          <Route path="/invoice/:id" element={<ProtectedRoute><RedirectDirectAccess><InvoicePrintPage /></RedirectDirectAccess></ProtectedRoute>} />
+          <Route path="/invoice/:id" element={<ProtectedRoute><RedirectDirectAccess><InvoicePrintRoute /></RedirectDirectAccess></ProtectedRoute>} />
           <Route path="/invoice/:id/kwitansi" element={<ProtectedRoute><RedirectDirectAccess><KwitansiPrintPage /></RedirectDirectAccess></ProtectedRoute>} />
           <Route path="/delivery/:id/print" element={<ProtectedRoute><RedirectDirectAccess><DeliveryPrintPage /></RedirectDirectAccess></ProtectedRoute>} />
           <Route path="/finance/report" element={<ProtectedRoute><RedirectDirectAccess><FinanceReportPrintPage /></RedirectDirectAccess></ProtectedRoute>} />

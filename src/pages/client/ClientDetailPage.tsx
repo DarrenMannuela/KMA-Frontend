@@ -135,6 +135,8 @@ export function ClientDetailPage() {
         <button
           onClick={() => setPrintYear(new Date().getFullYear())}
           disabled={catalogueItems.length === 0}
+          // Greyed out with nothing to print: say why, and what to do.
+          title={catalogueItems.length === 0 ? t('clientsArea.printPriceListEmpty') : undefined}
           className="btn-secondary inline-flex items-center gap-1.5 text-sm disabled:opacity-40"
         >
           <Printer size={15} /> {t('clientsArea.printPriceList')}
