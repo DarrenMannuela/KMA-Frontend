@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
-import { orderHooks, itemHooks, invoiceHooks, clientHooks, supplierHooks, productionHooks, operationHooks, buktiKasHooks } from '@/hooks'
+import { orderHooks, itemHooks, invoiceHooks, billable, clientHooks, supplierHooks, productionHooks, operationHooks, buktiKasHooks } from '@/hooks'
 import { LoadingState, ErrorState } from '@/components/ui/Page'
 import { formatRp } from '@/components/ui'
 import { fromProduction, fromOperation, inPeriod, previousPeriod, type Period } from '@/components/finance/ledgerModel'
@@ -69,7 +69,7 @@ export function FinanceReportPrintPage() {
 
   const orders = useMemo(() => ordersQ.data ?? [], [ordersQ.data])
   const items = useMemo(() => itemsQ.data ?? [], [itemsQ.data])
-  const invoices = useMemo(() => (invoicesQ.data ?? []) as Invoice[], [invoicesQ.data])
+  const invoices = useMemo(() => billable((invoicesQ.data ?? []) as Invoice[]), [invoicesQ.data])
   const clients = useMemo(() => clientsQ.data ?? [], [clientsQ.data])
   const suppliers = useMemo(() => suppliersQ.data ?? [], [suppliersQ.data])
   const costs = useMemo(() => [...(productionQ.data ?? []).map(fromProduction), ...(operationQ.data ?? []).map(fromOperation)], [productionQ.data, operationQ.data])

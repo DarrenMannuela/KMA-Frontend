@@ -14,7 +14,8 @@ import { isPastDue } from '@/utils/orderStatus'
 
 // Colour by meaning: unpaid is in progress (blue), red only once it's past
 // its due date, paid is done (green).
-const statusBadge = (r: Invoice) => r.status === 'paid' ? 'badge-green' : isPastDue(r) ? 'badge-red' : 'badge-blue'
+// An invoice cancelled with its order is struck off (grey), under All only.
+const statusBadge = (r: Invoice) => r.status === 'cancelled' ? 'badge-slate line-through decoration-slate-400' : r.status === 'paid' ? 'badge-green' : isPastDue(r) ? 'badge-red' : 'badge-blue'
 
 const TYPE_BADGE: Record<string, string> = {
   dp:         'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400',
@@ -43,6 +44,9 @@ export function InvoiceListPage() {
     try { sessionStorage.setItem('invoice-status-filter', value) } catch { /* private mode / quota — filter just won't persist */ }
   }
   const filteredData = data?.filter(inv => statusFilter === 'all' || inv.status === statusFilter)
+
+  const statusLabel = (r: Invoice) =>
+    r.status === 'cancelled' ? t('dashboardKpi.paymentStatus.cancelled') : r.status === 'paid' ? t('common.paid') : isPastDue(r) ? t('dashboardKpi.paymentStatus.overdue') : t('common.unpaid')
 
   const toggleStatus = (row: Invoice) => {
     const nextStatus = row.status === 'paid' ? 'unpaid' : 'paid'
@@ -134,8 +138,11 @@ export function InvoiceListPage() {
           render: r => r.tanggal ? <span className="whitespace-nowrap">{format(new Date(r.tanggal), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
         { header: t('common.status'), key: 'status', card: 'badge',
           // The card shows a plain badge; marking paid is in its ⋯ details.
-          cardRender: r => <span className={`badge ${statusBadge(r)}`}>{r.status === 'paid' ? t('common.paid') : isPastDue(r) ? t('dashboardKpi.paymentStatus.overdue') : t('common.unpaid')}</span>,
-          render: r => (
+          cardRender: r => <span className={`badge ${statusBadge(r)}`}>{statusLabel(r)}</span>,
+          // A cancelled one isn't marked paid from here: reactivate its order.
+          render: r => r.status === 'cancelled' ? (
+            <span className={`badge ${statusBadge(r)} min-w-16 justify-center`} title={t('invoiceList.cancelledTitle')}>{statusLabel(r)}</span>
+          ) : (
             <button
               type="button"
               className={`badge ${statusBadge(r)} cursor-pointer hover:opacity-75 transition-opacity min-w-16 justify-center tap`}
@@ -143,7 +150,7 @@ export function InvoiceListPage() {
               disabled={update.isPending}
               title={r.status === 'paid' ? t('invoiceList.markUnpaid') : t('invoiceList.markPaid')}
             >
-              {r.status === 'paid' ? t('common.paid') : isPastDue(r) ? t('dashboardKpi.paymentStatus.overdue') : t('common.unpaid')}
+              {statusLabel(r)}
             </button>
           )},
       ]}

@@ -25,7 +25,9 @@ interface Step {
  *  only a Pelunasan invoice ends in Pelunasan. Read from what's already recorded: its invoices, the Kas Bon
  *  lines linked to it, and its DO / Surat Jalan. Each step names its
  *  document and links to it; the header says what comes next. */
-export function OrderJourney({ orderId, orderDate, itemCount, dpInvoice, pelunasanInvoice }: {
+export function OrderJourney({ orderId, orderDate, itemCount, dpInvoice, pelunasanInvoice, cancelledAt = null }: {
+  /** When the order was cancelled, if it was: the journey stops where it got to. */
+  cancelledAt?: string | null
   orderId: string
   orderDate: string | null | undefined
   itemCount: number
@@ -57,6 +59,7 @@ export function OrderJourney({ orderId, orderDate, itemCount, dpInvoice, pelunas
   // One invoice as a step: not made yet, waiting, late, or paid.
   const invoiceStep = (key: string, label: string, inv: Invoice | null, next: { make: string; wait: string; chase: string }): Step => {
     if (!inv) return { key, label, state: 'todo', detail: t('orderJourney.notInvoiced'), next: next.make }
+    if (inv.status === 'cancelled') return { key, label, state: 'todo', detail: <>{invoiceLink(inv)} · {t('orderJourney.invoiceCancelled')}</>, next: '' }
     if (inv.status === 'paid') {
       return { key, label, state: 'done', detail: <>{invoiceLink(inv)}{inv.paid_date && <> · {t('orderJourney.paid', { date: day(inv.paid_date) })}</>}</>, next: '' }
     }
@@ -101,7 +104,9 @@ export function OrderJourney({ orderId, orderDate, itemCount, dpInvoice, pelunas
       : invoiceStep('pelunasan', 'Pelunasan', pelunasanInvoice, { make: t('orderJourney.next.makePelunasan'), wait: t('orderJourney.next.waitPayment'), chase: t('orderJourney.next.chasePayment') }),
   ]
   // The first step not done yet is the one in hand.
-  const currentIndex = steps.findIndex(s => s.state !== 'done')
+  // A cancelled order stopped where it was: nothing is in hand any more.
+  if (cancelledAt) for (const s of steps) if (s.state !== 'done') s.state = 'todo'
+  const currentIndex = cancelledAt ? -1 : steps.findIndex(s => s.state !== 'done')
   const current = currentIndex < 0 ? null : steps[currentIndex]
   if (current && current.state === 'todo') current.state = 'now'
 
@@ -117,7 +122,8 @@ export function OrderJourney({ orderId, orderDate, itemCount, dpInvoice, pelunas
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-4">
         <h2 className="font-semibold text-navy-900 dark:text-slate-50">{t('orderJourney.title')}</h2>
         <p className={`text-sm ${current?.state === 'late' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>
-          {current ? t('orderJourney.nextStep', { step: current.next }) : t('orderJourney.allDone')}
+          {cancelledAt ? t('orderJourney.cancelled', { date: format(new Date(cancelledAt), 'd MMM yyyy', { locale: dateLocale }) })
+            : current ? t('orderJourney.nextStep', { step: current.next }) : t('orderJourney.allDone')}
         </p>
       </div>
       {/* A row of steps from dock up; a vertical list on a phone. */}

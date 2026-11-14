@@ -270,7 +270,8 @@
     "markPaid": "Mark as paid",
     "deleteConfirm": "Delete invoice {{id}}?",
     "viewInvoice": "View invoice",
-    "printKwitansi": "Print kwitansi/receipt"
+    "printKwitansi": "Print kwitansi/receipt",
+    "cancelledTitle": "Cancelled with its order. Reactivate the order to bill it again."
   },
   "orderJourney": {
     "title": "Order journey",
@@ -314,6 +315,8 @@
       "chasePayment": "chase the payment",
       "addItems": "add the order's items"
     },
-    "noItems": "no items yet"
+    "noItems": "no items yet",
+    "cancelled": "cancelled {{date}}, stopped here",
+    "invoiceCancelled": "cancelled"
   }
 }

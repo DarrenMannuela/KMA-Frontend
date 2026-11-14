@@ -9,7 +9,8 @@
       "paymentOverdue": "Pembayaran terlambat",
       "dpOverdue": "DP terlambat",
       "pelunasanOverdue": "Pelunasan terlambat",
-      "overdue": "Terlambat"
+      "overdue": "Terlambat",
+      "cancelled": "Dibatalkan"
     },
     "vsMonth": "{{arrow}} {{change}} vs {{month}}",
     "unchanged": "Sama dengan {{month}}",

@@ -8,6 +8,7 @@ import { PageHeader, Card, LoadingState, ErrorState } from '@/components/ui/Page
 import { ScrollX } from '@/components/ui/ScrollX'
 import {
   orderHooks, itemHooks, invoiceHooks, clientHooks, clientContactHooks, supplierHooks, productionHooks, operationHooks, buktiKasHooks, useBudgets, useRecurringCosts,
+  billable,
 } from '@/hooks'
 import { waLink, overdueReminderMessage, primaryContactPhone } from '@/utils/whatsapp'
 import { monthLabel, shortMonthLabel } from '@/utils/MonthUtils'
@@ -99,7 +100,7 @@ export function FinancePage() {
 
   const orders = useMemo(() => ordersQ.data ?? [], [ordersQ.data])
   const items = useMemo(() => itemsQ.data ?? [], [itemsQ.data])
-  const invoices = useMemo(() => (invoicesQ.data ?? []) as Invoice[], [invoicesQ.data])
+  const invoices = useMemo(() => billable((invoicesQ.data ?? []) as Invoice[]), [invoicesQ.data])
   const clients = useMemo(() => clientsQ.data ?? [], [clientsQ.data])
   const suppliers = useMemo(() => suppliersQ.data ?? [], [suppliersQ.data])
   const costs = useMemo(() => [...productionQ.data.map(fromProduction), ...operationQ.data.map(fromOperation)], [productionQ.data, operationQ.data])

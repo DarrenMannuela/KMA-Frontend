@@ -1,14 +1,16 @@
 import { useState, useEffect, useLayoutEffect, useRef, Fragment } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Plus, FileText, Copy, Pencil, Building2, PackageSearch, ChevronDown, ChevronRight } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
+import { ArrowLeft, Plus, FileText, Copy, Pencil, Building2, PackageSearch, ChevronDown, ChevronRight, Ban, RotateCcw } from 'lucide-react'
 import { format, differenceInCalendarDays } from 'date-fns'
 import { useTranslation } from 'react-i18next'
 import { ConfirmDialog, FormField, formatRp, UppercaseField } from '@/components/ui'
 import { LoadingState, ErrorState } from '@/components/ui/Page'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { orderHooks, itemHooks, clientItemHooks, clientItemPriceHooks } from '@/hooks'
-import { itemsApi, invoicesApi } from '@/api'
+import { itemsApi, invoicesApi, ordersApi } from '@/api'
+import { friendlyError } from '@/utils/friendlyError'
 import { useDateLocale } from '@/i18n/dateLocale'
 import type { Item, CreateItemRequest, Invoice } from '@/types'
 import { invoiceAmount } from '@/utils/invoiceAmount'
@@ -195,12 +197,14 @@ function ItemForm({
 // Where the order's money stands, one tile per invoice (DP and Pelunasan, or
 // the single full invoice), each with its own make/update button, so the
 // items card above only deals with items.
-function InvoiceTile({ label, invoice, allInvoices, actionLabel, onAction }: {
+function InvoiceTile({ label, invoice, allInvoices, actionLabel, onAction, locked = false }: {
   label: string
   invoice: Invoice | null
   allInvoices: Invoice[]
   actionLabel: string
   onAction: () => void
+  /** The order is cancelled: nothing to generate or update. */
+  locked?: boolean
 }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -209,7 +213,9 @@ function InvoiceTile({ label, invoice, allInvoices, actionLabel, onAction }: {
 
   let state: { text: string; className: string } | null = null
   if (invoice) {
-    if (invoice.status === 'paid') {
+    if (invoice.status === 'cancelled') {
+      state = { text: t('orders.detail.cancel.invoiceCancelled'), className: 'text-slate-500 dark:text-slate-400' }
+    } else if (invoice.status === 'paid') {
       state = { text: invoice.paid_date ? t('orders.detail.payment.paidOn', { date: fmt(invoice.paid_date) }) : t('common.paid'), className: 'text-green-700 dark:text-green-400' }
     } else if (isPastDue(invoice)) {
       const days = differenceInCalendarDays(new Date(), new Date(invoice.due_date!))
@@ -238,8 +244,8 @@ function InvoiceTile({ label, invoice, allInvoices, actionLabel, onAction }: {
           )}
         </div>
         {invoice && (
-          <span className={invoice.status === 'paid' ? 'badge-green' : isPastDue(invoice) ? 'badge-red' : 'badge-blue'}>
-            {invoice.status === 'paid' ? t('common.paid') : t('common.unpaid')}
+          <span className={invoice.status === 'cancelled' ? 'badge-slate line-through decoration-slate-400' : invoice.status === 'paid' ? 'badge-green' : isPastDue(invoice) ? 'badge-red' : 'badge-blue'}>
+            {invoice.status === 'cancelled' ? t('dashboardKpi.paymentStatus.cancelled') : invoice.status === 'paid' ? t('common.paid') : t('common.unpaid')}
           </span>
         )}
       </div>
@@ -252,23 +258,26 @@ function InvoiceTile({ label, invoice, allInvoices, actionLabel, onAction }: {
             {state && <p className={`text-xs ${state.className}`}>{state.text}</p>}
           </div>
         )}
-        <button type="button" className={`${invoice ? 'btn-secondary' : 'btn-primary'} btn-sm`} onClick={onAction}>
-          <FileText size={14} aria-hidden /> {actionLabel}
-        </button>
+        {!locked && (
+          <button type="button" className={`${invoice ? 'btn-secondary' : 'btn-primary'} btn-sm`} onClick={onAction}>
+            <FileText size={14} aria-hidden /> {actionLabel}
+          </button>
+        )}
       </div>
     </div>
   )
 }
 
-function OrderPayment({ orderId, dpInvoice, pelunasanInvoice, allInvoices, onOpenForm }: {
+function OrderPayment({ orderId, cancelled, dpInvoice, pelunasanInvoice, allInvoices, onOpenForm }: {
   orderId: string
+  cancelled: boolean
   dpInvoice: Invoice | null
   pelunasanInvoice: Invoice | null
   allInvoices: Invoice[]
   onOpenForm: (type: 'dp' | 'pelunasan' | 'cod') => void
 }) {
   const { t } = useTranslation()
-  const status = orderPaymentStatus(orderId, allInvoices)
+  const status = orderPaymentStatus(orderId, allInvoices, cancelled)
   const full = !!dpInvoice && (dpInvoice.down_payment ?? 0) === 0
 
   return (
@@ -277,7 +286,9 @@ function OrderPayment({ orderId, dpInvoice, pelunasanInvoice, allInvoices, onOpe
         <h2 className="font-semibold text-navy-900 dark:text-slate-50">{t('orders.detail.payment.title')}</h2>
         <span className={status.className}>{status.label}</span>
       </div>
-      {!dpInvoice ? (
+      {!dpInvoice && cancelled ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">{t('orders.detail.cancel.neverInvoiced')}</p>
+      ) : !dpInvoice ? (
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <p className="text-sm text-slate-500 flex-1 dark:text-slate-400">{t('orders.detail.payment.noInvoice')}</p>
           <div className="flex flex-wrap gap-2">
@@ -297,16 +308,18 @@ function OrderPayment({ orderId, dpInvoice, pelunasanInvoice, allInvoices, onOpe
             allInvoices={allInvoices}
             actionLabel={full ? t('orders.detail.updateInvoice') : t('orders.detail.updateDpInvoice')}
             onAction={() => onOpenForm('dp')}
+            locked={cancelled}
           />
-          {!full && (
+          {!full && (cancelled && !pelunasanInvoice ? null : (
             <InvoiceTile
               label="Pelunasan"
               invoice={pelunasanInvoice}
               allInvoices={allInvoices}
               actionLabel={pelunasanInvoice ? t('orders.detail.updatePelunasanInvoice') : t('orders.detail.generatePelunasanInvoice')}
               onAction={() => onOpenForm('pelunasan')}
+              locked={cancelled}
             />
-          )}
+          ))}
         </div>
       )}
     </section>
@@ -349,6 +362,24 @@ export function OrderDetailPage() {
   const dpIsFullPayment = !!dpInvoice && (dpInvoice.down_payment ?? 0) === 0
 
   const del = itemHooks.useDelete()
+  // Cancelling keeps the order (and what was paid and spent on it) but
+  // takes its unpaid invoices out of what's owed; it can be reactivated.
+  const qc = useQueryClient()
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const setCancelled = useMutation({
+    mutationFn: (cancel: boolean) => ordersApi.update(orderId, (cancel
+      ? { cancelled_at: new Date().toISOString(), cancel_reason: cancelReason.trim() || null }
+      : { cancelled_at: null }) as Parameters<typeof ordersApi.update>[1]),
+    onSuccess: (_d, cancel) => {
+      // The order and its invoices both changed.
+      for (const key of ['orders', 'invoice', 'invoices']) qc.invalidateQueries({ queryKey: [key] })
+      setCancelOpen(false)
+      setCancelReason('')
+      toast.success(t(cancel ? 'orders.detail.cancel.done' : 'orders.detail.cancel.reactivated'))
+    },
+    onError: (e: Error) => toast.error(friendlyError(e)),
+  })
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Item | null>(null)
   const [duplicating, setDuplicating] = useState<Item | null>(null)
@@ -456,9 +487,30 @@ export function OrderDetailPage() {
             )}
           </p>
         </div>
+        {!order.cancelled_at && (
+          <button className="btn-ghost ml-auto shrink-0 !text-red-600 dark:!text-red-400" onClick={() => setCancelOpen(true)}>
+            <Ban size={14} aria-hidden /> <span className="hidden sm:inline">{t('orders.detail.cancel.button')}</span><span className="sm:hidden">{t('orders.detail.cancel.buttonShort')}</span>
+          </button>
+        )}
       </div>
 
+      {order.cancelled_at && (
+        <div role="status" className="card p-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-slate-300 bg-slate-50 dark:bg-white/5 dark:border-navy-600">
+          <Ban size={18} className="text-slate-500 shrink-0 dark:text-slate-400" aria-hidden />
+          <div className="flex-1 min-w-[12rem] text-sm">
+            <p className="font-semibold text-navy-900 dark:text-slate-50">{t('orders.detail.cancel.banner', { date: format(new Date(order.cancelled_at), 'd MMMM yyyy', { locale: dateLocale }) })}</p>
+            <p className="text-slate-600 dark:text-slate-300">
+              {order.cancel_reason ? t('orders.detail.cancel.reasonIs', { reason: order.cancel_reason }) : t('orders.detail.cancel.noReason')} {t('orders.detail.cancel.bannerEffect')}
+            </p>
+          </div>
+          <button className="btn-secondary" disabled={setCancelled.isPending} onClick={() => setCancelled.mutate(false)}>
+            <RotateCcw size={14} aria-hidden /> {t('orders.detail.cancel.reactivate')}
+          </button>
+        </div>
+      )}
+
       <OrderJourney
+        cancelledAt={order.cancelled_at ?? null}
         orderId={order.id}
         orderDate={order.date}
         itemCount={orderItems.length}
@@ -467,6 +519,7 @@ export function OrderDetailPage() {
       />
 
       <OrderPayment
+        cancelled={!!order.cancelled_at}
         orderId={order.id}
         dpInvoice={dpInvoice}
         pelunasanInvoice={pelunasanInvoice}
@@ -757,6 +810,26 @@ export function OrderDetailPage() {
         </Modal>
       )}
 
+      {cancelOpen && (
+        <Modal title={t('orders.detail.cancel.title', { id: order.id })} onClose={() => setCancelOpen(false)}>
+          <div className="space-y-4">
+            <ul className="text-sm text-slate-600 list-disc pl-5 space-y-1 dark:text-slate-300">
+              <li>{t('orders.detail.cancel.effectUnpaid')}</li>
+              <li>{t('orders.detail.cancel.effectPaid')}</li>
+              <li>{t('orders.detail.cancel.effectUndo')}</li>
+            </ul>
+            <FormField label={t('orders.detail.cancel.reasonLabel')}>
+              <input className="field" value={cancelReason} maxLength={200} onChange={e => setCancelReason(e.target.value)} placeholder={t('orders.detail.cancel.reasonPlaceholder')} />
+            </FormField>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button className="btn-primary !bg-red-600 !border-red-600 hover:!bg-red-700 !text-white" disabled={setCancelled.isPending} onClick={() => setCancelled.mutate(true)}>
+                <Ban size={14} aria-hidden /> {setCancelled.isPending ? t('common.saving') : t('orders.detail.cancel.confirm')}
+              </button>
+              <button className="btn-secondary" onClick={() => setCancelOpen(false)}>{t('orders.detail.cancel.keep')}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {confirmDeleteItem && (
         <ConfirmDialog
           message={t('orders.detail.deleteConfirm', { name: `${confirmDeleteItem.item_name}${confirmDeleteItem.size ? ` (${confirmDeleteItem.size})` : ''}` })}

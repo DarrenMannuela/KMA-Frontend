@@ -214,6 +214,27 @@
         "dueOn": "Due {{date}}",
         "noDueDate": "No due date",
         "open": "Open the invoice"
+      },
+      "cancel": {
+        "button": "Cancel order",
+        "buttonShort": "Cancel",
+        "title": "Cancel order {{id}}?",
+        "effectUnpaid": "Its unpaid invoices are cancelled with it and stop counting as money owed (Piutang, overdue lists, billed totals).",
+        "effectPaid": "Money already received and Kas Bon costs already recorded stay in the figures.",
+        "effectUndo": "The order stays in the list, marked Cancelled, and can be reactivated at any time.",
+        "reasonLabel": "Reason (optional)",
+        "reasonPlaceholder": "e.g. client changed supplier",
+        "confirm": "Cancel this order",
+        "keep": "Keep the order",
+        "done": "Order cancelled",
+        "reactivated": "Order reactivated",
+        "reactivate": "Reactivate",
+        "banner": "This order was cancelled on {{date}}.",
+        "reasonIs": "Reason: {{reason}}.",
+        "noReason": "No reason given.",
+        "bannerEffect": "Its unpaid invoices no longer count as money owed.",
+        "invoiceCancelled": "Cancelled with the order",
+        "neverInvoiced": "Cancelled before any invoice was made."
       }
     },
     "itemForm": {

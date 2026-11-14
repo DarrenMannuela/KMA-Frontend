@@ -119,6 +119,7 @@ export function InvoiceSwitcher({ variant, invoices, currentId, onPick, onClose 
               </span>
               <span className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
                 <span className="flex-1 min-w-0 truncate">{inv.kepada_yth || '—'}</span>
+                {inv.status === 'cancelled' && <span className="shrink-0 text-slate-500 line-through">{t('dashboardKpi.paymentStatus.cancelled')}</span>}
                 {paid && <span className="shrink-0 text-green-700">{t('common.paid')}</span>}
                 {overdue && <span className="shrink-0 text-red-600">{t('dashboardKpi.paymentStatus.overdue')}</span>}
               </span>

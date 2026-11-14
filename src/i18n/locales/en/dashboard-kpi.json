@@ -9,7 +9,8 @@
       "paymentOverdue": "Payment overdue",
       "dpOverdue": "DP overdue",
       "pelunasanOverdue": "Pelunasan overdue",
-      "overdue": "Overdue"
+      "overdue": "Overdue",
+      "cancelled": "Cancelled"
     },
     "vsMonth": "{{arrow}} {{change}} vs {{month}}",
     "unchanged": "Same as {{month}}",

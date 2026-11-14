@@ -18,6 +18,7 @@ export interface Invoice {
   tanggal: string
   due_date: string | null
   paid_date: string | null
+  /** "unpaid", "paid", or "cancelled" (its order was cancelled while it was unpaid). */
   status: string
 }
 

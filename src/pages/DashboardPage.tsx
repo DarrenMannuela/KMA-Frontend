@@ -9,7 +9,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { CREATE_STATE } from '@/hooks/useCreateOnArrival'
 import { useTranslation } from 'react-i18next'
 import { formatRp } from '@/components/ui'
-import { orderHooks, deliveryHooks, productionHooks, operationHooks, invoiceHooks, clientContactHooks } from '@/hooks'
+import { orderHooks, deliveryHooks, productionHooks, operationHooks, invoiceHooks, billable, clientContactHooks } from '@/hooks'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { format, differenceInCalendarDays } from 'date-fns'
 import { isInMonth } from '@/utils/MonthUtils'
@@ -311,10 +311,13 @@ export function DashboardPage() {
   const isError   = dashboardQueries.some(q => q.isError)
   const retryAll  = () => dashboardQueries.forEach(q => q.refetch())
 
-  const safeInvoices      = Array.isArray(invoices)      ? invoices      : []
+  // Invoices cancelled with their order aren't owed or billed any more.
+  const safeInvoices      = Array.isArray(invoices)      ? billable(invoices as Invoice[]) : []
   const safeProductions = Array.isArray(productions) ? productions : []
   const safeOperations  = Array.isArray(operations)  ? operations  : []
   const safeOrders      = Array.isArray(orders)      ? orders      : []
+  // Cancelled orders don't count as orders taken.
+  const liveOrders = (safeOrders as Order[]).filter(o => !o.cancelled_at)
 
   // Only unpaid invoices are actually "outstanding" — a paid invoice's
   // ar_receivable was real money owed at the time, but once status flips
@@ -349,7 +352,7 @@ export function DashboardPage() {
   // The overdue part, oldest first; the same rule as the Overdue KPI.
   const overdueInvoices = arBreakdown.filter(i => isOverdue(i.due_date))
 
-  const orderInvoiceStatus = (orderId: string) => orderPaymentStatus(orderId, safeInvoices as Invoice[])
+  const orderInvoiceStatus = (orderId: string) => orderPaymentStatus(orderId, safeInvoices as Invoice[], !!(safeOrders as Order[]).find(o => o.id === orderId)?.cancelled_at)
 
   // Recent Orders / AR Breakdown desktop rows are keyboard-activatable `<tr>`s
   // (a real <a>/<button> can't wrap a <tr> or its cells cleanly), so Enter/Space
@@ -363,7 +366,7 @@ export function DashboardPage() {
   const upToToday = (d: string) => Number(d.slice(8, 10)) <= now.getDate()
   const prodLastMonth = (safeProductions as ProductionRow[]).filter(p => isInMonth(p.date, lastMonth.getFullYear(), lastMonth.getMonth()) && upToToday(p.date)).reduce((s, p) => s + p.price * p.amount, 0)
   const opsLastMonth = (safeOperations as OperationRow[]).filter(o => isInMonth(o.date, lastMonth.getFullYear(), lastMonth.getMonth()) && upToToday(o.date)).reduce((s, o) => s + o.price, 0)
-  const ordersThisMonth = (safeOrders as Order[]).filter(o => isInMonth(o.date, now.getFullYear(), now.getMonth())).length
+  const ordersThisMonth = liveOrders.filter(o => isInMonth(o.date, now.getFullYear(), now.getMonth())).length
   const deliveriesThisMonth = deliveries.filter(d => isInMonth(d.date, now.getFullYear(), now.getMonth())).length
 
   // ── KPI comparisons and six-month trends ──
@@ -381,7 +384,7 @@ export function DashboardPage() {
   const perMonth = <T,>(rows: T[], date: (r: T) => string | null | undefined, value: (r: T) => number) =>
     months.map(m => rows.filter(r => isInMonth(date(r), m.getFullYear(), m.getMonth())).reduce((n, r) => n + value(r), 0))
   const inLastMonthSoFar = (d: string) => isInMonth(d, lastMonth.getFullYear(), lastMonth.getMonth()) && upToToday(d)
-  const ordersLastMonth = (safeOrders as Order[]).filter(o => inLastMonthSoFar(o.date)).length
+  const ordersLastMonth = liveOrders.filter(o => inLastMonthSoFar(o.date)).length
   const deliveriesLastMonth = deliveries.filter(d => inLastMonthSoFar(d.date)).length
 
   // What was owed at the end of a day: invoices issued by then and not yet
@@ -477,7 +480,7 @@ export function DashboardPage() {
         <Kpi
           label={t('dashboard.ordersThisMonth')}
           value={ordersThisMonth}
-          trend={perMonth(safeOrders as Order[], o => o.date, () => 1)}
+          trend={perMonth(liveOrders, o => o.date, () => 1)}
           months={months}
           kind="bars"
           format={String}

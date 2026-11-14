@@ -12,17 +12,20 @@ const TONE = {
   inProgress: 'badge-blue',
   problem: 'badge-red',
   done: 'badge-green',
+  // A cancelled order: struck off, not a problem to chase.
+  cancelled: 'badge-slate line-through decoration-slate-400',
 }
 
 /** An unpaid invoice whose due date has gone by (from the day after it). */
 export const isPastDue = (inv: Pick<Invoice, 'status' | 'due_date'>) =>
-  inv.status !== 'paid' && !!inv.due_date && inv.due_date.slice(0, 10) < todayISODate()
+  inv.status === 'unpaid' && !!inv.due_date && inv.due_date.slice(0, 10) < todayISODate()
 
 const status = (key: string, tone: keyof typeof TONE): OrderStatus =>
   ({ label: i18n.t(`dashboardKpi.paymentStatus.${key}`), className: TONE[tone] })
 
 /** Where an order's payment stands, from its DP and pelunasan invoices. */
-export function orderPaymentStatus(orderId: string, invoices: Invoice[]): OrderStatus {
+export function orderPaymentStatus(orderId: string, invoices: Invoice[], cancelled = false): OrderStatus {
+  if (cancelled) return status('cancelled', 'cancelled')
   const own = invoices.filter(i => i.order_id === orderId)
   const dp = own.find(i => i.type === 'dp')
   const pelunasan = own.find(i => i.type === 'pelunasan')

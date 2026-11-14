@@ -9,6 +9,10 @@ export interface Order {
                               // record is later renamed or removed.
   po_number: string | null
   date: string        // ISO date string
+  /** Set while the order is cancelled (null/absent = active), with the
+   *  reason given, if any. Its unpaid invoices are "cancelled" with it. */
+  cancelled_at?: string | null
+  cancel_reason?: string | null
 }
 
 // ─── Matches dto/Items.go ─────────────────────────────────────────────────────

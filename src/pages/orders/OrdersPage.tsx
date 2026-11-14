@@ -256,7 +256,7 @@ export function OrdersPage() {
         { header: t('orders.columns.date'),      key: 'date', card: 'meta',        edit: { type: 'date', value: r => r.date ? r.date.slice(0, 10) : '' }, render: r => r.date ? <span className="whitespace-nowrap">{format(new Date(r.date), 'dd MMM yyyy', { locale: dateLocale })}</span> : '—' },
         { header: t('orders.columns.value'),     key: 'value', card: 'amount', render: r => value.get(r.id) ? <span className="font-mono tabular-nums whitespace-nowrap">{formatRp(value.get(r.id)!)}</span> : <span className="text-slate-500 text-xs dark:text-navy-300">{t('orders.noItems')}</span> },
         { header: t('orders.columns.payment'),   key: 'payment', card: 'badge', render: r => {
-            const st = orderPaymentStatus(r.id, invoices)
+            const st = orderPaymentStatus(r.id, invoices, !!r.cancelled_at)
             return <span className={`badge ${st.className}`}>{st.label}</span>
           } },
       ]}

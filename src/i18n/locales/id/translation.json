@@ -211,6 +211,27 @@
         "dueOn": "Jatuh tempo {{date}}",
         "noDueDate": "Tanpa jatuh tempo",
         "open": "Buka invoice"
+      },
+      "cancel": {
+        "button": "Batalkan pesanan",
+        "buttonShort": "Batalkan",
+        "title": "Batalkan pesanan {{id}}?",
+        "effectUnpaid": "Invoice yang belum dibayar ikut dibatalkan dan tidak lagi dihitung sebagai piutang (Piutang, daftar terlambat, total ditagihkan).",
+        "effectPaid": "Uang yang sudah diterima dan biaya Kas Bon yang sudah dicatat tetap masuk hitungan.",
+        "effectUndo": "Pesanan tetap ada di daftar dengan tanda Dibatalkan, dan bisa diaktifkan lagi kapan saja.",
+        "reasonLabel": "Alasan (opsional)",
+        "reasonPlaceholder": "mis. klien pindah pemasok",
+        "confirm": "Batalkan pesanan ini",
+        "keep": "Jangan batalkan",
+        "done": "Pesanan dibatalkan",
+        "reactivated": "Pesanan diaktifkan lagi",
+        "reactivate": "Aktifkan lagi",
+        "banner": "Pesanan ini dibatalkan pada {{date}}.",
+        "reasonIs": "Alasan: {{reason}}.",
+        "noReason": "Tanpa alasan.",
+        "bannerEffect": "Invoice yang belum dibayar tidak lagi dihitung sebagai piutang.",
+        "invoiceCancelled": "Dibatalkan bersama pesanan",
+        "neverInvoiced": "Dibatalkan sebelum ada invoice."
       }
     },
     "itemForm": {

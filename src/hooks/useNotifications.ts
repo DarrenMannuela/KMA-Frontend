@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
 import { useDateLocale } from '@/i18n/dateLocale'
-import { orderHooks, itemHooks, invoiceHooks, clientHooks, productionHooks, operationHooks, useBudgets, useRecurringCosts } from '@/hooks'
+import { orderHooks, itemHooks, invoiceHooks, billable, clientHooks, productionHooks, operationHooks, useBudgets, useRecurringCosts } from '@/hooks'
 import { receivables, budgetUsage, monthKey, dueOn } from '@/components/finance/financeStats'
 import { fromProduction, fromOperation } from '@/components/finance/ledgerModel'
 import { invoiceAmount } from '@/utils/invoiceAmount'
@@ -52,7 +52,7 @@ export function useNotifications() {
   const [read, setRead] = useState<Set<string>>(loadRead)
 
   const list = useMemo<AppNotification[]>(() => {
-    const invoices = invoicesRaw as Invoice[]
+    const invoices = billable(invoicesRaw as Invoice[])
     const now = new Date()
     const today = isoDay(now)
     const thisMonth = monthKey(now.getFullYear(), now.getMonth())

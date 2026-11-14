@@ -258,7 +258,8 @@
     "markPaid": "Tandai lunas",
     "deleteConfirm": "Hapus invoice {{id}}?",
     "viewInvoice": "Lihat invoice",
-    "printKwitansi": "Cetak kwitansi"
+    "printKwitansi": "Cetak kwitansi",
+    "cancelledTitle": "Dibatalkan bersama pesanannya. Aktifkan lagi pesanannya untuk menagih kembali."
   },
   "orderJourney": {
     "title": "Perjalanan pesanan",
@@ -302,6 +303,8 @@
       "chasePayment": "tagih pembayaran",
       "addItems": "tambahkan barang pesanan"
     },
-    "noItems": "belum ada barang"
+    "noItems": "belum ada barang",
+    "cancelled": "dibatalkan {{date}}, berhenti di sini",
+    "invoiceCancelled": "dibatalkan"
   }
 }
