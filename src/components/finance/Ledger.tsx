@@ -577,7 +577,8 @@ export function Ledger({ kind, initial, title }: {
   // keeps the same options (and the same columns) as before.
   const unitKey = [...new Set([...SI_UNITS, ...allRows.map(r => r.unit).filter(Boolean)])].join('\u0000')
   const unitOptions = useMemo(() => unitKey.split('\u0000').map(u => ({ value: u, label: u })), [unitKey])
-  const orderSuggestions = useMemo(() => orders.slice(-300).map(o => o.id).reverse(), [orders])
+  // A cancelled order isn't offered for new costs (lines already linked keep it).
+  const orderSuggestions = useMemo(() => orders.filter(o => !o.cancelled_at).slice(-300).map(o => o.id).reverse(), [orders])
   const headerSuggestions = useMemo(() => headers.slice(-300).map(h => h.id).reverse(), [headers])
   const byKasBon = filters.groupBy === 'kasbon'
 

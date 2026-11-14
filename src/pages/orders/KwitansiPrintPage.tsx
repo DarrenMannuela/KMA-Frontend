@@ -1,4 +1,5 @@
 import { invoiceAmount, liveDownPayment, balanceDue } from '@/utils/invoiceAmount'
+import { CancelledStamp } from '@/components/print/CancelledStamp'
 import { useState, useEffect, useLayoutEffect } from 'react'
 import type { CSSProperties } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -324,9 +325,10 @@ export function KwitansiPrintPage() {
         <div
           id="kwitansi"
           ref={scaleDocRef}
-          className="bg-white mx-auto shadow-lg print:shadow-none"
+          className="bg-white mx-auto shadow-lg print:shadow-none relative"
           style={{ ...PAGE_STYLE, fontFamily: fonts.main, fontSize: `${L.bodySize}px`, ['--kw-label' as string]: `${Math.round(150 * L.bodySize / 13)}px`, transform: `scale(${scale})`, transformOrigin: 'top left' }}
         >
+          <CancelledStamp show={invoice.status === 'cancelled'} />
           {/* Header: the logo over the company name, KWITANSI, and the receipt's
               number, invoice and date. The layout puts the logo block left,
               right, centred above the title, or leaves the logo out (the

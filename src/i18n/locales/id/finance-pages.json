@@ -101,7 +101,12 @@
     "amountRp": "Jumlah (Rp)",
     "orderOptional": "Pesanan (opsional)",
     "orderPlaceholder": "No. pesanan untuk kas ini",
-    "editLineOn": "Ubah baris di {{id}}"
+    "editLineOn": "Ubah baris di {{id}}",
+    "paysInvoice": "melunasi {{id}}",
+    "paysInvoiceLabel": "Untuk membayar invoice",
+    "paysNothing": "— bukan pembayaran invoice —",
+    "paysHint": "Menyimpan akan menandai {{id}} lunas, bertanggal Bukti Kas ini. Uangnya dihitung sekali, sebagai pembayaran invoice itu.",
+    "paysNothingHint": "Hanya invoice pesanan ini yang belum dibayar yang ditampilkan."
   },
   "finance": {
     "budgets": {

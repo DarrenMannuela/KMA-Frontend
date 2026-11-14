@@ -7,7 +7,10 @@ import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 import { CrudPage } from '@/components/ui/CrudPage'
 import { formatRp } from '@/components/ui'
-import { invoiceHooks } from '@/hooks'
+import { invoiceHooks, buktiKasHooks } from '@/hooks'
+import { Modal } from '@/components/ui/Modal'
+import { FormField } from '@/components/ui'
+import { todayISODate } from '@/utils/MonthUtils'
 import { useDateLocale } from '@/i18n/dateLocale'
 import type { Invoice } from '@/types'
 import { isPastDue } from '@/utils/orderStatus'
@@ -48,18 +51,31 @@ export function InvoiceListPage() {
   const statusLabel = (r: Invoice) =>
     r.status === 'cancelled' ? t('dashboardKpi.paymentStatus.cancelled') : r.status === 'paid' ? t('common.paid') : isPastDue(r) ? t('dashboardKpi.paymentStatus.overdue') : t('common.unpaid')
 
+  // Invoices paid by a Bukti Kas line: unpaid again only by unlinking it there.
+  const { data: buktiKas = [] } = buktiKasHooks.useList()
+  const paidByBuktiKas = (id: string) => buktiKas.find(b => b.invoice_id === id)?.header_id ?? null
+
+  // Marking paid asks the date it was paid (today unless changed); marking
+  // unpaid clears it, so a paid date always means paid.
+  const [payFor, setPayFor] = useState<Invoice | null>(null)
+  const [payDate, setPayDate] = useState(todayISODate())
   const toggleStatus = (row: Invoice) => {
-    const nextStatus = row.status === 'paid' ? 'unpaid' : 'paid'
-    // paid_date is stamped the first time an invoice is marked paid and kept if it
-    // goes back to unpaid.
-    const body = nextStatus === 'paid' && !row.paid_date
-      ? { status: nextStatus, paid_date: new Date().toISOString() }
-      : { status: nextStatus }
+    if (row.status === 'paid') {
+      update.mutate({ id: row.id, body: { status: 'unpaid', paid_date: null } })
+      return
+    }
+    setPayDate(row.paid_date ? row.paid_date.slice(0, 10) : todayISODate())
+    setPayFor(row)
+  }
+  const markPaid = () => {
+    const row = payFor
+    if (!row || !payDate) return
+    setPayFor(null)
+    const body = { status: 'paid', paid_date: new Date(payDate).toISOString() }
     update.mutate({ id: row.id, body }, {
       // Marking paid hides the row under the Unpaid filter, so the toast offers Undo.
       // It reverts directly: `row` still holds the old status.
       onSuccess: () => {
-        if (nextStatus !== 'paid') return
         toast((toastItem) => (
           <span className="flex items-center gap-3">
             {t('invoiceList.markedPaid')}
@@ -67,7 +83,7 @@ export function InvoiceListPage() {
               className="font-semibold text-navy-300 hover:text-white underline underline-offset-2"
               onClick={() => {
                 toast.dismiss(toastItem.id)
-                update.mutate({ id: row.id, body: { status: 'unpaid' } })
+                update.mutate({ id: row.id, body: { status: 'unpaid', paid_date: null } })
               }}
             >
               {t('common.undo')}
@@ -78,7 +94,9 @@ export function InvoiceListPage() {
     })
   }
 
+
   return (
+    <>
     <CrudPage<Invoice>
       title={t('invoiceList.title')}
       icon={FileText}
@@ -140,7 +158,9 @@ export function InvoiceListPage() {
           // The card shows a plain badge; marking paid is in its ⋯ details.
           cardRender: r => <span className={`badge ${statusBadge(r)}`}>{statusLabel(r)}</span>,
           // A cancelled one isn't marked paid from here: reactivate its order.
-          render: r => r.status === 'cancelled' ? (
+          render: r => r.status === 'paid' && paidByBuktiKas(r.id) ? (
+            <span className={`badge ${statusBadge(r)} min-w-16 justify-center`} title={t('invoiceList.paidByBuktiKas', { id: paidByBuktiKas(r.id) })}>{statusLabel(r)}</span>
+          ) : r.status === 'cancelled' ? (
             <span className={`badge ${statusBadge(r)} min-w-16 justify-center`} title={t('invoiceList.cancelledTitle')}>{statusLabel(r)}</span>
           ) : (
             <button
@@ -185,5 +205,19 @@ export function InvoiceListPage() {
         </>
       )}
     />
+    {payFor && (
+      <Modal title={t('invoiceList.markPaidTitle', { id: payFor.id })} onClose={() => setPayFor(null)}>
+        <div className="space-y-4">
+          <FormField label={t('invoiceList.paidOn')}>
+            <input className="field" type="date" value={payDate} max={todayISODate()} onChange={e => setPayDate(e.target.value)} />
+          </FormField>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn-primary" disabled={!payDate || update.isPending} onClick={markPaid}>{t('invoiceList.markPaid')}</button>
+            <button className="btn-secondary" onClick={() => setPayFor(null)}>{t('common.cancel')}</button>
+          </div>
+        </div>
+      </Modal>
+    )}
+    </>
   )
 }

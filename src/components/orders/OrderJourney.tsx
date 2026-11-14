@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { format, differenceInCalendarDays } from 'date-fns'
 import { Check } from 'lucide-react'
-import { deliveryHooks, productionHooks, operationHooks } from '@/hooks'
+import { deliveryHooks, productionHooks, operationHooks, useOrderRemainingItems } from '@/hooks'
 import { useDateLocale } from '@/i18n/dateLocale'
 import { sheetParams } from '@/components/finance/ledgerParams'
 import { isPastDue } from '@/utils/orderStatus'
@@ -45,6 +45,10 @@ export function OrderJourney({ orderId, orderDate, itemCount, dpInvoice, pelunas
     () => allDeliveries.filter(d => d.order_id === orderId).sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '')),
     [allDeliveries, orderId],
   )
+  // How much of the order has shipped, from what its DO / SJ boxes hold.
+  const remaining = useOrderRemainingItems(orderId)
+  const ordered = remaining.reduce((n, r) => n + r.amount, 0)
+  const shipped = remaining.reduce((n, r) => n + Math.min(r.amount, r.delivered), 0)
   const kasBonLines = useMemo(
     () => production.data.filter(r => r.order_id === orderId).length + operations.data.filter(r => r.order_id === orderId).length,
     [production.data, operations.data, orderId],
@@ -73,6 +77,9 @@ export function OrderJourney({ orderId, orderDate, itemCount, dpInvoice, pelunas
   const fullInvoice = !!dpInvoice && (dpInvoice.down_payment ?? 0) === 0
   const hasDp = !!dpInvoice && !fullInvoice
   const delivered = deliveries.length > 0
+  // Some shipped, some not: delivery is under way, not done. (With nothing
+  // packed in any box yet, there's no way to tell, so a DO counts as done.)
+  const partial = delivered && shipped > 0 && shipped < ordered
   const steps: Step[] = [
     // An order with nothing on it yet isn't finished being entered.
     { key: 'order', label: t('orderJourney.steps.order'), state: itemCount ? 'done' : 'now', detail: <>{day(orderDate)}{orderDate ? ' · ' : ''}{itemCount ? t('orderJourney.items', { count: itemCount }) : t('orderJourney.noItems')}</>, next: t('orderJourney.next.addItems') },
@@ -93,11 +100,11 @@ export function OrderJourney({ orderId, orderDate, itemCount, dpInvoice, pelunas
     {
       key: 'delivery',
       label: t('orderJourney.steps.delivery'),
-      state: delivered ? 'done' : 'todo',
+      state: partial ? 'now' : delivered ? 'done' : 'todo',
       detail: delivered
-        ? <>{link(deliveries[0].id, `/delivery/${encodeURIComponent(deliveries[0].id)}`)} · {day(deliveries[0].date)}{deliveries.length > 1 && <> · {t('orderJourney.more', { count: deliveries.length - 1 })}</>}</>
+        ? <>{partial && <>{t('orderJourney.partial', { shipped, ordered })} · </>}{link(deliveries[0].id, `/delivery/${encodeURIComponent(deliveries[0].id)}`)} · {day(deliveries[0].date)}{deliveries.length > 1 && <> · {t('orderJourney.more', { count: deliveries.length - 1 })}</>}</>
         : t('orderJourney.noDelivery'),
-      next: t('orderJourney.next.makeDelivery'),
+      next: partial ? t('orderJourney.next.shipRest', { count: ordered - shipped }) : t('orderJourney.next.makeDelivery'),
     },
     fullInvoice || (!dpInvoice && !pelunasanInvoice)
       ? invoiceStep('payment', t('orderJourney.steps.payment'), dpInvoice, { make: t('orderJourney.next.makeInvoice'), wait: t('orderJourney.next.waitPayment'), chase: t('orderJourney.next.chasePayment') })

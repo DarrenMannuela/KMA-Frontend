@@ -571,5 +571,40 @@
     "show": "Show the invoice list",
     "hide": "Hide the invoice list",
     "other": "Other invoices"
+  },
+  "invoicePage": {
+    "loadFailed": "Couldn't load this invoice. Check your connection and try again.",
+    "notFound": "Invoice not found.",
+    "atLeastPages_one": "at least {{count}} page",
+    "atLeastPages_other": "at least {{count}} pages",
+    "addRow": "Add Row",
+    "addRowTitle": "Add a row to the item table",
+    "adding": "Adding…",
+    "paperFormat": "Paper format",
+    "newPageBefore": "Start a new page before:",
+    "removeBlankRow": "Remove blank row",
+    "addBlankRow": "Add blank row",
+    "removeNote": "Remove this note",
+    "pickFromCatalogue": "Pick from Catalogue (optional)",
+    "typeManually": "Type manually instead…",
+    "itemName": "Item Name",
+    "size": "Size",
+    "qty": "Qty",
+    "unitPrice": "Unit Price (Rp)",
+    "subtotal": "Subtotal",
+    "clearBreaks": "Clear",
+    "addNote": "Add note"
+  },
+  "deliveryPicker": {
+    "item": "Item",
+    "select": "Select item…",
+    "left": "{{remaining}} of {{amount}} left",
+    "noItems": "This order has no items yet."
+  },
+  "undoLabels": {
+    "addedTo": "Added {{name}} to {{id}}",
+    "aLine": "a line",
+    "updatedBuktiKas": "Updated a Bukti Kas line",
+    "deletedBuktiKas": "Deleted a Bukti Kas line"
   }
 }

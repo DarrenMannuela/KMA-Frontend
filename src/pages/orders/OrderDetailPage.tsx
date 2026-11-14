@@ -426,6 +426,8 @@ export function OrderDetailPage() {
     })
   }
 
+  // A cancelled order's items are fixed (the server refuses changes too).
+  const locked = !!order?.cancelled_at
   const openAdd = () => {
     setEditing(null)
     setDuplicating(null)
@@ -530,9 +532,11 @@ export function OrderDetailPage() {
       <div className="card">
         <div className="flex items-center justify-between gap-2 p-4 border-b border-slate-100 flex-wrap dark:border-navy-800">
           <h2 className="font-semibold text-navy-900 dark:text-slate-50">{t('orders.detail.orderItems', { count: orderItems.length })}</h2>
+{!locked && (
           <button className="btn-primary flex items-center gap-1" onClick={openAdd}>
             <Plus size={14} /> {t('orders.detail.addItem')}
           </button>
+          )}
         </div>
 
         {/* On phones the item form opens as a popup instead of pushing the list down. */}
@@ -571,6 +575,7 @@ export function OrderDetailPage() {
             ) : itemGroups.map(group => {
               const rowActions = (item: Item) => (
                 <div className="flex items-center gap-1 dock:gap-3 mt-2 -ml-2 dock:ml-0" onClick={e => e.stopPropagation()}>
+                  {!locked && <>
                   <button
                     className="tap px-2 dock:px-0 rounded-lg text-slate-500 hover:text-gold-500 text-sm dock:text-xs flex items-center gap-1.5 dock:gap-1 dark:text-slate-400"
                     onClick={() => openDuplicate(item)}
@@ -592,6 +597,7 @@ export function OrderDetailPage() {
                   >
                     {t('orders.detail.delete')}
                   </button>
+                  </>}
                 </div>
               )
 
@@ -682,6 +688,7 @@ export function OrderDetailPage() {
                       <td className="p-4 text-right font-mono font-semibold">{formatRp(item.sub_total)}</td>
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-3">
+                          {!locked && <>
                           <button
                             className="tap px-2 dock:px-0 rounded-lg text-slate-500 hover:text-gold-500 text-sm dock:text-xs flex items-center gap-1.5 dock:gap-1 dark:text-slate-400"
                             onClick={() => openDuplicate(item)}
@@ -703,6 +710,7 @@ export function OrderDetailPage() {
                           >
                             {t('orders.detail.delete')}
                           </button>
+                          </>}
                         </div>
                       </td>
                     </tr>
@@ -743,6 +751,7 @@ export function OrderDetailPage() {
                         <td className="p-4 text-right font-mono font-semibold">{formatRp(item.sub_total)}</td>
                         <td className="p-4 text-right">
                           <div className="flex items-center justify-end gap-3" onClick={e => e.stopPropagation()}>
+                            {!locked && <>
                             <button
                               className="tap px-2 dock:px-0 rounded-lg text-slate-500 hover:text-gold-500 text-sm dock:text-xs flex items-center gap-1.5 dock:gap-1 dark:text-slate-400"
                               onClick={() => openDuplicate(item)}
@@ -764,6 +773,7 @@ export function OrderDetailPage() {
                             >
                               {t('orders.detail.delete')}
                             </button>
+                            </>}
                           </div>
                         </td>
                       </tr>

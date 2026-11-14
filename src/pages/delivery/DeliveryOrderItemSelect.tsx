@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { FormField } from '@/components/ui'
 import type { OrderRemainingItem } from '@/hooks'
 
@@ -10,11 +11,12 @@ interface OrderItemSelectProps {
   label?: string
 }
 
-export function OrderItemSelect({ items, value, onSelect, missing, label = 'Item' }: OrderItemSelectProps) {
+export function OrderItemSelect({ items, value, onSelect, missing, label }: OrderItemSelectProps) {
+  const { t } = useTranslation()
   const selectedKey = value ? `${value.item_name}|${value.size ?? ''}` : ''
 
   return (
-    <FormField label={label} required>
+    <FormField label={label ?? t('deliveryPicker.item')} required>
       <select
         className={`field ${missing ? '!border-red-400 !ring-red-100 dark:!border-red-500 dark:!ring-red-500/20' : ''}`}
         value={selectedKey}
@@ -25,18 +27,18 @@ export function OrderItemSelect({ items, value, onSelect, missing, label = 'Item
           onSelect(match ?? null)
         }}
       >
-        <option value="">Select item…</option>
+        <option value="">{t('deliveryPicker.select')}</option>
         {items.map(r => {
           const key = `${r.item_name}|${r.size ?? ''}`
           return (
             <option key={key} value={key} disabled={r.remaining <= 0 && key !== selectedKey}>
-              {r.item_name}{r.size ? ` (${r.size})` : ''} — {r.remaining} of {r.amount} left
+              {r.item_name}{r.size ? ` (${r.size})` : ''} — {t('deliveryPicker.left', { remaining: r.remaining, amount: r.amount })}
             </option>
           )
         })}
       </select>
       {items.length === 0 && (
-        <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">This order has no items yet.</p>
+        <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">{t('deliveryPicker.noItems')}</p>
       )}
     </FormField>
   )

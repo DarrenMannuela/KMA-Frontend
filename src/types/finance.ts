@@ -123,6 +123,8 @@ export interface BuktiKasItem {
   description: string
   price: number
   order_id: string | null
+  /** The invoice this cash pays, if any: linking it marks that invoice paid. */
+  invoice_id?: string | null
 }
 
 export interface BuktiKasRow {
@@ -133,6 +135,7 @@ export interface BuktiKasRow {
   item_description: string      // item-level (what the cash was for)
   price: number                 // item-level
   order_id: string | null       // item-level: the order this cash was received for
+  invoice_id: string | null     // item-level: the invoice this cash pays (it's then paid by it)
 }
 
 export type CreateBuktiKasHeaderRequest = BuktiKasHeader
@@ -141,7 +144,7 @@ export type UpdateBuktiKasHeaderRequest = Partial<CreateBuktiKasHeaderRequest>
 export type CreateBuktiKasItemRequest = Omit<BuktiKasItem, 'id'>
 export type UpdateBuktiKasItemRequest = Partial<CreateBuktiKasItemRequest>
 
-export type CreateBuktiKasRowRequest = Omit<BuktiKasRow, 'id' | 'order_id'> & { order_id?: string | null }
+export type CreateBuktiKasRowRequest = Omit<BuktiKasRow, 'id' | 'order_id' | 'invoice_id'> & { order_id?: string | null; invoice_id?: string | null }
 
 export interface BuktiKasBatch {
   new_headers?: BuktiKasHeader[]

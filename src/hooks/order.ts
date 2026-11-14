@@ -6,7 +6,8 @@ import { makeCrudHooks } from './crud'
 import { deliveryHooks, deliveryItemHooks } from './delivery'
 
 export const orderHooks = makeCrudHooks('orders', ordersApi, 'Order')
-export const itemHooks  = makeCrudHooks('items',  itemsApi,  'Item')
+// The server keeps the order's invoice totals in line with its items.
+export const itemHooks  = makeCrudHooks('items',  itemsApi,  'Item', ['invoices', 'invoice'])
 
 // What's left to deliver of each item on an order, across all its deliveries
 // (matched by item name + size). excludeItemId leaves one delivery item out,

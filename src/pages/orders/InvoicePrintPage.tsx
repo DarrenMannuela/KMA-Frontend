@@ -23,6 +23,7 @@ import { useInvoiceLayout, resolveFormat, BORDER_PRESETS, type BorderPreset, typ
 import { InvoiceFormatBar, type FormatTarget } from './InvoiceFormatBar'
 import { usePrintLayout } from '@/hooks/usePrintLayout'
 import { PrintLayoutPanel, PANEL_ROOM_CLASS } from '@/components/print/PrintLayoutPanel'
+import { CancelledStamp } from '@/components/print/CancelledStamp'
 import { PrintToolbar, ZoomButton } from '@/components/print/PrintToolbar'
 import { usePreviewZoom } from '@/hooks/usePreviewZoom'
 import { printFontStacks } from '@/utils/printLayout'
@@ -1054,17 +1055,17 @@ export function InvoicePrintPage({ invoiceList }: {
     likelyMultiPage ? 2 : 1,
   )
 
-  if (invoiceLoading) return <div className="p-8 text-slate-400">Loading…</div>
+  if (invoiceLoading) return <div className="p-8 text-slate-400">{t('common.loading')}</div>
   // A failed fetch shows Retry, not "Invoice not found".
   if (invoiceError) {
     return (
       <div className="p-8 text-center">
-        <p className="text-red-400 mb-3">Couldn't load this invoice — check your connection and try again.</p>
-        <button onClick={() => refetchInvoice()} className="btn-secondary">Retry</button>
+        <p className="text-red-400 mb-3">{t('invoicePage.loadFailed')}</p>
+        <button onClick={() => refetchInvoice()} className="btn-secondary">{t('common.retry')}</button>
       </div>
     )
   }
-  if (!invoice) return <div className="p-8 text-red-400">Invoice not found.</div>
+  if (!invoice) return <div className="p-8 text-red-400">{t('invoicePage.notFound')}</div>
 
   // Live, not this invoice's own (possibly stale) down_payment — see allInvoices
   // above. For a DP invoice this is itself, so nothing changes there; only a
@@ -1488,7 +1489,7 @@ export function InvoicePrintPage({ invoiceList }: {
           {/* "At least": natural overflow can add pages beyond the prediction. */}
           {previewTotalPages > 1 && (
             <span className="badge bg-slate-100 text-slate-600">
-              at least {previewTotalPages} page{previewTotalPages === 1 ? '' : 's'}
+              {t('invoicePage.atLeastPages', { count: previewTotalPages })}
             </span>
           )}
         </>}
@@ -1563,24 +1564,24 @@ export function InvoicePrintPage({ invoiceList }: {
           <button
             type="button"
             onClick={() => setShowAddItemPanel(a => !a)}
-            title={showAddItemPanel ? 'Close' : 'Add a row to the item table'}
+            title={showAddItemPanel ? t('common.close') : t('invoicePage.addRowTitle')}
             className={`px-2 py-1 rounded text-xs font-medium border transition-colors flex items-center gap-1.5 ${
               showAddItemPanel
                 ? 'bg-navy-900 text-white border-navy-900'
                 : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
             }`}
           >
-            <Plus size={13} /> Add Row
+            <Plus size={13} /> {t('invoicePage.addRow')}
           </button>
           {showAddItemPanel && isMobile && (
-            <Modal title="Add Row" onClose={() => setShowAddItemPanel(false)}>
+            <Modal title={t('invoicePage.addRow')} onClose={() => setShowAddItemPanel(false)}>
               <div className="space-y-5">
                 {catalogue.length > 0 && (
-                  <FormField label="Pick from Catalogue (optional)">
+                  <FormField label={t('invoicePage.pickFromCatalogue')}>
                     <div className="relative">
                       <PackageSearch size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                       <select className="field pl-8" value={catalogueItemId} onChange={e => handlePickCatalogueItem(e.target.value)}>
-                        <option value="">Type manually instead…</option>
+                        <option value="">{t('invoicePage.typeManually')}</option>
                         {catalogue.map(c => (
                           <option key={c.id} value={c.id}>{c.item_name}{c.size ? ` (${c.size})` : ''}</option>
                         ))}
@@ -1592,7 +1593,7 @@ export function InvoicePrintPage({ invoiceList }: {
                   </FormField>
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField label="Item Name" required>
+                  <FormField label={t('invoicePage.itemName')} required>
                     <input
                       ref={newItemName.ref}
                       value={newItemName.value}
@@ -1601,7 +1602,7 @@ export function InvoicePrintPage({ invoiceList }: {
                       className="field"
                     />
                   </FormField>
-                  <FormField label="Size">
+                  <FormField label={t('invoicePage.size')}>
                     <input
                       ref={newItemSize.ref}
                       value={newItemSize.value}
@@ -1610,7 +1611,7 @@ export function InvoicePrintPage({ invoiceList }: {
                       className="field"
                     />
                   </FormField>
-                  <FormField label="Qty" required>
+                  <FormField label={t('invoicePage.qty')} required>
                     <input
                       type="text"
                       inputMode="numeric"
@@ -1623,7 +1624,7 @@ export function InvoicePrintPage({ invoiceList }: {
                       className="field"
                     />
                   </FormField>
-                  <FormField label="Unit Price (Rp)" required>
+                  <FormField label={t('invoicePage.unitPrice')} required>
                     <input
                       className="field font-mono"
                       type="text"
@@ -1635,7 +1636,7 @@ export function InvoicePrintPage({ invoiceList }: {
                   </FormField>
                 </div>
                 <div className="bg-slate-50 rounded-lg px-5 py-4 flex justify-between items-center">
-                  <span className="text-base text-slate-500">Subtotal</span>
+                  <span className="text-base text-slate-500">{t('invoicePage.subtotal')}</span>
                   <span className="font-mono font-semibold text-lg">{formatRp(newItemAmount * newItemPrice)}</span>
                 </div>
                 <button
@@ -1644,7 +1645,7 @@ export function InvoicePrintPage({ invoiceList }: {
                   disabled={createItem.isPending || !newItemName.value.trim()}
                   className="btn-primary w-full flex items-center justify-center gap-1.5 !py-3 !text-base"
                 >
-                  <Plus size={14} /> {createItem.isPending ? 'Adding…' : 'Add Row'}
+                  <Plus size={14} /> {createItem.isPending ? t('invoicePage.adding') : t('invoicePage.addRow')}
                 </button>
               </div>
             </Modal>
@@ -1655,22 +1656,22 @@ export function InvoicePrintPage({ invoiceList }: {
               className="absolute right-0 mt-2 w-[28rem] space-y-5 bg-white border border-slate-200 rounded-lg shadow-lg p-6 z-20"
             >
               <div className="flex justify-between items-center">
-                <span className="text-base font-semibold text-slate-700">Add Row</span>
+                <span className="text-base font-semibold text-slate-700">{t('invoicePage.addRow')}</span>
                 <button
                   type="button"
                   onClick={() => setShowAddItemPanel(false)}
                   className="btn-ghost btn-sm !px-1.5"
-                  title="Close"
+                  title={t('common.close')}
                 >
                   <X size={16} />
                 </button>
               </div>
               {catalogue.length > 0 && (
-                <FormField label="Pick from Catalogue (optional)">
+                <FormField label={t('invoicePage.pickFromCatalogue')}>
                   <div className="relative">
                     <PackageSearch size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     <select className="field pl-8" value={catalogueItemId} onChange={e => handlePickCatalogueItem(e.target.value)}>
-                      <option value="">Type manually instead…</option>
+                      <option value="">{t('invoicePage.typeManually')}</option>
                       {catalogue.map(c => (
                         <option key={c.id} value={c.id}>{c.item_name}{c.size ? ` (${c.size})` : ''}</option>
                       ))}
@@ -1682,7 +1683,7 @@ export function InvoicePrintPage({ invoiceList }: {
                 </FormField>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <FormField label="Item Name" required>
+                <FormField label={t('invoicePage.itemName')} required>
                   <input
                     ref={newItemName.ref}
                     value={newItemName.value}
@@ -1691,7 +1692,7 @@ export function InvoicePrintPage({ invoiceList }: {
                     className="field"
                   />
                 </FormField>
-                <FormField label="Size">
+                <FormField label={t('invoicePage.size')}>
                   <input
                     ref={newItemSize.ref}
                     value={newItemSize.value}
@@ -1700,7 +1701,7 @@ export function InvoicePrintPage({ invoiceList }: {
                     className="field"
                   />
                 </FormField>
-                <FormField label="Qty" required>
+                <FormField label={t('invoicePage.qty')} required>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -1713,7 +1714,7 @@ export function InvoicePrintPage({ invoiceList }: {
                     className="field"
                   />
                 </FormField>
-                <FormField label="Unit Price (Rp)" required>
+                <FormField label={t('invoicePage.unitPrice')} required>
                   <input
                     className="field font-mono"
                     type="text"
@@ -1725,7 +1726,7 @@ export function InvoicePrintPage({ invoiceList }: {
                 </FormField>
               </div>
               <div className="bg-slate-50 rounded-lg px-5 py-4 flex justify-between items-center">
-                <span className="text-base text-slate-500">Subtotal</span>
+                <span className="text-base text-slate-500">{t('invoicePage.subtotal')}</span>
                 <span className="font-mono font-semibold text-lg">{formatRp(newItemAmount * newItemPrice)}</span>
               </div>
               <button
@@ -1734,7 +1735,7 @@ export function InvoicePrintPage({ invoiceList }: {
                 disabled={createItem.isPending || !newItemName.value.trim()}
                 className="btn-primary w-full flex items-center justify-center gap-1.5 !py-3 !text-base"
               >
-                <Plus size={14} /> {createItem.isPending ? 'Adding…' : 'Add Row'}
+                <Plus size={14} /> {createItem.isPending ? t('invoicePage.adding') : t('invoicePage.addRow')}
               </button>
             </div>
           )}
@@ -1745,7 +1746,7 @@ export function InvoicePrintPage({ invoiceList }: {
           value={paperFormat}
           onChange={e => setPaperFormat(e.target.value as PaperFormat)}
           className="field text-sm !w-auto"
-          title="Paper format"
+          title={t('invoicePage.paperFormat')}
         >
           {(Object.keys(PAPER_FORMATS) as PaperFormat[]).map(key => (
             <option key={key} value={key}>{PAPER_FORMATS[key].label}</option>
@@ -1761,7 +1762,7 @@ export function InvoicePrintPage({ invoiceList }: {
         pinned={!isMobile && formatBar}
         below={<>{groupNames.length > 1 ? (
         <div className={`print:hidden bg-white border-b border-slate-200 px-6 py-2 flex items-center gap-1.5 flex-wrap ${sideListOpen ? 'dock:pl-[19.5rem]' : ''}`}>
-          <span className="text-xs text-slate-400 mr-0.5">Start a new page before:</span>
+          <span className="text-xs text-slate-400 mr-0.5">{t('invoicePage.newPageBefore')}</span>
           {groupNames.map(name => (
             <button
               key={name}
@@ -1782,7 +1783,7 @@ export function InvoicePrintPage({ invoiceList }: {
               onClick={() => setManualBreaks(new Set())}
               className="text-xs text-slate-400 hover:text-slate-600 underline ml-1"
             >
-              Clear
+              {t('invoicePage.clearBreaks')}
             </button>
           )}
         </div>
@@ -1810,6 +1811,7 @@ export function InvoicePrintPage({ invoiceList }: {
         >
           {/* Page 1's badge sits at the sheet's top-right corner. */}
           <PageFlag page={1} total={previewTotalPages} />
+          <CancelledStamp show={invoice.status === 'cancelled'} />
           <div
             id="invoice"
             className="bg-white shadow-lg print:shadow-none"
@@ -2055,9 +2057,9 @@ export function InvoicePrintPage({ invoiceList }: {
                                 {isLastGapRow && (
                                   <span className="print:hidden" onClick={e => e.stopPropagation()} style={{ display: 'inline-flex', gap: '3px', marginRight: 'auto' }}>
                                     {extra > 0 && (
-                                      <button type="button" title="Remove blank row" onClick={() => removeGapRow(group.name)} style={gapButton}>−</button>
+                                      <button type="button" title={t('invoicePage.removeBlankRow')} onClick={() => removeGapRow(group.name)} style={gapButton}>−</button>
                                     )}
-                                    <button type="button" title="Add blank row" onClick={() => addGapRow(group.name)} style={gapButton}>+</button>
+                                    <button type="button" title={t('invoicePage.addBlankRow')} onClick={() => addGapRow(group.name)} style={gapButton}>+</button>
                                   </span>
                                 )}
                                 <div style={{ flex: 1, minWidth: 0 }}>{freeText(key, 'jumlah', '-', 'right')}</div>
@@ -2160,7 +2162,7 @@ export function InvoicePrintPage({ invoiceList }: {
                   <div key={idx} className={note.trim() === '' ? 'print:hidden' : undefined} style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                     <span style={{ minWidth: '14px' }}>{numberOf.get(idx) ? `${numberOf.get(idx)}.` : ''}</span>
                     <div style={{ flex: 1, minWidth: 0 }}><SheetCell value={note} onSave={v => updateNote(idx, v)} uppercase={false} placeholder="…" /></div>
-                    <button type="button" onClick={() => removeNote(idx)} className="print:hidden" title="Remove this note"
+                    <button type="button" onClick={() => removeNote(idx)} className="print:hidden" title={t('invoicePage.removeNote')}
                       style={{ flexShrink: 0, width: '16px', height: '16px', lineHeight: '16px', textAlign: 'center', borderRadius: '999px', border: 'none', background: '#e2e8f0', color: '#64748b', fontSize: '11px', cursor: 'pointer' }}>
                       ×
                     </button>
@@ -2181,7 +2183,7 @@ export function InvoicePrintPage({ invoiceList }: {
                   <span style={{ display: 'inline-flex', gap: '4px', whiteSpace: 'nowrap' }}>No. Rek. <SheetCell value={rekening.accountNumber} onSave={v => setRekening({ accountNumber: v })} uppercase={false} /></span>
                 </div>
                 <button ref={addNoteBtnRef} type="button" onClick={addNote} className="print:hidden btn-secondary flex items-center gap-1.5" style={{ marginTop: '8px', fontSize: '12px', padding: '4px 10px', fontFamily: 'Arial, sans-serif' }}>
-                  <Plus size={12} /> Add note
+                  <Plus size={12} /> {t('invoicePage.addNote')}
                 </button>
               </div>
             )

@@ -254,7 +254,15 @@
     "dueDate": "Due Date (J/T)",
     "paidDate": "Paid Date",
     "itemsOnInvoice": "Items on this invoice ({{count}})",
-    "generateInvoice": "Generate Invoice"
+    "generateInvoice": "Generate Invoice",
+    "switch": {
+      "willRemove": "This order already has Pelunasan invoice {{id}} (unpaid). Saving at 0% removes it, since this invoice now covers the full amount. It can be undone.",
+      "blocked": "This order's Pelunasan invoice {{id}} is already paid, so this one can't become a full invoice. Mark that Pelunasan unpaid or delete it first.",
+      "confirmPaid": "Invoice {{id}} is marked paid. It was for {{before}}; after this change it will be for {{after}}, and that is what will count as received. Change it?",
+      "confirmPaidLabel": "Change the amount"
+    },
+    "paidDateHint": "Filling this in marks the invoice paid; clearing it marks it unpaid.",
+    "paidViaBuktiKas": "Paid by Bukti Kas {{id}}: its date is this invoice's paid date. Change it on the Bukti Kas page."
   },
   "invoiceList": {
     "title": "Invoices",
@@ -271,7 +279,10 @@
     "deleteConfirm": "Delete invoice {{id}}?",
     "viewInvoice": "View invoice",
     "printKwitansi": "Print kwitansi/receipt",
-    "cancelledTitle": "Cancelled with its order. Reactivate the order to bill it again."
+    "cancelledTitle": "Cancelled with its order. Reactivate the order to bill it again.",
+    "markPaidTitle": "Mark {{id}} paid",
+    "paidOn": "Paid on",
+    "paidByBuktiKas": "Paid by Bukti Kas {{id}}. To make it unpaid, unlink or delete that line on the Bukti Kas page."
   },
   "orderJourney": {
     "title": "Order journey",
@@ -313,10 +324,12 @@
       "makeInvoice": "create the invoice (DP or COD)",
       "waitPayment": "wait for payment",
       "chasePayment": "chase the payment",
-      "addItems": "add the order's items"
+      "addItems": "add the order's items",
+      "shipRest": "send the remaining {{count}} pcs"
     },
     "noItems": "no items yet",
     "cancelled": "cancelled {{date}}, stopped here",
-    "invoiceCancelled": "cancelled"
+    "invoiceCancelled": "cancelled",
+    "partial": "partly sent · {{shipped}}/{{ordered}}"
   }
 }

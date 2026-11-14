@@ -67,7 +67,10 @@ export function makeCrudHooks<T, C, U>(
     update: (id: string | number, b: U) => Promise<T>
     delete: (id: string | number) => Promise<unknown>
   },
-  label: string
+  label: string,
+  /** Other lists a change here also changes on the server (an item's
+   *  invoices, whose totals follow it). */
+  alsoInvalidate: string[] = [],
 ) {
   return {
     useList: () =>
@@ -85,7 +88,7 @@ export function makeCrudHooks<T, C, U>(
         // the create request itself settles — otherwise a derived value
         // like "remaining quantity" can still read the pre-create state
         // when a second submit becomes possible again.
-        onSuccess: async () => { await qc.invalidateQueries({ queryKey: [key] }); toast.success(crudToast('created', label)) },
+        onSuccess: async () => { alsoInvalidate.forEach(k => qc.invalidateQueries({ queryKey: [k] })); await qc.invalidateQueries({ queryKey: [key] }); toast.success(crudToast('created', label)) },
         onError:   (e: Error) => toast.error(friendlyError(e)),
       })
     },
@@ -94,7 +97,7 @@ export function makeCrudHooks<T, C, U>(
       const qc = useQueryClient()
       return useMutation({
         mutationFn: ({ id, body }: { id: string | number; body: U }) => api.update(id, body),
-        onSuccess: () => { qc.invalidateQueries({ queryKey: [key] }); toast.success(crudToast('updated', label)) },
+        onSuccess: () => { qc.invalidateQueries({ queryKey: [key] }); alsoInvalidate.forEach(k => qc.invalidateQueries({ queryKey: [k] })); toast.success(crudToast('updated', label)) },
         onError:   (e: Error) => toast.error(friendlyError(e)),
       })
     },
@@ -105,6 +108,7 @@ export function makeCrudHooks<T, C, U>(
         mutationFn: (id: string | number) => api.delete(id),
         onSuccess: (res: unknown) => {
           qc.invalidateQueries({ queryKey: [key] })
+          alsoInvalidate.forEach(k => qc.invalidateQueries({ queryKey: [k] }))
           const message = crudToast('deleted', label)
           const restoreId = (res as { restoreId?: string | null } | undefined)?.restoreId
           if (!restoreId) { toast.success(message); return }

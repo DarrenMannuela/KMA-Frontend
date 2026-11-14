@@ -4,13 +4,15 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { Trans, useTranslation } from 'react-i18next'
 import { RotateCcw, Building2 } from 'lucide-react'
-import { FormField, formatRp, UppercaseField } from '@/components/ui'
+import { ConfirmDialog, FormField, formatRp, UppercaseField } from '@/components/ui'
+import { invoiceAmount } from '@/utils/invoiceAmount'
 import { invoicesApi, ApiError } from '@/api'
-import { invoiceHooks, clientHooks, clientContactHooks } from '@/hooks'
+import { invoiceHooks, clientHooks, clientContactHooks, buktiKasHooks } from '@/hooks'
 import { useIsDirty, useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import type { Order, Item, Invoice, CreateInvoiceRequest, UpdateInvoiceRequest } from '@/types'
 import { stripCommas, formatThousands } from '@/utils/NumberFormat'
 import { friendlyError } from '@/utils/friendlyError'
+import { todayISODate } from '@/utils/MonthUtils'
 
 // "NNN/KMA/YY" for this year. Older invoices may carry a ".N" suffix
 // ("076.1/KMA/26"); the scan allows it, new suggestions never use it.
@@ -81,6 +83,9 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
   const { data: contacts = [] } = clientContactHooks.useByClient(clientId ?? undefined)
 
   const total = items.reduce((s, i) => s + i.sub_total, 0)
+  // Paid by a Bukti Kas line: its paid date follows that Bukti Kas.
+  const { data: buktiKas = [] } = buktiKasHooks.useList()
+  const paidVia = existingInvoice ? buktiKas.find(b => b.invoice_id === existingInvoice.id)?.header_id ?? null : null
 
   // A string while editing, so the field can be emptied. COD starts at 0%,
   // a DP at 50%.
@@ -224,11 +229,42 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
   const isDirty = useIsDirty({ form, dpPercent, contactId })
   const { guardClose } = useUnsavedChanges(isDirty)
 
+  // ── Switching between a DP and a full invoice ──
+  // At 0% this invoice covers the whole order, so a Pelunasan the order
+  // already has would ask for the same money again (and the order page no
+  // longer shows it). An unpaid one is removed on save (to the bin, so it
+  // can be undone); a paid one blocks the switch: that money came in
+  // against it, and has to be sorted out first.
+  const becomesFull = form.type === 'dp' && downPayment === 0
+  const leftoverPelunasan = becomesFull
+    ? invoices.find(i => i.order_id === order.id && i.type === 'pelunasan' && i.id !== existingInvoice?.id) ?? null
+    : null
+  const blockedByPaidPelunasan = leftoverPelunasan?.status === 'paid'
+  const removePelunasan = invoiceHooks.useDelete()
+  // A paid invoice whose amount is about to change (its percentage moved,
+  // either way): what's recorded as received changes with it, so that's
+  // confirmed with both amounts spelled out.
+  const paidBefore = existingInvoice?.status === 'paid' ? invoiceAmount(existingInvoice, invoices) : null
+  const paidAfter = downPayment > 0 && form.type === 'dp' ? downPayment : ar
+  const changesPaidAmount = forcedType !== 'pelunasan' && paidBefore != null && paidBefore !== paidAfter
+  const [confirmPaidChange, setConfirmPaidChange] = useState(false)
+
+  // Once the full invoice is saved, its order's unpaid Pelunasan goes.
+  const dropLeftover = () => {
+    if (!leftoverPelunasan || blockedByPaidPelunasan) return
+    // mutateAsync: the form closes right after saving, and a promise still
+    // settles then (a per-call onSuccess wouldn't run once it's unmounted).
+    removePelunasan.mutateAsync(leftoverPelunasan.id)
+      .then(() => qc.invalidateQueries({ queryKey: ['invoices'] }))
+      .catch(() => { /* the hook has already shown why */ })
+  }
+
   const create = useMutation({
     mutationFn: (body: CreateInvoiceRequest) => invoicesApi.create(body),
     onSuccess: (inv) => {
       qc.invalidateQueries({ queryKey: ['invoices'] })
       toast.success(t('invoiceForm.created'))
+      dropLeftover()
       onClose()
       navigate(`/invoice/${encodeURIComponent(inv.id)}`)
     },
@@ -248,21 +284,28 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
     onSuccess: (inv) => {
       qc.invalidateQueries({ queryKey: ['invoices'] })
       toast.success(t('invoiceForm.updated'))
+      dropLeftover()
       onClose()
       navigate(`/invoice/${encodeURIComponent(inv.id)}`)
     },
     onError: (e: Error) => toast.error(friendlyError(e)),
   })
 
-  const handleSubmit = () => {
+  const handleSubmit = (confirmed = false) => {
+    if (blockedByPaidPelunasan) { toast.error(t('invoiceForm.switch.blocked', { id: leftoverPelunasan!.id })); return }
+    if (changesPaidAmount && !confirmed) { setConfirmPaidChange(true); return }
     if (!form.id) { toast.error(t('invoiceForm.idRequired')); return }
     if (idAlreadyExists) { toast.error(t('invoiceForm.idExistsToast')); return }
     if (!form.kepada_yth) { toast.error(t('invoiceForm.kepadaRequired')); return }
     if (!form.untuk) { toast.error(t('invoiceForm.untukRequired')); return }
     if (!form.alamat) { toast.error(t('invoiceForm.alamatRequired')); return }
 
+    // A paid date means paid, and none means unpaid (a cancelled invoice
+    // stays cancelled; one paid by Bukti Kas is left to it).
+    const status = form.status === 'cancelled' || paidVia ? form.status : form.paid_date ? 'paid' : 'unpaid'
     const payload = {
       ...form,
+      status,
       down_payment:  downPayment,
       remaining,
       ar_receivable: ar,
@@ -348,6 +391,11 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
             {dpPercentNum === 0 && (
               <p className="text-xs text-amber-600 mt-1 dark:text-amber-400">
                 {t('invoiceForm.zeroPercentHint')}
+              </p>
+            )}
+            {leftoverPelunasan && (
+              <p role="alert" className={`text-xs mt-1 font-medium ${blockedByPaidPelunasan ? 'text-red-600 dark:text-red-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                {t(blockedByPaidPelunasan ? 'invoiceForm.switch.blocked' : 'invoiceForm.switch.willRemove', { id: leftoverPelunasan.id })}
               </p>
             )}
           </FormField>
@@ -500,7 +548,11 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
             <input className="field" type="date" value={form.due_date ?? ''} onChange={set('due_date')} />
           </FormField>
           <FormField label={t('invoiceForm.paidDate')}>
-            <input className="field" type="date" value={form.paid_date ?? ''} onChange={set('paid_date')} />
+            <input className="field" type="date" value={form.paid_date ?? ''} onChange={set('paid_date')} max={todayISODate()}
+              disabled={!!paidVia || form.status === 'cancelled'} />
+            <p className="text-xs text-slate-500 mt-1 dark:text-slate-400">
+              {paidVia ? t('invoiceForm.paidViaBuktiKas', { id: paidVia }) : t('invoiceForm.paidDateHint')}
+            </p>
           </FormField>
         </div>
       </div>
@@ -537,11 +589,19 @@ export function GenerateInvoiceForm({ order, items, existingInvoice, forcedType,
       </div>
 
       <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-navy-800">
-        <button className="btn-primary" disabled={busy || idAlreadyExists} onClick={handleSubmit}>
+        <button className="btn-primary" disabled={busy || idAlreadyExists || blockedByPaidPelunasan} onClick={() => handleSubmit()}>
           {busy ? t('common.saving') : existingInvoice ? t('orders.detail.updateInvoice') : t('invoiceForm.generateInvoice')}
         </button>
         <button className="btn-secondary" onClick={() => guardClose(onClose)}>{t('common.cancel')}</button>
       </div>
+      {confirmPaidChange && existingInvoice && paidBefore != null && (
+        <ConfirmDialog
+          message={t('invoiceForm.switch.confirmPaid', { id: existingInvoice.id, before: formatRp(paidBefore), after: formatRp(paidAfter) })}
+          confirmLabel={t('invoiceForm.switch.confirmPaidLabel')}
+          onConfirm={() => { setConfirmPaidChange(false); handleSubmit(true) }}
+          onCancel={() => setConfirmPaidChange(false)}
+        />
+      )}
     </div>
   )
 }

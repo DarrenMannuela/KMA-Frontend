@@ -247,7 +247,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
             onChange={e => applyOrderSelection(e.target.value || null)}
           >
             <option value="">{t('delivery.form.selectOrder')}</option>
-            {orders.map(o => <option key={o.id} value={o.id}>{o.id} — {o.company}</option>)}
+            {orders.filter(o => !o.cancelled_at || o.id === form.order_id).map(o => <option key={o.id} value={o.id}>{o.id} — {o.company}</option>)}
           </select>
           <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">
             {t('delivery.form.doOrderHint')}
@@ -263,7 +263,7 @@ function DeliveryForm({ editing, onClose }: { editing: Delivery | null; onClose:
             onChange={e => applyOrderSelection(e.target.value || null)}
           >
             <option value="">{t('delivery.form.noLinkedOrder')}</option>
-            {orders.map(o => <option key={o.id} value={o.id}>{o.id} — {o.company}</option>)}
+            {orders.filter(o => !o.cancelled_at || o.id === form.order_id).map(o => <option key={o.id} value={o.id}>{o.id} — {o.company}</option>)}
           </select>
           {form.order_id ? (() => {
             const linkedOrder = orders.find(o => o.id === form.order_id)

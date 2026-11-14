@@ -104,7 +104,12 @@
     "amountRp": "Amount (Rp)",
     "orderOptional": "Order (optional)",
     "orderPlaceholder": "Order ID this cash was for",
-    "editLineOn": "Edit line on {{id}}"
+    "editLineOn": "Edit line on {{id}}",
+    "paysInvoice": "pays {{id}}",
+    "paysInvoiceLabel": "Pays invoice",
+    "paysNothing": "— not an invoice payment —",
+    "paysHint": "Saving marks {{id}} paid, dated this Bukti Kas. The money counts once, as that invoice's payment.",
+    "paysNothingHint": "Only unpaid invoices of this order are listed."
   },
   "finance": {
     "budgets": {

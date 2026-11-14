@@ -86,7 +86,8 @@ export function useNotifications() {
     // Orders with items but no invoice yet.
     const withItems = new Set(items.map(i => i.order_id))
     for (const o of orders) {
-      if (!withItems.has(o.id) || !o.date) continue
+      // A cancelled order isn't waiting to be invoiced.
+      if (!withItems.has(o.id) || !o.date || o.cancelled_at) continue
       const age = daysBetween(o.date.slice(0, 10), today)
       if (age < NOT_INVOICED_AFTER_DAYS) continue
       if (invoices.some(i => i.order_id === o.id)) continue

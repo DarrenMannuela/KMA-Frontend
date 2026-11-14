@@ -370,7 +370,7 @@ export function KasBonForm({ kind, headers, suppliers, orders, categories, heade
           </div>
         </div>
         <datalist id={orderListId}>
-          {orders.slice(-300).reverse().map(o => <option key={o.id} value={o.id}>{o.company ?? ''}</option>)}
+          {orders.filter(o => !o.cancelled_at).slice(-300).reverse().map(o => <option key={o.id} value={o.id}>{o.company ?? ''}</option>)}
         </datalist>
         <datalist id={categoryListId}>{categories.map(c => <option key={c} value={c} />)}</datalist>
         {/* One per registered supplier catalogue — only lines whose supplier

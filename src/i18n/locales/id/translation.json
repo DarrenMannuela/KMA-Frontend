@@ -563,5 +563,40 @@
     "show": "Tampilkan daftar invoice",
     "hide": "Sembunyikan daftar invoice",
     "other": "Invoice lainnya"
+  },
+  "invoicePage": {
+    "loadFailed": "Invoice ini tidak bisa dimuat. Periksa koneksi lalu coba lagi.",
+    "notFound": "Invoice tidak ditemukan.",
+    "atLeastPages_one": "minimal {{count}} halaman",
+    "atLeastPages_other": "minimal {{count}} halaman",
+    "addRow": "Tambah Baris",
+    "addRowTitle": "Tambah baris ke tabel barang",
+    "adding": "Menambahkan…",
+    "paperFormat": "Ukuran kertas",
+    "newPageBefore": "Mulai halaman baru sebelum:",
+    "removeBlankRow": "Hapus baris kosong",
+    "addBlankRow": "Tambah baris kosong",
+    "removeNote": "Hapus catatan ini",
+    "pickFromCatalogue": "Pilih dari Katalog (opsional)",
+    "typeManually": "Ketik manual saja…",
+    "itemName": "Nama Barang",
+    "size": "Ukuran",
+    "qty": "Jml",
+    "unitPrice": "Harga Satuan (Rp)",
+    "subtotal": "Subtotal",
+    "clearBreaks": "Hapus",
+    "addNote": "Tambah catatan"
+  },
+  "deliveryPicker": {
+    "item": "Barang",
+    "select": "Pilih barang…",
+    "left": "sisa {{remaining}} dari {{amount}}",
+    "noItems": "Pesanan ini belum punya barang."
+  },
+  "undoLabels": {
+    "addedTo": "{{name}} ditambahkan ke {{id}}",
+    "aLine": "satu baris",
+    "updatedBuktiKas": "Baris Bukti Kas diubah",
+    "deletedBuktiKas": "Baris Bukti Kas dihapus"
   }
 }

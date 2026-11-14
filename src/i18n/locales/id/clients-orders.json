@@ -242,7 +242,15 @@
     "dueDate": "Jatuh Tempo (J/T)",
     "paidDate": "Tanggal Lunas",
     "itemsOnInvoice": "Barang di invoice ini ({{count}})",
-    "generateInvoice": "Buat Invoice"
+    "generateInvoice": "Buat Invoice",
+    "switch": {
+      "willRemove": "Pesanan ini sudah punya invoice Pelunasan {{id}} (belum dibayar). Menyimpan dengan 0% akan menghapusnya, karena invoice ini sekarang mencakup seluruh jumlah. Bisa diurungkan.",
+      "blocked": "Invoice Pelunasan {{id}} pesanan ini sudah dibayar, jadi invoice ini tidak bisa dijadikan invoice penuh. Tandai Pelunasan itu belum dibayar atau hapus dulu.",
+      "confirmPaid": "Invoice {{id}} sudah ditandai lunas. Sebelumnya senilai {{before}}; setelah perubahan ini menjadi {{after}}, dan jumlah itulah yang dihitung sebagai uang diterima. Ubah?",
+      "confirmPaidLabel": "Ubah jumlahnya"
+    },
+    "paidDateHint": "Mengisi tanggal ini menandai invoice lunas; mengosongkannya menandai belum dibayar.",
+    "paidViaBuktiKas": "Dilunasi lewat Bukti Kas {{id}}: tanggalnya menjadi tanggal lunas invoice ini. Ubah di halaman Bukti Kas."
   },
   "invoiceList": {
     "title": "Invoice",
@@ -259,7 +267,10 @@
     "deleteConfirm": "Hapus invoice {{id}}?",
     "viewInvoice": "Lihat invoice",
     "printKwitansi": "Cetak kwitansi",
-    "cancelledTitle": "Dibatalkan bersama pesanannya. Aktifkan lagi pesanannya untuk menagih kembali."
+    "cancelledTitle": "Dibatalkan bersama pesanannya. Aktifkan lagi pesanannya untuk menagih kembali.",
+    "markPaidTitle": "Tandai {{id}} lunas",
+    "paidOn": "Dibayar pada",
+    "paidByBuktiKas": "Dilunasi lewat Bukti Kas {{id}}. Untuk membatalkan, lepas atau hapus baris itu di halaman Bukti Kas."
   },
   "orderJourney": {
     "title": "Perjalanan pesanan",
@@ -301,10 +312,12 @@
       "makeInvoice": "buat invoice (DP atau COD)",
       "waitPayment": "tunggu pembayaran",
       "chasePayment": "tagih pembayaran",
-      "addItems": "tambahkan barang pesanan"
+      "addItems": "tambahkan barang pesanan",
+      "shipRest": "kirim sisa {{count}} pcs"
     },
     "noItems": "belum ada barang",
     "cancelled": "dibatalkan {{date}}, berhenti di sini",
-    "invoiceCancelled": "dibatalkan"
+    "invoiceCancelled": "dibatalkan",
+    "partial": "sebagian · {{shipped}}/{{ordered}}"
   }
 }

@@ -35,7 +35,11 @@ export function orderPaymentStatus(orderId: string, invoices: Invoice[], cancell
     if (dp!.status === 'paid') return status('fullyPaid', 'done')
     return isPastDue(dp!) ? status('paymentOverdue', 'problem') : status('awaitingPayment', 'inProgress')
   }
-  if (dp && dp.status !== 'paid') return isPastDue(dp) ? status('dpOverdue', 'problem') : status('awaitingDp', 'inProgress')
+  if (dp && dp.status !== 'paid') {
+    // The Pelunasan came in first: what's left to collect is the DP itself.
+    if (pelunasan?.status === 'paid') return isPastDue(dp) ? status('dpOverdue', 'problem') : status('dpStillUnpaid', 'inProgress')
+    return isPastDue(dp) ? status('dpOverdue', 'problem') : status('awaitingDp', 'inProgress')
+  }
   if (!pelunasan || pelunasan.status !== 'paid') {
     return pelunasan && isPastDue(pelunasan) ? status('pelunasanOverdue', 'problem') : status('awaitingPelunasan', 'inProgress')
   }

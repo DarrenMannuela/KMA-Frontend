@@ -48,5 +48,8 @@
     "print": "Print",
     "zoomFit": "Fit to screen",
     "zoomActual": "Actual size"
+  },
+  "printStamp": {
+    "cancelled": "Cancelled"
   }
 }

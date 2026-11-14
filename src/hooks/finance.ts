@@ -1,3 +1,4 @@
+import i18n from '@/i18n/config'
 import { useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -56,6 +57,7 @@ function toBuktiKasRows(headers: BuktiKasHeader[], grouped: Record<string, Bukti
   return headers.flatMap(h => (grouped[h.id] ?? []).map(item => ({
     id: item.id, header_id: h.id, date: h.date, description: h.description,
     item_description: item.description, price: item.price, order_id: item.order_id ?? null,
+    invoice_id: item.invoice_id ?? null,
   })))
 }
 
@@ -192,7 +194,7 @@ export const productionHooks = {
     return {
       ...batch,
       mutate: (row: CreateProductionRowRequest, opts?: MutateOpts) => batch.mutate({
-        label: `Added ${row.material_name || 'a line'} to ${row.header_id}`,
+        label: i18n.t('undoLabels.addedTo', { name: row.material_name || i18n.t('undoLabels.aLine'), id: row.header_id }),
         batch: {
           headers: [headerFor(row)],
           production_create: [{
@@ -213,7 +215,7 @@ export const operationHooks = {
     return {
       ...batch,
       mutate: (row: CreateOperationRowRequest, opts?: MutateOpts) => batch.mutate({
-        label: `Added ${row.item_description || row.category} to ${row.header_id}`,
+        label: i18n.t('undoLabels.addedTo', { name: row.item_description || row.category, id: row.header_id }),
         batch: {
           headers: [headerFor(row)],
           operation_create: [{
@@ -237,6 +239,7 @@ const buktiKasUndoStack: BuktiKasUndoEntry[] = []
 
 const buktiKasItemFields = (i: BuktiKasItem) => ({
   header_id: i.header_id, description: i.description, price: i.price, order_id: i.order_id ?? null,
+  invoice_id: i.invoice_id ?? null,
 })
 
 function inverseBuktiKasBatch(r: BuktiKasBatchResult): BuktiKasBatch {
@@ -254,6 +257,9 @@ const isEmptyBuktiKasBatch = (b: BuktiKasBatch) => Object.values(b).every(v => !
 function invalidateBuktiKas(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: BUKTI_KAS_HEADERS_KEY })
   qc.invalidateQueries({ queryKey: BUKTI_KAS_ITEMS_KEY })
+  // A line can pay (or stop paying) an invoice.
+  qc.invalidateQueries({ queryKey: ['invoice'] })
+  qc.invalidateQueries({ queryKey: ['invoices'] })
 }
 
 async function undoLastBuktiKas(qc: QueryClient) {
@@ -312,12 +318,12 @@ export const buktiKasHooks = {
     return {
       ...batch,
       mutate: (row: CreateBuktiKasRowRequest, opts?: MutateOpts) => batch.mutate({
-        label: `Added ${row.item_description || 'a line'} to ${row.header_id}`,
+        label: i18n.t('undoLabels.addedTo', { name: row.item_description || i18n.t('undoLabels.aLine'), id: row.header_id }),
         batch: {
           headers: [buktiKasHeaderFor(row)],
           item_create: [{
             header_id: row.header_id, description: row.item_description,
-            price: row.price, order_id: row.order_id ?? null,
+            price: row.price, order_id: row.order_id ?? null, invoice_id: row.invoice_id ?? null,
           }],
         },
       }, opts),
@@ -328,8 +334,8 @@ export const buktiKasHooks = {
     const batch = useBuktiKasBatch()
     return {
       ...batch,
-      mutate: (args: { id: number; fields: Partial<Pick<BuktiKasItem, 'description' | 'price' | 'order_id'>> }, opts?: MutateOpts) => batch.mutate({
-        label: 'Updated a Bukti Kas line',
+      mutate: (args: { id: number; fields: Partial<Pick<BuktiKasItem, 'description' | 'price' | 'order_id' | 'invoice_id'>> }, opts?: MutateOpts) => batch.mutate({
+        label: i18n.t('undoLabels.updatedBuktiKas'),
         batch: { item_update: [{ id: args.id, fields: args.fields }] },
       }, opts),
     }
@@ -340,7 +346,7 @@ export const buktiKasHooks = {
     return {
       ...batch,
       mutate: (id: number, opts?: MutateOpts) => batch.mutate({
-        label: 'Deleted a Bukti Kas line',
+        label: i18n.t('undoLabels.deletedBuktiKas'),
         batch: { item_delete: [id] },
       }, opts),
     }

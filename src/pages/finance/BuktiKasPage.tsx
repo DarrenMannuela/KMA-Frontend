@@ -5,11 +5,12 @@ import { ConfirmDialog, FormField, formatRp } from '@/components/ui'
 import { Modal } from '@/components/ui/Modal'
 import { PageHeader, LoadingState, ErrorState } from '@/components/ui/Page'
 import { useIsMobile } from '@/hooks/useIsMobile'
-import { buktiKasHooks, orderHooks } from '@/hooks'
+import { buktiKasHooks, orderHooks, invoiceHooks } from '@/hooks'
+import { invoiceAmount } from '@/utils/invoiceAmount'
 import { suggestNextBuktiKasId } from '@/utils/BuktiKasId'
 import { todayISODate, formatDateShort } from '@/utils/MonthUtils'
 import { orderLabel } from '@/components/finance/ledgerModel'
-import type { BuktiKasRow } from '@/types'
+import type { BuktiKasRow, Invoice } from '@/types'
 
 // Cash RECEIVED, grouped by Bukti Kas header the same way Kas Bon groups
 // production/operation lines — see types/finance.ts's own comment for why
@@ -23,6 +24,7 @@ export function BuktiKasPage() {
   const isMobile = useIsMobile()
   const { data: rows = [], isLoading, isError, refetch } = buktiKasHooks.useList()
   const { data: orders = [] } = orderHooks.useList()
+  const { data: invoices = [] } = invoiceHooks.useList()
   const del = buktiKasHooks.useDelete()
 
   const [formFor, setFormFor] = useState<{ headerId?: string } | null>(null)
@@ -114,7 +116,10 @@ export function BuktiKasPage() {
                         {h.rows.map(r => (
                           <tr key={r.id}>
                             <td>{r.item_description}</td>
-                            <td className="text-slate-500 text-xs dark:text-slate-400">{r.order_id ? orderLabel(orders, r.order_id) : '—'}</td>
+                            <td className="text-slate-500 text-xs dark:text-slate-400">
+                              {r.order_id ? orderLabel(orders, r.order_id) : '—'}
+                              {r.invoice_id && <div className="mt-0.5 font-medium text-green-700 dark:text-green-400">{t('buktiKas.paysInvoice', { id: r.invoice_id })}</div>}
+                            </td>
                             <td className="text-right font-mono">{formatRp(r.price)}</td>
                             <td className="text-right">
                               <div className="flex items-center justify-end gap-1">
@@ -138,13 +143,14 @@ export function BuktiKasPage() {
         <BuktiKasLineForm
           headers={headers.map(h => ({ id: h.header_id, date: h.date, description: h.description }))}
           orders={orders}
+          invoices={invoices}
           headerId={formFor.headerId}
           onClose={() => setFormFor(null)}
         />
       )}
 
       {editingRow && (
-        <BuktiKasEditForm row={editingRow} orders={orders} onClose={() => setEditingRow(null)} />
+        <BuktiKasEditForm row={editingRow} orders={orders} invoices={invoices} onClose={() => setEditingRow(null)} />
       )}
 
       {confirmDeleteRow && (
@@ -161,9 +167,10 @@ export function BuktiKasPage() {
 // New Bukti Kas (or another line on an existing one) — header fields only
 // editable when starting a new one; adding to an existing Bukti Kas reuses
 // its date/description as-is, same convention as Kas Bon's "add a line".
-function BuktiKasLineForm({ headers, orders, headerId: existingId, onClose }: {
+function BuktiKasLineForm({ headers, orders, invoices, headerId: existingId, onClose }: {
   headers: { id: string; date: string; description: string }[]
   orders: { id: string; company?: string | null }[]
+  invoices: Invoice[]
   headerId?: string
   onClose: () => void
 }) {
@@ -177,6 +184,7 @@ function BuktiKasLineForm({ headers, orders, headerId: existingId, onClose }: {
   const [itemDescription, setItemDescription] = useState('')
   const [price, setPrice] = useState('')
   const [orderId, setOrderId] = useState('')
+  const [invoiceId, setInvoiceId] = useState('')
   const [missing, setMissing] = useState(false)
 
   const changeDate = (value: string) => {
@@ -195,6 +203,7 @@ function BuktiKasLineForm({ headers, orders, headerId: existingId, onClose }: {
       header_id: headerIdTrimmed, date, description: (description.trim() || itemDescription.trim()).toUpperCase(),
       item_description: itemDescription.trim().toUpperCase(), price: Math.round(priceNum),
       order_id: orders.some(o => o.id === orderId) ? orderId : null,
+      invoice_id: invoiceId || null,
     }, { onSuccess: onClose })
   }
 
@@ -235,6 +244,8 @@ function BuktiKasLineForm({ headers, orders, headerId: existingId, onClose }: {
             {orders.slice(-300).reverse().map(o => <option key={o.id} value={o.id}>{o.company ?? ''}</option>)}
           </datalist>
         </FormField>
+        <PaysInvoice orderId={orderId} invoices={invoices} value={invoiceId} current={null}
+          onChange={(id, amount) => { setInvoiceId(id); if (id && !price) setPrice(String(amount)) }} />
         <button className="btn-primary w-full" disabled={create.isPending} onClick={submit}>
           {create.isPending ? t('common.saving') : t('finance.budgets.add')}
         </button>
@@ -246,9 +257,10 @@ function BuktiKasLineForm({ headers, orders, headerId: existingId, onClose }: {
 // Editing one existing line — description/amount/order only; the header's
 // own date/description change from the header card itself, not here (same
 // split OrderDetailPage/DeliveryItemsManager use elsewhere in this app).
-function BuktiKasEditForm({ row, orders, onClose }: {
+function BuktiKasEditForm({ row, orders, invoices, onClose }: {
   row: BuktiKasRow
   orders: { id: string; company?: string | null }[]
+  invoices: Invoice[]
   onClose: () => void
 }) {
   const { t } = useTranslation()
@@ -256,6 +268,7 @@ function BuktiKasEditForm({ row, orders, onClose }: {
   const [itemDescription, setItemDescription] = useState(row.item_description)
   const [price, setPrice] = useState(String(row.price))
   const [orderId, setOrderId] = useState(row.order_id ?? '')
+  const [invoiceId, setInvoiceId] = useState(row.invoice_id ?? '')
   const [missing, setMissing] = useState(false)
 
   const submit = () => {
@@ -269,6 +282,7 @@ function BuktiKasEditForm({ row, orders, onClose }: {
       fields: {
         description: itemDescription.trim().toUpperCase(), price: Math.round(priceNum),
         order_id: orders.some(o => o.id === orderId) ? orderId : null,
+        invoice_id: invoiceId || null,
       },
     }, { onSuccess: onClose })
   }
@@ -292,10 +306,46 @@ function BuktiKasEditForm({ row, orders, onClose }: {
             {orders.slice(-300).reverse().map(o => <option key={o.id} value={o.id}>{o.company ?? ''}</option>)}
           </datalist>
         </FormField>
+        <PaysInvoice orderId={orderId} invoices={invoices} value={invoiceId} current={row.invoice_id}
+          onChange={id => setInvoiceId(id)} />
         <button className="btn-primary w-full" disabled={update.isPending} onClick={submit}>
           {update.isPending ? t('common.saving') : t('common.save')}
         </button>
       </div>
     </Modal>
+  )
+}
+
+/** Which of the order's invoices this cash pays, if any. Only unpaid ones
+ *  are offered (and the one it already pays): picking one marks that invoice
+ *  paid, dated this Bukti Kas, and its money then counts once. */
+function PaysInvoice({ orderId, invoices, value, current, onChange }: {
+  orderId: string
+  invoices: Invoice[]
+  value: string
+  current: string | null
+  onChange: (invoiceId: string, amount: number) => void
+}) {
+  const { t } = useTranslation()
+  const own = invoices.filter(i => i.order_id === orderId && (i.status === 'unpaid' || i.id === current))
+  if (!orderId || (!own.length && !value)) return null
+  const chosen = invoices.find(i => i.id === value)
+  return (
+    <FormField label={t('buktiKas.paysInvoiceLabel')}>
+      <select className="field" value={value} onChange={e => {
+        const inv = invoices.find(i => i.id === e.target.value)
+        onChange(e.target.value, inv ? invoiceAmount(inv, invoices) : 0)
+      }}>
+        <option value="">{t('buktiKas.paysNothing')}</option>
+        {own.map(i => (
+          <option key={i.id} value={i.id}>
+            {i.id} · {i.type === 'pelunasan' ? 'Pelunasan' : (i.down_payment ?? 0) === 0 ? 'Invoice' : 'DP'} · {formatRp(invoiceAmount(i, invoices))}
+          </option>
+        ))}
+      </select>
+      <p className="text-xs text-slate-500 mt-1 dark:text-slate-400">
+        {chosen ? t('buktiKas.paysHint', { id: chosen.id }) : t('buktiKas.paysNothingHint')}
+      </p>
+    </FormField>
   )
 }

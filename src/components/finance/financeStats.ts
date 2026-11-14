@@ -29,6 +29,11 @@ export interface MonthStat {
   cashIn: number
 }
 
+/** Bukti Kas lines whose cash isn't already counted as an invoice's payment:
+ *  a line that pays an invoice marks it paid, and that invoice's amount is
+ *  what counts as received (so the money counts once). */
+const ownCash = (buktiKas: BuktiKasRow[]) => buktiKas.filter(b => !b.invoice_id)
+
 export function monthly(year: number, invoices: Invoice[], costs: LedgerRow[], buktiKas: BuktiKasRow[] = []): MonthStat[] {
   const rows: MonthStat[] = Array.from({ length: 12 }, (_, month) => ({ month, invoiced: 0, production: 0, operation: 0, cost: 0, profit: 0, cashIn: 0 }))
   const monthOf = (d: string) => (d.slice(0, 4) === String(year) ? Number(d.slice(5, 7)) - 1 : -1)
@@ -38,7 +43,7 @@ export function monthly(year: number, invoices: Invoice[], costs: LedgerRow[], b
     const p = isPaid(inv) ? monthOf(paidOn(inv)) : -1
     if (p >= 0) rows[p].cashIn += invoiceAmount(inv, invoices)
   }
-  for (const b of buktiKas) {
+  for (const b of ownCash(buktiKas)) {
     const m = monthOf(day(b.date))
     if (m >= 0) rows[m].cashIn += b.price
   }
@@ -62,7 +67,7 @@ export function totals(period: Period, invoices: Invoice[], costs: LedgerRow[], 
     if (inPeriod(day(inv.tanggal), period)) t.invoiced += invoiceAmount(inv, invoices)
     if (isPaid(inv) && inPeriod(paidOn(inv), period)) t.cashIn += invoiceAmount(inv, invoices)
   }
-  for (const b of buktiKas) if (inPeriod(day(b.date), period)) t.cashIn += b.price
+  for (const b of ownCash(buktiKas)) if (inPeriod(day(b.date), period)) t.cashIn += b.price
   for (const c of costs) if (inPeriod(c.date, period)) t[c.kind] += c.total
   t.cost = t.production + t.operation
   t.profit = t.invoiced - t.cost
@@ -109,7 +114,7 @@ export function cashFlow(period: Period, invoices: Invoice[], costs: LedgerRow[]
     return hit
   }
   for (const inv of invoices) if (isPaid(inv)) { const b = find(paidOn(inv)); if (b) b.cashIn += invoiceAmount(inv, invoices) }
-  for (const bk of buktiKas) { const b = find(day(bk.date)); if (b) b.cashIn += bk.price }
+  for (const bk of ownCash(buktiKas)) { const b = find(day(bk.date)); if (b) b.cashIn += bk.price }
   for (const c of costs) { const b = find(day(c.date)); if (b) b.cashOut += c.total }
   return buckets
 }
